@@ -1,0 +1,19 @@
+# Codex local development links
+.agents/skills/
+
+# Generated packages
+dist/
+
+# Generated diagrams
+outputs/*
+!outputs/.gitkeep
+
+# Python 
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Editors and OS
+.DS_Store
+Thumbs.db

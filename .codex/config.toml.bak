@@ -1,0 +1,13 @@
+[mcp_servers.drawio]
+command = "C:\\Windows\\System32\\cmd.exe"
+args = [
+    "/d",
+    "/s",
+    "/c",
+    "npx.cmd -y @next-ai-drawio/mcp-server@0.2.3"
+]
+startup_timeout_sec = 120
+tool_timeout_sec = 300
+enabled = true
+required = true
+default_tools_approval_mode = "prompt"
