@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/vllm/architecture-ir.schema.json",
+  "title": "vLLM architecture diagram IR",
+  "type": "object",
+  "required": ["schema_version", "model_name", "detail_level", "pages", "unresolved"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "model_name": {"type": "string", "minLength": 1},
+    "detail_level": {"enum": ["overview", "full"]},
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "nodes", "edges"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "title": {"type": "string", "minLength": 1},
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "label", "kind", "badges", "evidence"],
+              "properties": {
+                "id": {"type": "string", "minLength": 1},
+                "label": {"type": "string", "minLength": 1},
+                "subtitle": {"type": ["string", "null"]},
+                "kind": {
+                  "enum": [
+                    "input",
+                    "embedding",
+                    "normalization",
+                    "attention",
+                    "ffn",
+                    "moe",
+                    "repeated_block",
+                    "head",
+                    "logits_processor",
+                    "decision",
+                    "add",
+                    "merge",
+                    "output",
+                    "container",
+                    "note"
+                  ]
+                },
+                "badges": {"type": "array", "items": {"type": "string"}},
+                "repeat": {"type": ["string", "null"]},
+                "evidence": {"type": "array", "items": {"type": "object"}}
+              },
+              "additionalProperties": true
+            }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "source", "target", "kind", "evidence"],
+              "properties": {
+                "id": {"type": "string", "minLength": 1},
+                "source": {"type": "string", "minLength": 1},
+                "target": {"type": "string", "minLength": 1},
+                "kind": {
+                  "enum": [
+                    "runtime",
+                    "residual",
+                    "containment",
+                    "dependency",
+                    "conditional_true",
+                    "conditional_false",
+                    "weight_mapping"
+                  ]
+                },
+                "label": {"type": ["string", "null"]},
+                "condition": {"type": ["string", "null"]},
+                "evidence": {"type": "array", "items": {"type": "object"}}
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "unresolved": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": false
+}

@@ -41,23 +41,25 @@ python <skill-directory>/scripts/extract_architecture.py \
 
 Do not rewrite or replace the extractor before trying it.
 
-If it fails, report the exact error. Inspect the source manually only for the
-unsupported structure and record the limitation in `unresolved`.
-
 ## 3. Read the extracted analysis
 
-Use the generated JSON as the primary source of facts. Review:
+Use the generated JSON as the primary source of facts. Prefer these fields:
 
 - `classes`;
-- `module_assignments`;
-- `forward_flows`;
+- `module_assignments`, filtered by `assignment_kind`;
+- `layer_factories`;
+- `forward_control_flows`;
 - `conditions`;
 - `parallelism_hints`;
-- `weight_loading_hints`;
+- `weight_mappings`;
 - `warnings`.
 
+`forward_flows` and `weight_loading_hints` are compatibility/debug fields. Do
+not use their flattened order when `forward_control_flows` contains branches or
+loops.
+
 When a relationship is unclear, inspect the corresponding source lines instead
-of rereading unrelated parts of the whole file.
+of rereading unrelated parts of the file.
 
 ## 4. Interpret vLLM semantics
 
@@ -65,38 +67,59 @@ Read only the relevant bundled references:
 
 - `references/evidence-rules.md`;
 - `references/vllm-patterns.md`;
+- `references/architecture-rules.md`;
 - `references/diagram-style.md`.
 
 The extractor reports syntax-level evidence. Use the references to interpret
 vLLM-specific symbols, but never let a pattern override the supplied source.
 
-## 5. Plan before drawing
+## 5. Write Architecture IR
 
-Create a compact internal diagram plan containing:
+Before generating Draw.io XML, write:
 
-- major nodes;
-- runtime edges;
-- residual edges;
-- conditional branches;
-- containment relationships;
-- parallelism annotations;
-- optional checkpoint mappings;
-- unresolved items;
-- source evidence lines for every major node.
+`outputs/<model-name>-architecture-ir.json`
 
-For `overview`, use one page and no more than twelve major nodes.
+The IR must follow:
 
-Recommended main flow:
+`schemas/architecture-ir.schema.json`
 
-`Input Tokens → Embedding → N × Decoder Layer → Final Norm → LM Head → Logits`
+Required top-level fields:
 
-Show decoder details below the main flow when supported by the source:
+- `schema_version`;
+- `model_name`;
+- `detail_level`;
+- `pages`;
+- `unresolved`.
 
-`Input Norm → Attention → Post-Attention Norm → Dense FFN or MoE`
+Every major node and every edge must include direct or derived source evidence.
+Keep source line numbers in `evidence`, not in visible node titles.
 
-## 6. Generate the Draw.io document
+Important semantic rules:
 
-Generate a complete, valid Draw.io XML document. Follow
+- preserve `if/else` branches from `forward_control_flows`;
+- represent repeated `make_layers` output symbolically as `N × Decoder Layer`;
+- represent residual addition with an explicit Add/Merge node;
+- reconnect conditional branches to a common downstream node or output;
+- represent TP, PP and EP as badges or annotations;
+- keep checkpoint mappings outside runtime tensor flow;
+- for `LogitsProcessor(self.lm_head, hidden_states)`, use a runtime edge from
+  hidden states and a dependency edge from LM Head.
+
+## 6. Validate Architecture IR
+
+Run:
+
+```text
+python <skill-directory>/scripts/validate_architecture_ir.py \
+  outputs/<model-name>-architecture-ir.json
+```
+
+Do not call Draw.io until validation succeeds. If validation fails, correct the
+IR rather than bypassing the validator.
+
+## 7. Generate the Draw.io document
+
+Generate a complete, valid Draw.io XML document from the validated IR. Follow
 `references/diagram-style.md`.
 
 Use symbolic values when configuration is external:
@@ -105,9 +128,9 @@ Use symbolic values when configuration is external:
 - `E experts`;
 - `Top-K routing`.
 
-Do not place `load_weights` relationships in the runtime forward path.
+Use `html=0` in cell styles by default for SVG compatibility.
 
-## 7. Call the Draw.io MCP
+## 8. Call the Draw.io MCP
 
 Use the Draw.io MCP tools in this order:
 
@@ -124,17 +147,20 @@ Export:
 
 For a requested full diagram, replace `overview` with `full`.
 
-## 8. Validate before completion
+## 9. Validate before completion
 
 Before exporting, verify:
 
-- every major node has direct or derived source evidence;
-- forward edges follow the source `forward` methods;
-- real source conditions remain visible;
-- residual connections are not omitted when directly present;
+- the Architecture IR validator passed;
+- every major node and edge has source evidence;
+- mutually exclusive branches were not flattened into one path;
+- loop-based decoder execution is visible when present;
+- residual edges end at explicit Add/Merge nodes;
+- conditional branches reconnect;
 - parallel groups are annotations, not compute nodes;
 - checkpoint mappings are separate from runtime flow;
 - no concrete external config values were guessed;
+- Draw.io XML uses stable IDs and `html=0` labels;
 - the Draw.io XML opens successfully.
 
 # Completion report
@@ -148,4 +174,5 @@ Report:
 - detected TP, PP and EP hints;
 - unresolved external configuration or parser warnings;
 - source-analysis JSON path;
+- architecture-IR JSON path;
 - exported Draw.io and SVG paths.
