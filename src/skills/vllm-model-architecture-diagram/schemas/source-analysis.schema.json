@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/vllm/source-analysis.schema.json",
+  "title": "vLLM source analysis",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "source_file",
+    "classes",
+    "module_assignments",
+    "forward_flows",
+    "conditions",
+    "parallelism_hints",
+    "weight_loading_hints",
+    "warnings"
+  ],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "source_file": {"type": "string"},
+    "classes": {"type": "array", "items": {"type": "object"}},
+    "module_assignments": {"type": "array", "items": {"type": "object"}},
+    "forward_flows": {"type": "array", "items": {"type": "object"}},
+    "conditions": {"type": "array", "items": {"type": "object"}},
+    "parallelism_hints": {"type": "array", "items": {"type": "object"}},
+    "weight_loading_hints": {"type": "array", "items": {"type": "object"}},
+    "warnings": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}
