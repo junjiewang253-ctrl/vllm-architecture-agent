@@ -35,10 +35,18 @@ EDGE_KINDS = {
     "conditional_true",
     "conditional_false",
     "weight_mapping",
+    "invocation",
+    "summary",
 }
 
 NON_MAJOR_NODE_KINDS = {"note", "container"}
 PARALLEL_BADGE_LABELS = {"TP", "PP", "EP"}
+PHASES = {
+    "construction",
+    "runtime",
+    "checkpoint_loading",
+    "parallel_partition",
+}
 
 
 def _is_non_empty_evidence(value: Any) -> bool:
@@ -50,8 +58,8 @@ def _is_non_empty_evidence(value: Any) -> bool:
 def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
     errors: list[str] = []
 
-    if data.get("schema_version") != "0.1":
-        errors.append("schema_version must be '0.1'")
+    if data.get("schema_version") != "0.2":
+        errors.append("schema_version must be '0.2'")
     if not isinstance(data.get("model_name"), str) or not data["model_name"].strip():
         errors.append("model_name must be a non-empty string")
     if data.get("detail_level") not in {"overview", "full"}:
@@ -95,6 +103,9 @@ def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
             kind = node.get("kind")
             if kind not in NODE_KINDS:
                 errors.append(f"{node_prefix}.kind is invalid: {kind!r}")
+            phase = node.get("phase")
+            if phase not in PHASES:
+                errors.append(f"{node_prefix}.phase is invalid: {phase!r}")
             label = node.get("label")
             if not isinstance(label, str) or not label.strip():
                 errors.append(f"{node_prefix}.label must be a non-empty string")
@@ -103,10 +114,70 @@ def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
                     f"{node_prefix}: TP/PP/EP must be badges or notes, not compute nodes"
                 )
 
+            badges = node.get("badges")
+            if not isinstance(badges, list):
+                errors.append(f"{node_prefix}.badges must be a list")
+            else:
+                for badge in badges:
+                    if badge not in PARALLEL_BADGE_LABELS:
+                        errors.append(f"{node_prefix}.badges contains invalid badge: {badge!r}")
+
+            parent_id = node.get("parent_id")
+            if parent_id is not None:
+                if not isinstance(parent_id, str) or not parent_id:
+                    errors.append(f"{node_prefix}.parent_id must be a non-empty string or null")
+                elif parent_id == node_id:
+                    errors.append(f"{node_prefix}: node cannot be its own parent")
+
+            repetition = node.get("repetition")
+            if repetition is not None:
+                if not isinstance(repetition, dict):
+                    errors.append(f"{node_prefix}.repetition must be an object or null")
+                else:
+                    count_expression = repetition.get("count_expression")
+                    if not isinstance(count_expression, str) or not count_expression.strip():
+                        errors.append(
+                            f"{node_prefix}.repetition.count_expression must be non-empty"
+                        )
+
+            variants = node.get("variants")
+            if variants is not None:
+                if not isinstance(variants, list):
+                    errors.append(f"{node_prefix}.variants must be a list")
+                else:
+                    for variant_index, variant in enumerate(variants):
+                        variant_prefix = f"{node_prefix}.variants[{variant_index}]"
+                        if not isinstance(variant, dict):
+                            errors.append(f"{variant_prefix} must be an object")
+                            continue
+                        variant_phase = variant.get("phase")
+                        if variant_phase not in PHASES:
+                            errors.append(
+                                f"{variant_prefix}.phase is invalid: {variant_phase!r}"
+                            )
+                        component = variant.get("component")
+                        if (
+                            isinstance(component, str)
+                            and ("MoE" in component or "FeedForward" in component or "FFN" in component)
+                            and variant_phase != "construction"
+                        ):
+                            errors.append(
+                                f"{variant_prefix}: Dense/MoE variants must use construction phase"
+                            )
+
             if kind not in NON_MAJOR_NODE_KINDS and not _is_non_empty_evidence(
                 node.get("evidence")
             ):
                 errors.append(f"{node_prefix} must include source evidence")
+
+        for node_index, node in enumerate(nodes):
+            if not isinstance(node, dict):
+                continue
+            parent_id = node.get("parent_id")
+            if isinstance(parent_id, str) and parent_id and parent_id not in node_by_id:
+                errors.append(
+                    f"{prefix}.nodes[{node_index}].parent_id references unknown node: {parent_id!r}"
+                )
 
         edge_ids: set[str] = set()
         outgoing: dict[str, list[dict[str, Any]]] = {}
@@ -126,12 +197,15 @@ def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
             source = edge.get("source")
             target = edge.get("target")
             kind = edge.get("kind")
+            phase = edge.get("phase")
             if source not in node_by_id:
                 errors.append(f"{edge_prefix}.source references unknown node: {source!r}")
             if target not in node_by_id:
                 errors.append(f"{edge_prefix}.target references unknown node: {target!r}")
             if kind not in EDGE_KINDS:
                 errors.append(f"{edge_prefix}.kind is invalid: {kind!r}")
+            if phase not in PHASES:
+                errors.append(f"{edge_prefix}.phase is invalid: {phase!r}")
             if not _is_non_empty_evidence(edge.get("evidence")):
                 errors.append(f"{edge_prefix} must include source evidence")
             if isinstance(source, str):
@@ -142,6 +216,46 @@ def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
                 if target_kind not in {"add", "merge"}:
                     errors.append(
                         f"{edge_prefix}: residual edge must target an add or merge node"
+                    )
+            if kind == "weight_mapping" and phase != "checkpoint_loading":
+                errors.append(
+                    f"{edge_prefix}: weight_mapping edge must use checkpoint_loading phase"
+                )
+
+            if source in node_by_id and target in node_by_id:
+                source_node = node_by_id[source]
+                target_node = node_by_id[target]
+                source_scope = source_node.get("scope")
+                target_scope = target_node.get("scope")
+                if (
+                    kind == "runtime"
+                    and isinstance(source_scope, str)
+                    and isinstance(target_scope, str)
+                    and source_scope
+                    and target_scope
+                    and source_scope != target_scope
+                ):
+                    errors.append(
+                        f"{edge_prefix}: runtime edge cannot cross scopes "
+                        f"{source_scope!r} -> {target_scope!r}"
+                    )
+                if (
+                    isinstance(source_scope, str)
+                    and isinstance(target_scope, str)
+                    and source_scope
+                    and target_scope
+                    and source_scope != target_scope
+                    and kind not in {"invocation", "summary"}
+                ):
+                    errors.append(
+                        f"{edge_prefix}: cross-scope edge must use invocation or summary"
+                    )
+                if kind == "runtime" and (
+                    source_node.get("phase") == "construction"
+                    or target_node.get("phase") == "construction"
+                ):
+                    errors.append(
+                        f"{edge_prefix}: construction phase nodes cannot use runtime edges"
                     )
 
         for node_id, node in node_by_id.items():

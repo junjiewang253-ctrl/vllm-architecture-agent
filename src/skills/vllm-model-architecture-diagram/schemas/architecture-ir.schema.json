@@ -5,7 +5,7 @@
   "type": "object",
   "required": ["schema_version", "model_name", "detail_level", "pages", "unresolved"],
   "properties": {
-    "schema_version": {"const": "0.1"},
+    "schema_version": {"const": "0.2"},
     "model_name": {"type": "string", "minLength": 1},
     "detail_level": {"enum": ["overview", "full"]},
     "pages": {
@@ -45,8 +45,47 @@
                     "note"
                   ]
                 },
+                "phase": {
+                  "enum": [
+                    "construction",
+                    "runtime",
+                    "checkpoint_loading",
+                    "parallel_partition"
+                  ]
+                },
+                "scope": {"type": ["string", "null"]},
+                "parent_id": {"type": ["string", "null"]},
                 "badges": {"type": "array", "items": {"type": "string"}},
-                "repeat": {"type": ["string", "null"]},
+                "repetition": {
+                  "type": ["object", "null"],
+                  "properties": {
+                    "count_expression": {"type": "string"},
+                    "local_start": {"type": ["string", "null"]},
+                    "local_end": {"type": ["string", "null"]}
+                  },
+                  "required": ["count_expression"],
+                  "additionalProperties": false
+                },
+                "variants": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["condition", "component", "phase"],
+                    "properties": {
+                      "condition": {"type": "string", "minLength": 1},
+                      "component": {"type": "string", "minLength": 1},
+                      "phase": {
+                        "enum": [
+                          "construction",
+                          "runtime",
+                          "checkpoint_loading",
+                          "parallel_partition"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
                 "evidence": {"type": "array", "items": {"type": "object"}}
               },
               "additionalProperties": true
@@ -69,11 +108,24 @@
                     "dependency",
                     "conditional_true",
                     "conditional_false",
-                    "weight_mapping"
+                    "weight_mapping",
+                    "invocation",
+                    "summary"
                   ]
                 },
+                "phase": {
+                  "enum": [
+                    "construction",
+                    "runtime",
+                    "checkpoint_loading",
+                    "parallel_partition"
+                  ]
+                },
+                "scope": {"type": ["string", "null"]},
                 "label": {"type": ["string", "null"]},
                 "condition": {"type": ["string", "null"]},
+                "source_port": {"type": ["string", "null"]},
+                "target_port": {"type": ["string", "null"]},
                 "evidence": {"type": "array", "items": {"type": "object"}}
               },
               "additionalProperties": true

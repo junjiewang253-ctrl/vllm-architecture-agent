@@ -41,9 +41,26 @@ python <skill-directory>/scripts/extract_architecture.py \
 
 Do not rewrite or replace the extractor before trying it.
 
-## 3. Read the extracted analysis
+## 3. Build the draft Architecture IR
 
-Use the generated JSON as the primary source of facts. Prefer these fields:
+Run the bundled IR builder:
+
+```text
+python <skill-directory>/scripts/build_architecture_ir.py \
+  outputs/<model-name>-source-analysis.json \
+  --output outputs/<model-name>-architecture-ir.json
+```
+
+The builder creates a conservative `overview` page only. It should identify
+top-level ForCausalLM wrappers, `self.model`, embedding, repeated
+`make_layers` decoder blocks, final norm, LM Head, LogitsProcessor, decoder
+attention, Dense/MoE construction variants, and TP/PP/EP badges when these are
+supported by source-analysis facts.
+
+## 4. Read the extracted analysis and draft IR
+
+Use the generated source-analysis JSON as the primary source of facts. Prefer
+these fields:
 
 - `classes`;
 - `module_assignments`, filtered by `assignment_kind`;
@@ -58,10 +75,15 @@ Use the generated JSON as the primary source of facts. Prefer these fields:
 not use their flattened order when `forward_control_flows` contains branches or
 loops.
 
+Read `outputs/<model-name>-architecture-ir.json` and inspect `unresolved`.
+Only supplement or correct the IR when the source-analysis evidence supports
+the change. Keep unresolved items when the source or external config prevents a
+deterministic answer.
+
 When a relationship is unclear, inspect the corresponding source lines instead
 of rereading unrelated parts of the file.
 
-## 4. Interpret vLLM semantics
+## 5. Interpret vLLM semantics
 
 Read only the relevant bundled references:
 
@@ -73,11 +95,7 @@ Read only the relevant bundled references:
 The extractor reports syntax-level evidence. Use the references to interpret
 vLLM-specific symbols, but never let a pattern override the supplied source.
 
-## 5. Write Architecture IR
-
-Before generating Draw.io XML, write:
-
-`outputs/<model-name>-architecture-ir.json`
+## 6. Architecture IR rules
 
 The IR must follow:
 
@@ -96,16 +114,25 @@ Keep source line numbers in `evidence`, not in visible node titles.
 
 Important semantic rules:
 
-- preserve `if/else` branches from `forward_control_flows`;
-- represent repeated `make_layers` output symbolically as `N × Decoder Layer`;
-- represent residual addition with an explicit Add/Merge node;
-- reconnect conditional branches to a common downstream node or output;
-- represent TP, PP and EP as badges or annotations;
-- keep checkpoint mappings outside runtime tensor flow;
-- for `LogitsProcessor(self.lm_head, hidden_states)`, use a runtime edge from
-  hidden states and a dependency edge from LM Head.
+- Overview does not expand full Attention internals.
+- Overview does not expand full MoE internals.
+- Dense/MoE layer selection is a construction `variants` list, not a runtime
+  `decision` node.
+- Checkpoint weight mapping must not enter runtime pages or tensor flow.
+- Containers are ownership/grouping nodes, not ordinary tensor-flow nodes.
+- Preserve `if/else` branches from `forward_control_flows` when a page expands
+  them.
+- Represent repeated `make_layers` output symbolically with `repetition`,
+  including `count_expression`, `local_start`, and `local_end` when known.
+- Represent residual addition with an explicit Add/Merge node.
+- Reconnect conditional branches to a common downstream node or output.
+- Represent TP, PP and EP as badges or notes, never as compute nodes.
+- For `LogitsProcessor(self.lm_head, hidden_states)`, use a runtime/summary
+  edge for `hidden_states` and a dependency edge from LM Head with ports.
+- Draw.io must faithfully render IR nodes and edges. It must not freely add or
+  delete semantic nodes or edges.
 
-## 6. Validate Architecture IR
+## 7. Validate Architecture IR
 
 Run:
 
@@ -117,20 +144,20 @@ python <skill-directory>/scripts/validate_architecture_ir.py \
 Do not call Draw.io until validation succeeds. If validation fails, correct the
 IR rather than bypassing the validator.
 
-## 7. Generate the Draw.io document
+## 8. Generate the Draw.io document
 
 Generate a complete, valid Draw.io XML document from the validated IR. Follow
 `references/diagram-style.md`.
 
 Use symbolic values when configuration is external:
 
-- `N × Decoder Layer`;
+- `config.num_hidden_layers` as repeated decoder count;
 - `E experts`;
 - `Top-K routing`.
 
 Use `html=0` in cell styles by default for SVG compatibility.
 
-## 8. Call the Draw.io MCP
+## 9. Call the Draw.io MCP
 
 Use the Draw.io MCP tools in this order:
 
@@ -147,7 +174,7 @@ Export:
 
 For a requested full diagram, replace `overview` with `full`.
 
-## 9. Validate before completion
+## 10. Validate before completion
 
 Before exporting, verify:
 
