@@ -76,63 +76,14 @@ not use their flattened order when `forward_control_flows` contains branches or
 loops.
 
 Read `outputs/<model-name>-architecture-ir.json` and inspect `unresolved`.
-Only supplement or correct the IR when the source-analysis evidence supports
-the change. Keep unresolved items when the source or external config prevents a
+Only supplement or correct the IR when source-analysis evidence supports the
+change. Keep unresolved items when source or external config prevents a
 deterministic answer.
 
 When a relationship is unclear, inspect the corresponding source lines instead
 of rereading unrelated parts of the file.
 
-## 5. Interpret vLLM semantics
-
-Read only the relevant bundled references:
-
-- `references/evidence-rules.md`;
-- `references/vllm-patterns.md`;
-- `references/architecture-rules.md`;
-- `references/diagram-style.md`.
-
-The extractor reports syntax-level evidence. Use the references to interpret
-vLLM-specific symbols, but never let a pattern override the supplied source.
-
-## 6. Architecture IR rules
-
-The IR must follow:
-
-`schemas/architecture-ir.schema.json`
-
-Required top-level fields:
-
-- `schema_version`;
-- `model_name`;
-- `detail_level`;
-- `pages`;
-- `unresolved`.
-
-Every major node and every edge must include direct or derived source evidence.
-Keep source line numbers in `evidence`, not in visible node titles.
-
-Important semantic rules:
-
-- Overview does not expand full Attention internals.
-- Overview does not expand full MoE internals.
-- Dense/MoE layer selection is a construction `variants` list, not a runtime
-  `decision` node.
-- Checkpoint weight mapping must not enter runtime pages or tensor flow.
-- Containers are ownership/grouping nodes, not ordinary tensor-flow nodes.
-- Preserve `if/else` branches from `forward_control_flows` when a page expands
-  them.
-- Represent repeated `make_layers` output symbolically with `repetition`,
-  including `count_expression`, `local_start`, and `local_end` when known.
-- Represent residual addition with an explicit Add/Merge node.
-- Reconnect conditional branches to a common downstream node or output.
-- Represent TP, PP and EP as badges or notes, never as compute nodes.
-- For `LogitsProcessor(self.lm_head, hidden_states)`, use a runtime/summary
-  edge for `hidden_states` and a dependency edge from LM Head with ports.
-- Draw.io must faithfully render IR nodes and edges. It must not freely add or
-  delete semantic nodes or edges.
-
-## 7. Validate Architecture IR
+## 5. Validate Architecture IR
 
 Run:
 
@@ -141,54 +92,99 @@ python <skill-directory>/scripts/validate_architecture_ir.py \
   outputs/<model-name>-architecture-ir.json
 ```
 
-Do not call Draw.io until validation succeeds. If validation fails, correct the
-IR rather than bypassing the validator.
+Do not render Draw.io until validation succeeds. If validation fails, correct
+the IR rather than bypassing the validator.
 
-## 8. Generate the Draw.io document
+## 6. Render Draw.io deterministically
 
-Generate a complete, valid Draw.io XML document from the validated IR. Follow
-`references/diagram-style.md`.
+Run the bundled renderer:
 
-Use symbolic values when configuration is external:
+```text
+python <skill-directory>/scripts/render_drawio.py \
+  outputs/<model-name>-architecture-ir.json \
+  --output outputs/<model-name>-overview.drawio
+```
 
-- `config.num_hidden_layers` as repeated decoder count;
-- `E experts`;
-- `Top-K routing`.
+Agent must not directly hand-write complete Draw.io XML. The renderer is the
+only component that converts IR semantics into Draw.io cells.
 
-Use `html=0` in cell styles by default for SVG compatibility.
+Rendering rules:
 
-## 9. Call the Draw.io MCP
+- IR node IDs must map one-to-one to Draw.io semantic node IDs.
+- IR edge IDs must map one-to-one to Draw.io semantic edge IDs.
+- `parent_id` must map to Draw.io `parent`.
+- Decorative cells must use the `decorative_` prefix.
+- Dense/MoE variants are construction notes, not runtime decision nodes.
+- TP, PP and EP are badge decorations, not compute nodes.
+- Evidence remains in IR and is not shown in node titles.
 
-Use the Draw.io MCP tools in this order:
+## 7. Validate Draw.io XML
+
+Run:
+
+```text
+python <skill-directory>/scripts/validate_drawio.py \
+  outputs/<model-name>-architecture-ir.json \
+  outputs/<model-name>-overview.drawio
+```
+
+Draw.io validation failure blocks export. Fix layout-only issues through the
+renderer or a non-semantic MCP edit, then run `validate_drawio.py` again.
+
+## 8. Call the Draw.io MCP
+
+Use the Draw.io MCP only after both validators pass.
+
+Allowed MCP work:
+
+- open the generated diagram;
+- inspect visual layout;
+- fix pure layout issues;
+- export.
+
+Forbidden MCP work:
+
+- adding semantic nodes;
+- deleting semantic nodes;
+- adding semantic edges;
+- deleting semantic edges;
+- changing edge source or target;
+- reinterpreting architecture.
+
+If MCP edits the `.drawio` file, run `validate_drawio.py` again before export.
+
+Use the MCP tools in this order:
 
 1. `start_session`;
-2. `create_new_diagram` with the complete XML;
+2. `load_diagram` with `outputs/<model-name>-overview.drawio`;
 3. `get_diagram` only when inspection is needed;
-4. `edit_diagram` for targeted corrections;
+4. `edit_diagram` only for pure layout corrections;
 5. `export_diagram`.
 
-Export:
+Default outputs:
 
+- `outputs/<model-name>-source-analysis.json`;
+- `outputs/<model-name>-architecture-ir.json`;
 - `outputs/<model-name>-overview.drawio`;
-- `outputs/<model-name>-overview.svg`.
+- `outputs/<model-name>-overview.svg`;
+- `outputs/<model-name>-overview.png`.
 
 For a requested full diagram, replace `overview` with `full`.
 
-## 10. Validate before completion
+## 9. Validate before completion
 
-Before exporting, verify:
+Before exporting or reporting completion, verify:
 
-- the Architecture IR validator passed;
-- every major node and edge has source evidence;
-- mutually exclusive branches were not flattened into one path;
-- loop-based decoder execution is visible when present;
-- residual edges end at explicit Add/Merge nodes;
-- conditional branches reconnect;
-- parallel groups are annotations, not compute nodes;
-- checkpoint mappings are separate from runtime flow;
-- no concrete external config values were guessed;
-- Draw.io XML uses stable IDs and `html=0` labels;
-- the Draw.io XML opens successfully.
+- Architecture IR validator passed;
+- Draw.io validator passed;
+- every IR node and edge exists in Draw.io;
+- no extra non-decorative semantic Draw.io nodes or edges exist;
+- every node parent matches IR `parent_id`;
+- child nodes stay inside parent containers;
+- repeated blocks show `repetition`;
+- construction variants render as decorative notes;
+- badges render as decorative cells;
+- no concrete external config values were guessed.
 
 # Completion report
 
@@ -202,4 +198,5 @@ Report:
 - unresolved external configuration or parser warnings;
 - source-analysis JSON path;
 - architecture-IR JSON path;
-- exported Draw.io and SVG paths.
+- Draw.io validation result;
+- exported Draw.io, SVG, and PNG paths.
