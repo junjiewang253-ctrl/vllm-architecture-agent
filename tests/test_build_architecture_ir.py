@@ -28,18 +28,31 @@ def build_hy_v3_ir() -> dict[str, Any]:
 
 
 def overview(ir: dict[str, Any]) -> dict[str, Any]:
-    return ir["pages"][0]
+    return next(page for page in ir["pages"] if page["id"] == "overview")
+
+
+def decoder_detail(ir: dict[str, Any]) -> dict[str, Any]:
+    return next(page for page in ir["pages"] if page["id"] == "decoder_layer_detail")
 
 
 def nodes_by_id(ir: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {node["id"]: node for node in overview(ir)["nodes"]}
 
 
+def detail_nodes_by_id(ir: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {node["id"]: node for node in decoder_detail(ir)["nodes"]}
+
+
 def test_builds_overview_ir_for_hy_v3():
     ir = build_hy_v3_ir()
-    assert ir["schema_version"] == "0.2"
+    assert ir["schema_version"] == "0.3"
     assert ir["detail_level"] == "overview"
     assert overview(ir)["id"] == "overview"
+
+
+def test_builder_generates_two_pages():
+    ir = build_hy_v3_ir()
+    assert [page["id"] for page in ir["pages"]] == ["overview", "decoder_layer_detail"]
 
 
 def test_identifies_top_level_model():
@@ -81,12 +94,26 @@ def test_dense_moe_variants_are_construction_phase():
     assert variants[0]["condition"] == "layer_idx < config.first_k_dense_replace"
 
 
-def test_attention_is_marked_tp():
+def test_overview_no_longer_contains_independent_attention_node():
     nodes = nodes_by_id(build_hy_v3_ir())
-    attention = nodes["hyv3_attention"]
+    assert "hyv3_attention" not in nodes
+    assert "self_attention" not in nodes
+
+
+def test_decoder_detail_contains_self_attention_marked_tp():
+    nodes = detail_nodes_by_id(build_hy_v3_ir())
+    attention = nodes["self_attention"]
     assert attention["label"] == "HYV3Attention"
-    assert attention["parent_id"] == "hyv3_decoder_layer"
     assert "TP" in attention["badges"]
+
+
+def test_decoder_detail_contains_required_stages():
+    nodes = detail_nodes_by_id(build_hy_v3_ir())
+    assert nodes["input_layernorm"]["display"]["label"] == "Input RMSNorm"
+    assert nodes["post_attention_layernorm"]["display"]["label"] == "Post-Attention RMSNorm"
+    assert nodes["ffn_stage"]["display"]["label"] == "Feed-Forward Stage"
+    assert nodes["attention_residual"]["kind"] == "add"
+    assert nodes["ffn_residual"]["kind"] == "add"
 
 
 def test_moe_and_decoder_parallel_badges_are_conservative():
@@ -94,6 +121,15 @@ def test_moe_and_decoder_parallel_badges_are_conservative():
     decoder = nodes["hyv3_decoder_layer"]
     assert "PP" in decoder["badges"]
     assert "EP" in decoder["badges"]
+
+
+def test_decoder_detail_dense_moe_are_construction_phase():
+    nodes = detail_nodes_by_id(build_hy_v3_ir())
+    assert nodes["dense_ffn"]["phase"] == "construction"
+    assert nodes["moe_ffn"]["phase"] == "construction"
+    edges = {edge["kind"] for edge in decoder_detail(build_hy_v3_ir())["edges"]}
+    assert "conditional_true" not in edges
+    assert "conditional_false" not in edges
 
 
 def test_external_parameters_enter_unresolved():
@@ -106,10 +142,19 @@ def test_external_parameters_enter_unresolved():
 
 def test_all_major_nodes_have_evidence():
     ir = build_hy_v3_ir()
-    for node in overview(ir)["nodes"]:
-        if node["kind"] in {"container", "note"}:
-            continue
-        assert node["evidence"], node["id"]
+    for page in ir["pages"]:
+        for node in page["nodes"]:
+            if node["kind"] in {"container", "note"}:
+                continue
+            assert node["evidence"], node["id"]
+
+
+def test_display_label_and_hidden_overview_edge_are_generated():
+    ir = build_hy_v3_ir()
+    nodes = nodes_by_id(ir)
+    assert nodes["vocab_parallel_embedding"]["display"]["label"] == "Token Embedding"
+    edges = {edge["id"]: edge for edge in overview(ir)["edges"]}
+    assert edges["top_invokes_model"]["display"]["visible"] is False
 
 
 def test_logits_processor_edges_use_ports():

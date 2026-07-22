@@ -42,6 +42,10 @@ def cells_by_id(xml: str) -> dict[str, ET.Element]:
     }
 
 
+def diagrams(xml: str) -> list[ET.Element]:
+    return ET.fromstring(xml).findall("diagram")
+
+
 def geometry(cell: ET.Element) -> dict[str, float]:
     geom = cell.find("mxGeometry")
     assert geom is not None
@@ -93,7 +97,7 @@ def test_child_nodes_are_not_all_root_parented():
     parents = {cells[node_id].get("parent") for node_id in semantic_nodes}
     assert parents != {"1"}
     assert "hyv3_model" in parents
-    assert "hyv3_decoder_layer" in parents
+    assert "ffn_stage" in parents
 
 
 def test_container_dimensions_exceed_internal_node_range():
@@ -109,22 +113,39 @@ def test_container_dimensions_exceed_internal_node_range():
 def test_repeated_block_displays_repetition():
     cells = cells_by_id(render_xml(hy_v3_ir()))
     value = cells["hyv3_decoder_layer"].get("value", "")
-    assert "config.num_hidden_layers x HYV3DecoderLayer" in value
-    assert "self.start_layer -> self.end_layer" in value
+    assert "N x Decoder Layers" in value
+    assert "Pipeline-local transformer stack" in value
 
 
 def test_variants_generate_decorative_cell():
     cells = cells_by_id(render_xml(hy_v3_ir()))
     variants = cells["decorative_variants_hyv3_decoder_layer"]
     assert variants.get("parent") == "hyv3_decoder_layer"
-    assert "Construction variants" in variants.get("value", "")
-    assert "HYV3MoEFused" in variants.get("value", "")
+    assert "Layer composition" in variants.get("value", "")
+    assert "Remaining layers: MoE" in variants.get("value", "")
 
 
 def test_badges_generate_decorative_cells():
     cells = cells_by_id(render_xml(hy_v3_ir()))
-    assert "decorative_badge_hyv3_attention_TP" in cells
+    assert "decorative_badge_self_attention_TP" in cells
     assert "decorative_badge_hyv3_decoder_layer_EP" in cells
+
+
+def test_renderer_generates_two_drawio_pages():
+    xml = render_xml(hy_v3_ir())
+    assert [(diagram.get("id"), diagram.get("name")) for diagram in diagrams(xml)] == [
+        ("overview", "Model Overview"),
+        ("decoder_layer_detail", "HYV3DecoderLayer Detail"),
+    ]
+
+
+def test_hidden_edge_still_exists_with_opacity_zero():
+    cells = cells_by_id(render_xml(hy_v3_ir()))
+    edge = cells["top_invokes_model"]
+    assert edge.get("edge") == "1"
+    assert "opacity=0" in edge.get("style", "")
+    assert edge.get("source") == "hyv3_for_causal_lm"
+    assert edge.get("target") == "hyv3_model"
 
 
 def test_same_input_renders_identical_xml():

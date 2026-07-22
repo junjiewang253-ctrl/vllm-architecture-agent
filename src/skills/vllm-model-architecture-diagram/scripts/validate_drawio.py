@@ -22,6 +22,13 @@ class Geometry:
     height: float
 
 
+@dataclass(frozen=True)
+class DiagramPage:
+    page_id: str
+    title: str
+    cells: dict[str, ET.Element]
+
+
 def _load_json(path: Path) -> dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -53,25 +60,7 @@ def _geometry(cell: ET.Element) -> Geometry | None:
     )
 
 
-def _ir_semantics(ir: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
-    nodes: dict[str, dict[str, Any]] = {}
-    edges: dict[str, dict[str, Any]] = {}
-    pages = ir.get("pages")
-    if not isinstance(pages, list):
-        raise ValueError("IR pages must be a list")
-    for page in pages:
-        if not isinstance(page, dict):
-            continue
-        for node in page.get("nodes", []):
-            if isinstance(node, dict) and isinstance(node.get("id"), str):
-                nodes[node["id"]] = node
-        for edge in page.get("edges", []):
-            if isinstance(edge, dict) and isinstance(edge.get("id"), str):
-                edges[edge["id"]] = edge
-    return nodes, edges
-
-
-def _drawio_cells(path: Path) -> tuple[dict[str, ET.Element], list[str]]:
+def _drawio_pages(path: Path) -> tuple[dict[str, DiagramPage], list[str]]:
     errors: list[str] = []
     try:
         tree = ET.parse(path)
@@ -79,64 +68,154 @@ def _drawio_cells(path: Path) -> tuple[dict[str, ET.Element], list[str]]:
         return {}, [f"Draw.io XML is not parseable: {exc}"]
 
     document = tree.getroot()
-    roots: list[ET.Element] = []
+    pages: dict[str, DiagramPage] = {}
     if document.tag == "mxGraphModel":
         root = document.find("root")
-        if root is not None:
-            roots.append(root)
-    elif document.tag == "mxfile":
-        for diagram in document.findall("diagram"):
-            model = diagram.find("mxGraphModel")
-            root = model.find("root") if model is not None else None
-            if root is not None:
-                roots.append(root)
-    else:
-        errors.append(f"unexpected Draw.io root element: {document.tag}")
+        if root is None:
+            return {}, ["Draw.io XML does not contain mxGraphModel/root"]
+        pages["overview"] = DiagramPage("overview", "Overview", _collect_cells(root, errors))
+        return pages, errors
 
-    if not roots and not errors:
-        errors.append("Draw.io XML does not contain mxGraphModel/root")
+    if document.tag != "mxfile":
+        return {}, [f"unexpected Draw.io root element: {document.tag}"]
 
+    for diagram in document.findall("diagram"):
+        page_id = diagram.get("id")
+        title = diagram.get("name")
+        if not page_id:
+            errors.append("diagram without id")
+            continue
+        if page_id in pages:
+            errors.append(f"duplicate Draw.io page id: {page_id}")
+            continue
+        model = diagram.find("mxGraphModel")
+        root = model.find("root") if model is not None else None
+        if root is None:
+            errors.append(f"diagram {page_id!r} does not contain mxGraphModel/root")
+            continue
+        pages[page_id] = DiagramPage(page_id, title or "", _collect_cells(root, errors))
+    if not pages and not errors:
+        errors.append("Draw.io XML does not contain any diagram pages")
+    return pages, errors
+
+
+def _collect_cells(root: ET.Element, errors: list[str]) -> dict[str, ET.Element]:
     cells: dict[str, ET.Element] = {}
-    for root in roots:
-        for cell in root.findall("mxCell"):
-            cell_id = cell.get("id")
-            if not cell_id:
-                errors.append("mxCell without id")
-                continue
-            if cell_id in cells and cell_id not in SENTINEL_IDS:
-                errors.append(f"duplicate Draw.io cell id: {cell_id}")
-            cells[cell_id] = cell
-    return cells, errors
+    for cell in root.findall("mxCell"):
+        cell_id = cell.get("id")
+        if not cell_id:
+            errors.append("mxCell without id")
+            continue
+        if cell_id in cells and cell_id not in SENTINEL_IDS:
+            errors.append(f"duplicate Draw.io cell id within page: {cell_id}")
+        cells[cell_id] = cell
+    return cells
 
 
 def _is_decorative(cell_id: str) -> bool:
     return cell_id.startswith(DECORATIVE_PREFIX)
 
 
+def _page_node_ids(page: dict[str, Any]) -> set[str]:
+    return {node["id"] for node in page.get("nodes", []) if isinstance(node, dict) and isinstance(node.get("id"), str)}
+
+
+def _page_edge_ids(page: dict[str, Any]) -> set[str]:
+    return {edge["id"] for edge in page.get("edges", []) if isinstance(edge, dict) and isinstance(edge.get("id"), str)}
+
+
 def validate_drawio(ir: dict[str, Any], drawio_path: Path) -> list[str]:
     errors: list[str] = []
-    ir_nodes, ir_edges = _ir_semantics(ir)
-    cells, parse_errors = _drawio_cells(drawio_path)
+    draw_pages, parse_errors = _drawio_pages(drawio_path)
     errors.extend(parse_errors)
     if parse_errors:
         return errors
 
-    for node_id in sorted(ir_nodes):
+    ir_pages = ir.get("pages")
+    if not isinstance(ir_pages, list):
+        return ["IR pages must be a list"]
+
+    ir_page_ids = {
+        page.get("id")
+        for page in ir_pages
+        if isinstance(page, dict) and isinstance(page.get("id"), str)
+    }
+    for page_id in sorted(ir_page_ids):
+        if page_id not in draw_pages:
+            errors.append(f"missing Draw.io page for IR page: {page_id}")
+    for page_id in sorted(draw_pages):
+        if page_id not in ir_page_ids:
+            errors.append(f"extra Draw.io page not present in IR: {page_id}")
+
+    all_ir_node_ids: set[str] = set()
+    for page in ir_pages:
+        if not isinstance(page, dict):
+            continue
+        all_ir_node_ids.update(_page_node_ids(page))
+
+    for page in ir_pages:
+        if not isinstance(page, dict):
+            continue
+        page_id = page.get("id")
+        if not isinstance(page_id, str) or page_id not in draw_pages:
+            continue
+        draw_page = draw_pages[page_id]
+        if draw_page.title != page.get("title"):
+            errors.append(
+                f"page {page_id} title mismatch: expected {page.get('title')!r}, got {draw_page.title!r}"
+            )
+        _validate_page(page, draw_page, all_ir_node_ids, errors)
+
+    return errors
+
+
+def _validate_page(
+    ir_page: dict[str, Any],
+    draw_page: DiagramPage,
+    all_ir_node_ids: set[str],
+    errors: list[str],
+) -> None:
+    node_ids = _page_node_ids(ir_page)
+    edge_ids = _page_edge_ids(ir_page)
+    cells = draw_page.cells
+
+    for node_id in sorted(node_ids):
         if node_id not in cells:
-            errors.append(f"missing Draw.io node for IR node: {node_id}")
-    for edge_id in sorted(ir_edges):
+            errors.append(f"page {draw_page.page_id}: missing Draw.io node for IR node: {node_id}")
+    for edge_id in sorted(edge_ids):
         if edge_id not in cells:
-            errors.append(f"missing Draw.io edge for IR edge: {edge_id}")
+            errors.append(f"page {draw_page.page_id}: missing Draw.io edge for IR edge: {edge_id}")
 
     for cell_id, cell in sorted(cells.items()):
-        if cell_id in SENTINEL_IDS or _is_decorative(cell_id):
+        if cell_id in SENTINEL_IDS:
             continue
-        if cell.get("vertex") == "1" and cell_id not in ir_nodes:
-            errors.append(f"extra semantic Draw.io node not present in IR: {cell_id}")
-        if cell.get("edge") == "1" and cell_id not in ir_edges:
-            errors.append(f"extra semantic Draw.io edge not present in IR: {cell_id}")
+        if _is_decorative(cell_id):
+            parent = cell.get("parent")
+            if parent not in SENTINEL_IDS and parent not in node_ids:
+                errors.append(
+                    f"page {draw_page.page_id}: decorative cell {cell_id} references non-page parent {parent!r}"
+                )
+            continue
+        if cell.get("vertex") == "1" and cell_id not in node_ids:
+            if cell_id in all_ir_node_ids:
+                errors.append(f"page {draw_page.page_id}: semantic node from another page is present: {cell_id}")
+            else:
+                errors.append(f"page {draw_page.page_id}: extra semantic Draw.io node not present in IR: {cell_id}")
+        if cell.get("edge") == "1" and cell_id not in edge_ids:
+            errors.append(f"page {draw_page.page_id}: extra semantic Draw.io edge not present in IR: {cell_id}")
 
-    for node_id, node in sorted(ir_nodes.items()):
+    node_by_id = {
+        node["id"]: node
+        for node in ir_page.get("nodes", [])
+        if isinstance(node, dict) and isinstance(node.get("id"), str)
+    }
+    edge_by_id = {
+        edge["id"]: edge
+        for edge in ir_page.get("edges", [])
+        if isinstance(edge, dict) and isinstance(edge.get("id"), str)
+    }
+
+    for node_id, node in sorted(node_by_id.items()):
         cell = cells.get(node_id)
         if cell is None:
             continue
@@ -144,34 +223,31 @@ def validate_drawio(ir: dict[str, Any], drawio_path: Path) -> list[str]:
         actual_parent = cell.get("parent")
         if actual_parent != expected_parent:
             errors.append(
-                f"node {node_id} parent mismatch: expected {expected_parent!r}, got {actual_parent!r}"
+                f"page {draw_page.page_id}: node {node_id} parent mismatch: expected {expected_parent!r}, got {actual_parent!r}"
             )
         if node.get("parent_id") and actual_parent == ROOT_PARENT_ID:
-            errors.append(f"node {node_id} has parent_id but still uses root parent")
-
+            errors.append(f"page {draw_page.page_id}: node {node_id} has parent_id but still uses root parent")
         geometry = _geometry(cell)
         if geometry is None:
-            errors.append(f"node {node_id} is missing geometry")
+            errors.append(f"page {draw_page.page_id}: node {node_id} is missing geometry")
             continue
         if geometry.width <= 0 or geometry.height <= 0:
-            errors.append(f"node {node_id} geometry width/height must be greater than 0")
+            errors.append(f"page {draw_page.page_id}: node {node_id} geometry width/height must be greater than 0")
 
-    for edge_id, edge in sorted(ir_edges.items()):
+    for edge_id, edge in sorted(edge_by_id.items()):
         cell = cells.get(edge_id)
         if cell is None:
             continue
-        actual_source = cell.get("source")
-        actual_target = cell.get("target")
-        if actual_source != edge.get("source"):
+        if cell.get("source") != edge.get("source"):
             errors.append(
-                f"edge {edge_id} source mismatch: expected {edge.get('source')!r}, got {actual_source!r}"
+                f"page {draw_page.page_id}: edge {edge_id} source mismatch: expected {edge.get('source')!r}, got {cell.get('source')!r}"
             )
-        if actual_target != edge.get("target"):
+        if cell.get("target") != edge.get("target"):
             errors.append(
-                f"edge {edge_id} target mismatch: expected {edge.get('target')!r}, got {actual_target!r}"
+                f"page {draw_page.page_id}: edge {edge_id} target mismatch: expected {edge.get('target')!r}, got {cell.get('target')!r}"
             )
 
-    for node_id, node in sorted(ir_nodes.items()):
+    for node_id, node in sorted(node_by_id.items()):
         parent_id = node.get("parent_id")
         if not isinstance(parent_id, str) or not parent_id:
             continue
@@ -189,9 +265,7 @@ def validate_drawio(ir: dict[str, Any], drawio_path: Path) -> list[str]:
             or child_geometry.x + child_geometry.width > parent_geometry.width
             or child_geometry.y + child_geometry.height > parent_geometry.height
         ):
-            errors.append(f"node {node_id} is outside parent container {parent_id}")
-
-    return errors
+            errors.append(f"page {draw_page.page_id}: node {node_id} is outside parent container {parent_id}")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

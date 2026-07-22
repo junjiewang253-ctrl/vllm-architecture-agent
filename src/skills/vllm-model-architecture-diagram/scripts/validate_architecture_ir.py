@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the semantic architecture IR before Draw.io rendering."""
+"""Validate semantic Architecture IR before Draw.io rendering."""
 
 from __future__ import annotations
 
@@ -26,7 +26,6 @@ NODE_KINDS = {
     "container",
     "note",
 }
-
 EDGE_KINDS = {
     "runtime",
     "residual",
@@ -38,28 +37,55 @@ EDGE_KINDS = {
     "invocation",
     "summary",
 }
-
+PHASES = {"construction", "runtime", "checkpoint_loading", "parallel_partition"}
 NON_MAJOR_NODE_KINDS = {"note", "container"}
 PARALLEL_BADGE_LABELS = {"TP", "PP", "EP"}
-PHASES = {
-    "construction",
-    "runtime",
-    "checkpoint_loading",
-    "parallel_partition",
-}
 
 
 def _is_non_empty_evidence(value: Any) -> bool:
-    return isinstance(value, list) and bool(value) and all(
-        isinstance(item, dict) for item in value
-    )
+    return isinstance(value, list) and bool(value) and all(isinstance(item, dict) for item in value)
+
+
+def _has_derived_evidence(value: Any) -> bool:
+    return isinstance(value, list) and any(isinstance(item, dict) and item.get("type") == "derived" for item in value)
+
+
+def _validate_node_display(value: Any, prefix: str, errors: list[str]) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict):
+        errors.append(f"{prefix}.display must be an object")
+        return
+    for key in value:
+        if key not in {"label", "subtitle", "description", "show_badges"}:
+            errors.append(f"{prefix}.display contains unknown key: {key}")
+    for key in ("label", "subtitle", "description"):
+        if key in value and value[key] is not None and not isinstance(value[key], str):
+            errors.append(f"{prefix}.display.{key} must be a string or null")
+    if "show_badges" in value and not isinstance(value["show_badges"], bool):
+        errors.append(f"{prefix}.display.show_badges must be boolean")
+
+
+def _validate_edge_display(value: Any, prefix: str, errors: list[str]) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict):
+        errors.append(f"{prefix}.display must be an object")
+        return
+    for key in value:
+        if key not in {"visible", "label"}:
+            errors.append(f"{prefix}.display contains unknown key: {key}")
+    if "visible" in value and not isinstance(value["visible"], bool):
+        errors.append(f"{prefix}.display.visible must be boolean")
+    if "label" in value and value["label"] is not None and not isinstance(value["label"], str):
+        errors.append(f"{prefix}.display.label must be a string or null")
 
 
 def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
     errors: list[str] = []
 
-    if data.get("schema_version") != "0.2":
-        errors.append("schema_version must be '0.2'")
+    if data.get("schema_version") != "0.3":
+        errors.append("schema_version must be '0.3'")
     if not isinstance(data.get("model_name"), str) or not data["model_name"].strip():
         errors.append("model_name must be a non-empty string")
     if data.get("detail_level") not in {"overview", "full"}:
@@ -70,11 +96,21 @@ def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
         errors.append("pages must be a non-empty list")
         return errors
 
+    global_node_to_page: dict[str, str] = {}
+    global_edge_ids: set[str] = set()
+    page_nodes: dict[str, dict[str, dict[str, Any]]] = {}
+
     for page_index, page in enumerate(pages):
         prefix = f"pages[{page_index}]"
         if not isinstance(page, dict):
             errors.append(f"{prefix} must be an object")
             continue
+        page_id = page.get("id")
+        if not isinstance(page_id, str) or not page_id:
+            errors.append(f"{prefix}.id must be a non-empty string")
+            page_id = f"<invalid-{page_index}>"
+        if not isinstance(page.get("title"), str) or not page["title"].strip():
+            errors.append(f"{prefix}.title must be a non-empty string")
 
         nodes = page.get("nodes")
         edges = page.get("edges")
@@ -97,22 +133,23 @@ def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
                 continue
             if node_id in node_by_id:
                 errors.append(f"{prefix} contains duplicate node id: {node_id}")
-            else:
-                node_by_id[node_id] = node
+            if node_id in global_node_to_page:
+                errors.append(f"node id {node_id!r} appears on multiple pages")
+            global_node_to_page[node_id] = page_id
+            node_by_id[node_id] = node
 
             kind = node.get("kind")
+            phase = node.get("phase")
+            label = node.get("label")
             if kind not in NODE_KINDS:
                 errors.append(f"{node_prefix}.kind is invalid: {kind!r}")
-            phase = node.get("phase")
             if phase not in PHASES:
                 errors.append(f"{node_prefix}.phase is invalid: {phase!r}")
-            label = node.get("label")
             if not isinstance(label, str) or not label.strip():
                 errors.append(f"{node_prefix}.label must be a non-empty string")
             elif label.strip().upper() in PARALLEL_BADGE_LABELS and kind != "note":
-                errors.append(
-                    f"{node_prefix}: TP/PP/EP must be badges or notes, not compute nodes"
-                )
+                errors.append(f"{node_prefix}: TP/PP/EP must be badges or notes, not compute nodes")
+            _validate_node_display(node.get("display"), node_prefix, errors)
 
             badges = node.get("badges")
             if not isinstance(badges, list):
@@ -133,12 +170,8 @@ def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
             if repetition is not None:
                 if not isinstance(repetition, dict):
                     errors.append(f"{node_prefix}.repetition must be an object or null")
-                else:
-                    count_expression = repetition.get("count_expression")
-                    if not isinstance(count_expression, str) or not count_expression.strip():
-                        errors.append(
-                            f"{node_prefix}.repetition.count_expression must be non-empty"
-                        )
+                elif not isinstance(repetition.get("count_expression"), str) or not repetition["count_expression"].strip():
+                    errors.append(f"{node_prefix}.repetition.count_expression must be non-empty")
 
             variants = node.get("variants")
             if variants is not None:
@@ -150,36 +183,35 @@ def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
                         if not isinstance(variant, dict):
                             errors.append(f"{variant_prefix} must be an object")
                             continue
-                        variant_phase = variant.get("phase")
-                        if variant_phase not in PHASES:
-                            errors.append(
-                                f"{variant_prefix}.phase is invalid: {variant_phase!r}"
-                            )
+                        if variant.get("phase") not in PHASES:
+                            errors.append(f"{variant_prefix}.phase is invalid: {variant.get('phase')!r}")
                         component = variant.get("component")
-                        if (
-                            isinstance(component, str)
-                            and ("MoE" in component or "FeedForward" in component or "FFN" in component)
-                            and variant_phase != "construction"
-                        ):
-                            errors.append(
-                                f"{variant_prefix}: Dense/MoE variants must use construction phase"
-                            )
+                        if isinstance(component, str) and ("MoE" in component or "FeedForward" in component or "FFN" in component) and variant.get("phase") != "construction":
+                            errors.append(f"{variant_prefix}: Dense/MoE variants must use construction phase")
 
-            if kind not in NON_MAJOR_NODE_KINDS and not _is_non_empty_evidence(
-                node.get("evidence")
-            ):
+            if kind not in NON_MAJOR_NODE_KINDS and not _is_non_empty_evidence(node.get("evidence")):
                 errors.append(f"{node_prefix} must include source evidence")
+            if kind in {"add", "merge"} and str(node.get("label", "")).lower().find("handoff") >= 0 and not _has_derived_evidence(node.get("evidence")):
+                errors.append(f"{node_prefix}: derived Add/Handoff node must include derived evidence")
 
         for node_index, node in enumerate(nodes):
             if not isinstance(node, dict):
                 continue
             parent_id = node.get("parent_id")
             if isinstance(parent_id, str) and parent_id and parent_id not in node_by_id:
-                errors.append(
-                    f"{prefix}.nodes[{node_index}].parent_id references unknown node: {parent_id!r}"
-                )
+                errors.append(f"{prefix}.nodes[{node_index}].parent_id references unknown or cross-page node: {parent_id!r}")
 
-        edge_ids: set[str] = set()
+        page_nodes[page_id] = node_by_id
+
+    for page_index, page in enumerate(pages):
+        if not isinstance(page, dict):
+            continue
+        prefix = f"pages[{page_index}]"
+        page_id = page.get("id")
+        node_by_id = page_nodes.get(page_id, {})
+        edges = page.get("edges")
+        if not isinstance(edges, list):
+            continue
         outgoing: dict[str, list[dict[str, Any]]] = {}
         for edge_index, edge in enumerate(edges):
             edge_prefix = f"{prefix}.edges[{edge_index}]"
@@ -189,19 +221,20 @@ def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
             edge_id = edge.get("id")
             if not isinstance(edge_id, str) or not edge_id:
                 errors.append(f"{edge_prefix}.id must be a non-empty string")
-            elif edge_id in edge_ids:
-                errors.append(f"{prefix} contains duplicate edge id: {edge_id}")
+            elif edge_id in global_edge_ids:
+                errors.append(f"duplicate edge id: {edge_id}")
             else:
-                edge_ids.add(edge_id)
+                global_edge_ids.add(edge_id)
 
             source = edge.get("source")
             target = edge.get("target")
             kind = edge.get("kind")
             phase = edge.get("phase")
+            _validate_edge_display(edge.get("display"), edge_prefix, errors)
             if source not in node_by_id:
-                errors.append(f"{edge_prefix}.source references unknown node: {source!r}")
+                errors.append(f"{edge_prefix}.source references unknown or cross-page node: {source!r}")
             if target not in node_by_id:
-                errors.append(f"{edge_prefix}.target references unknown node: {target!r}")
+                errors.append(f"{edge_prefix}.target references unknown or cross-page node: {target!r}")
             if kind not in EDGE_KINDS:
                 errors.append(f"{edge_prefix}.kind is invalid: {kind!r}")
             if phase not in PHASES:
@@ -210,74 +243,34 @@ def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
                 errors.append(f"{edge_prefix} must include source evidence")
             if isinstance(source, str):
                 outgoing.setdefault(source, []).append(edge)
-
-            if kind == "residual" and target in node_by_id:
-                target_kind = node_by_id[target].get("kind")
-                if target_kind not in {"add", "merge"}:
-                    errors.append(
-                        f"{edge_prefix}: residual edge must target an add or merge node"
-                    )
+            if kind == "residual" and target in node_by_id and node_by_id[target].get("kind") not in {"add", "merge"}:
+                errors.append(f"{edge_prefix}: residual edge must target an add or merge node")
             if kind == "weight_mapping" and phase != "checkpoint_loading":
-                errors.append(
-                    f"{edge_prefix}: weight_mapping edge must use checkpoint_loading phase"
-                )
+                errors.append(f"{edge_prefix}: weight_mapping edge must use checkpoint_loading phase")
 
             if source in node_by_id and target in node_by_id:
                 source_node = node_by_id[source]
                 target_node = node_by_id[target]
                 source_scope = source_node.get("scope")
                 target_scope = target_node.get("scope")
-                if (
-                    kind == "runtime"
-                    and isinstance(source_scope, str)
-                    and isinstance(target_scope, str)
-                    and source_scope
-                    and target_scope
-                    and source_scope != target_scope
-                ):
-                    errors.append(
-                        f"{edge_prefix}: runtime edge cannot cross scopes "
-                        f"{source_scope!r} -> {target_scope!r}"
-                    )
-                if (
-                    isinstance(source_scope, str)
-                    and isinstance(target_scope, str)
-                    and source_scope
-                    and target_scope
-                    and source_scope != target_scope
-                    and kind not in {"invocation", "summary"}
-                ):
-                    errors.append(
-                        f"{edge_prefix}: cross-scope edge must use invocation or summary"
-                    )
-                if kind == "runtime" and (
-                    source_node.get("phase") == "construction"
-                    or target_node.get("phase") == "construction"
-                ):
-                    errors.append(
-                        f"{edge_prefix}: construction phase nodes cannot use runtime edges"
-                    )
+                if kind == "runtime" and isinstance(source_scope, str) and isinstance(target_scope, str) and source_scope and target_scope and source_scope != target_scope:
+                    errors.append(f"{edge_prefix}: runtime edge cannot cross scopes {source_scope!r} -> {target_scope!r}")
+                if isinstance(source_scope, str) and isinstance(target_scope, str) and source_scope and target_scope and source_scope != target_scope and kind not in {"invocation", "summary"}:
+                    errors.append(f"{edge_prefix}: cross-scope edge must use invocation or summary")
+                if kind == "runtime" and (source_node.get("phase") == "construction" or target_node.get("phase") == "construction"):
+                    errors.append(f"{edge_prefix}: construction phase nodes cannot use runtime edges")
 
         for node_id, node in node_by_id.items():
             if node.get("kind") != "decision":
                 continue
             kinds = {edge.get("kind") for edge in outgoing.get(node_id, [])}
             if "conditional_true" not in kinds or "conditional_false" not in kinds:
-                errors.append(
-                    f"{prefix}: decision node {node_id!r} requires true and false branches"
-                )
+                errors.append(f"{prefix}: decision node {node_id!r} requires true and false branches")
 
-        if data.get("detail_level") == "overview":
-            major_nodes = [
-                node
-                for node in nodes
-                if isinstance(node, dict)
-                and node.get("kind") not in NON_MAJOR_NODE_KINDS
-            ]
+        if page_id == "overview":
+            major_nodes = [node for node in node_by_id.values() if node.get("kind") not in NON_MAJOR_NODE_KINDS]
             if len(major_nodes) > 12:
-                errors.append(
-                    f"{prefix}: overview contains {len(major_nodes)} major nodes; maximum is 12"
-                )
+                errors.append(f"{prefix}: overview contains {len(major_nodes)} major nodes; maximum is 12")
 
     return errors
 

@@ -26,7 +26,7 @@ def load_validator_module():
 
 def valid_ir():
     return {
-        "schema_version": "0.2",
+        "schema_version": "0.3",
         "model_name": "Example",
         "detail_level": "overview",
         "pages": [
@@ -143,7 +143,7 @@ def test_unknown_edge_endpoint_fails():
     data = valid_ir()
     data["pages"][0]["edges"][0]["target"] = "missing"
     errors = module.validate_architecture_ir(data)
-    assert any("unknown node" in error for error in errors)
+    assert any("unknown or cross-page node" in error for error in errors)
 
 
 def test_invalid_parent_id_fails():
@@ -151,7 +151,7 @@ def test_invalid_parent_id_fails():
     data = valid_ir()
     data["pages"][0]["nodes"][1]["parent_id"] = "missing"
     errors = module.validate_architecture_ir(data)
-    assert any("parent_id references unknown node" in error for error in errors)
+    assert any("parent_id references unknown or cross-page node" in error for error in errors)
 
 
 def test_runtime_edge_cross_scope_fails():

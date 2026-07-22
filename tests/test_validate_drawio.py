@@ -52,9 +52,12 @@ def find_cell(tree: ET.ElementTree, cell_id: str) -> ET.Element:
 
 
 def remove_cell(tree: ET.ElementTree, cell_id: str) -> None:
-    root = root_cell_parent(tree)
-    cell = find_cell(tree, cell_id)
-    root.remove(cell)
+    for root in tree.getroot().findall(".//root"):
+        cell = root.find(f"mxCell[@id='{cell_id}']")
+        if cell is not None:
+            root.remove(cell)
+            return
+    raise AssertionError(f"cell not found: {cell_id}")
 
 
 def validate(ir: dict[str, Any], path: Path) -> list[str]:
@@ -69,7 +72,7 @@ def valid_drawio_path(tmp_path: Path, ir: dict[str, Any]) -> Path:
 def test_missing_node_fails(tmp_path: Path):
     ir = hy_v3_ir()
     tree = render_tree(ir)
-    remove_cell(tree, "hyv3_attention")
+    remove_cell(tree, "self_attention")
     errors = validate(ir, write_tree(tmp_path / "missing-node.drawio", tree))
     assert any("missing Draw.io node" in error for error in errors)
 
@@ -77,7 +80,7 @@ def test_missing_node_fails(tmp_path: Path):
 def test_missing_edge_fails(tmp_path: Path):
     ir = hy_v3_ir()
     tree = render_tree(ir)
-    remove_cell(tree, "decoder_invokes_attention")
+    remove_cell(tree, "input_layernorm_to_self_attention")
     errors = validate(ir, write_tree(tmp_path / "missing-edge.drawio", tree))
     assert any("missing Draw.io edge" in error for error in errors)
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render Architecture IR 0.2 to deterministic Draw.io XML."""
+"""Render Architecture IR to deterministic Draw.io XML."""
 
 import argparse
 import json
@@ -140,9 +140,14 @@ def _fmt(value: float) -> str:
 
 
 def _node_label(node: dict[str, Any]) -> str:
-    label = str(node.get("label", ""))
-    subtitle = node.get("subtitle")
-    if node.get("kind") == "repeated_block":
+    display = node.get("display")
+    label: Any = display.get("label") if isinstance(display, dict) else None
+    subtitle: Any = display.get("subtitle") if isinstance(display, dict) else None
+    if not isinstance(label, str) or not label.strip():
+        label = str(node.get("label", ""))
+    if not isinstance(subtitle, str):
+        subtitle = node.get("subtitle")
+    if node.get("kind") == "repeated_block" and not (isinstance(display, dict) and display.get("label")):
         repetition = node.get("repetition")
         if isinstance(repetition, dict):
             count = repetition.get("count_expression")
@@ -180,14 +185,19 @@ def _variant_lines(node: dict[str, Any]) -> list[str]:
     variants = node.get("variants")
     if not isinstance(variants, list) or not variants:
         return []
-    lines = ["Construction variants"]
+    lines = ["Layer construction"] if node.get("id") == "ffn_stage" else ["Layer composition"]
     for variant in variants:
         if not isinstance(variant, dict):
             continue
-        condition = str(variant.get("condition", "")).strip()
         component = str(variant.get("component", "")).strip()
-        if condition and component:
-            lines.append(f"{condition} -> {component}")
+        if not component:
+            continue
+        if "FeedForward" in component or "FFN" in component:
+            lines.append("First K layers: Dense FFN")
+        elif "MoE" in component:
+            lines.append("Remaining layers: MoE")
+        else:
+            lines.append(component)
     return lines
 
 
@@ -358,6 +368,8 @@ def compute_layout(page: dict[str, Any]) -> tuple[dict[str, LayoutBox], list[Dec
         raise ValueError("page.nodes must be a list")
     boxes: dict[str, LayoutBox] = {}
     decorations: list[Decoration] = []
+    if page.get("id") == "decoder_layer_detail":
+        return _layout_decoder_detail(page, boxes, decorations)
     roots = _ordered_children(None, nodes)
     if not roots:
         raise ValueError("page must contain at least one root node")
@@ -367,6 +379,66 @@ def compute_layout(page: dict[str, Any]) -> tuple[dict[str, LayoutBox], list[Dec
         root_id = str(root["id"])
         boxes[root_id] = LayoutBox(x, 40.0, measured.width, measured.height)
         x += measured.width + SIDE_GAP
+    return boxes, decorations
+
+
+def _layout_decoder_detail(
+    page: dict[str, Any],
+    boxes: dict[str, LayoutBox],
+    decorations: list[Decoration],
+) -> tuple[dict[str, LayoutBox], list[Decoration]]:
+    nodes = page.get("nodes")
+    if not isinstance(nodes, list):
+        raise ValueError("page.nodes must be a list")
+    node_by_id = {
+        str(node["id"]): node
+        for node in nodes
+        if isinstance(node, dict) and "id" in node
+    }
+    sizes = {
+        node_id: LayoutBox(0.0, 0.0, *_leaf_size(node))
+        for node_id, node in node_by_id.items()
+        if node.get("kind") not in {"container", "repeated_block"}
+    }
+
+    for node_id, x in zip(
+        ["decoder_input", "input_layernorm", "self_attention", "attention_residual"],
+        [40.0, 250.0, 470.0, 690.0],
+    ):
+        if node_id in sizes:
+            size = sizes[node_id]
+            boxes[node_id] = LayoutBox(x, 84.0, size.width, size.height)
+
+    if "ffn_stage" in node_by_id:
+        boxes["ffn_stage"] = LayoutBox(250.0, 284.0, 448.0, 220.0)
+        boxes["dense_ffn"] = LayoutBox(24.0, 72.0, 180.0, 76.0)
+        boxes["moe_ffn"] = LayoutBox(228.0, 72.0, 188.0, 76.0)
+        decorations.append(
+            Decoration(
+                cell_id="decorative_variants_ffn_stage",
+                parent="ffn_stage",
+                value="\n".join(_variant_lines(node_by_id["ffn_stage"])),
+                style=(
+                    "rounded=1;whiteSpace=wrap;html=0;fontFamily=Inter;fontSize=12;"
+                    "align=left;verticalAlign=top;spacing=8;fillColor=#FFFBEB;"
+                    "strokeColor=#D6A63B;dashed=1;"
+                ),
+                box=LayoutBox(24.0, 156.0, 392.0, 48.0),
+            )
+        )
+
+    for node_id, x in {
+        "post_attention_layernorm": 40.0,
+        "ffn_residual": 740.0,
+        "decoder_output": 950.0,
+    }.items():
+        if node_id in sizes:
+            size = sizes[node_id]
+            boxes[node_id] = LayoutBox(x, 300.0, size.width, size.height)
+
+    for node_id, size in sizes.items():
+        if node_id not in boxes:
+            boxes[node_id] = size
     return boxes, decorations
 
 
@@ -396,6 +468,13 @@ def _node_parent(node: dict[str, Any]) -> str:
 
 
 def _edge_label(edge: dict[str, Any]) -> str:
+    display = edge.get("display")
+    if isinstance(display, dict):
+        if display.get("visible") is False:
+            return ""
+        display_label = display.get("label")
+        if isinstance(display_label, str):
+            return display_label
     label = edge.get("label")
     if isinstance(label, str) and label:
         return label
@@ -411,6 +490,9 @@ def _edge_label(edge: dict[str, Any]) -> str:
 
 def _add_badges(root: ET.Element, node: dict[str, Any], box: LayoutBox) -> list[Decoration]:
     decorations: list[Decoration] = []
+    display = node.get("display")
+    if isinstance(display, dict) and display.get("show_badges") is False:
+        return decorations
     badges = node.get("badges")
     if not isinstance(badges, list):
         return decorations
@@ -444,7 +526,7 @@ def render_drawio(ir: dict[str, Any]) -> str:
             "host": "app.diagrams.net",
             "modified": "2026-07-22T00:00:00.000Z",
             "agent": "vllm-architecture-agent",
-            "version": "v0.5",
+            "version": "v0.6",
             "type": "device",
         },
     )
@@ -525,6 +607,9 @@ def render_drawio(ir: dict[str, Any]) -> str:
                 continue
             kind = str(edge.get("kind"))
             edge_style = EDGE_STYLES.get(kind, EDGE_STYLES["runtime"])
+            display = edge.get("display")
+            if isinstance(display, dict) and display.get("visible") is False:
+                edge_style += "opacity=0;"
             cell = _make_cell(
                 root,
                 {

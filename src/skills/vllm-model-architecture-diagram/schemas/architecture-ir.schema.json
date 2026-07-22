@@ -5,7 +5,7 @@
   "type": "object",
   "required": ["schema_version", "model_name", "detail_level", "pages", "unresolved"],
   "properties": {
-    "schema_version": {"const": "0.2"},
+    "schema_version": {"const": "0.3"},
     "model_name": {"type": "string", "minLength": 1},
     "detail_level": {"enum": ["overview", "full"]},
     "pages": {
@@ -26,6 +26,16 @@
                 "id": {"type": "string", "minLength": 1},
                 "label": {"type": "string", "minLength": 1},
                 "subtitle": {"type": ["string", "null"]},
+                "display": {
+                  "type": "object",
+                  "properties": {
+                    "label": {"type": "string"},
+                    "subtitle": {"type": ["string", "null"]},
+                    "description": {"type": ["string", "null"]},
+                    "show_badges": {"type": "boolean"}
+                  },
+                  "additionalProperties": false
+                },
                 "kind": {
                   "enum": [
                     "input",
@@ -126,6 +136,14 @@
                 "condition": {"type": ["string", "null"]},
                 "source_port": {"type": ["string", "null"]},
                 "target_port": {"type": ["string", "null"]},
+                "display": {
+                  "type": "object",
+                  "properties": {
+                    "visible": {"type": "boolean"},
+                    "label": {"type": ["string", "null"]}
+                  },
+                  "additionalProperties": false
+                },
                 "evidence": {"type": "array", "items": {"type": "object"}}
               },
               "additionalProperties": true
