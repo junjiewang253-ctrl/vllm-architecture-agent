@@ -26,13 +26,14 @@ def load_validator_module():
 
 def valid_ir():
     return {
-        "schema_version": "0.3",
+        "schema_version": "0.4",
         "model_name": "Example",
         "detail_level": "overview",
         "pages": [
             {
                 "id": "overview",
                 "title": "Overview",
+                "page_type": "overview",
                 "nodes": [
                     {
                         "id": "input",
@@ -202,6 +203,22 @@ def test_invalid_badge_fails():
     data["pages"][0]["nodes"][1]["badges"] = ["TP", "DP"]
     errors = module.validate_architecture_ir(data)
     assert any("invalid badge" in error for error in errors)
+
+
+def test_invalid_edge_display_route_fails():
+    module = load_validator_module()
+    data = valid_ir()
+    data["pages"][0]["edges"][0]["display"] = {"visible": True, "show_label": False, "route": "sideways"}
+    errors = module.validate_architecture_ir(data)
+    assert any("display.route is invalid" in error for error in errors)
+
+
+def test_edge_display_show_label_must_be_boolean():
+    module = load_validator_module()
+    data = valid_ir()
+    data["pages"][0]["edges"][0]["display"] = {"visible": True, "show_label": "no"}
+    errors = module.validate_architecture_ir(data)
+    assert any("display.show_label must be boolean" in error for error in errors)
 
 
 def test_residual_must_target_add_or_merge():

@@ -36,10 +36,14 @@ EDGE_KINDS = {
     "weight_mapping",
     "invocation",
     "summary",
+    "adaptation",
+    "parallel_partition",
 }
 PHASES = {"construction", "runtime", "checkpoint_loading", "parallel_partition"}
 NON_MAJOR_NODE_KINDS = {"note", "container"}
 PARALLEL_BADGE_LABELS = {"TP", "PP", "EP"}
+PAGE_TYPES = {"overview", "decoder_detail", "attention_detail", "adaptation_map"}
+EDGE_DISPLAY_ROUTES = {"direct", "top_lane", "bottom_lane"}
 
 
 def _is_non_empty_evidence(value: Any) -> bool:
@@ -73,19 +77,23 @@ def _validate_edge_display(value: Any, prefix: str, errors: list[str]) -> None:
         errors.append(f"{prefix}.display must be an object")
         return
     for key in value:
-        if key not in {"visible", "label"}:
+        if key not in {"visible", "label", "show_label", "route"}:
             errors.append(f"{prefix}.display contains unknown key: {key}")
     if "visible" in value and not isinstance(value["visible"], bool):
         errors.append(f"{prefix}.display.visible must be boolean")
     if "label" in value and value["label"] is not None and not isinstance(value["label"], str):
         errors.append(f"{prefix}.display.label must be a string or null")
+    if "show_label" in value and not isinstance(value["show_label"], bool):
+        errors.append(f"{prefix}.display.show_label must be boolean")
+    if "route" in value and value["route"] not in EDGE_DISPLAY_ROUTES:
+        errors.append(f"{prefix}.display.route is invalid: {value.get('route')!r}")
 
 
 def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
     errors: list[str] = []
 
-    if data.get("schema_version") != "0.3":
-        errors.append("schema_version must be '0.3'")
+    if data.get("schema_version") != "0.4":
+        errors.append("schema_version must be '0.4'")
     if not isinstance(data.get("model_name"), str) or not data["model_name"].strip():
         errors.append("model_name must be a non-empty string")
     if data.get("detail_level") not in {"overview", "full"}:
@@ -111,6 +119,8 @@ def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
             page_id = f"<invalid-{page_index}>"
         if not isinstance(page.get("title"), str) or not page["title"].strip():
             errors.append(f"{prefix}.title must be a non-empty string")
+        if page.get("page_type") not in PAGE_TYPES:
+            errors.append(f"{prefix}.page_type is invalid: {page.get('page_type')!r}")
 
         nodes = page.get("nodes")
         edges = page.get("edges")
@@ -255,7 +265,7 @@ def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
                 target_scope = target_node.get("scope")
                 if kind == "runtime" and isinstance(source_scope, str) and isinstance(target_scope, str) and source_scope and target_scope and source_scope != target_scope:
                     errors.append(f"{edge_prefix}: runtime edge cannot cross scopes {source_scope!r} -> {target_scope!r}")
-                if isinstance(source_scope, str) and isinstance(target_scope, str) and source_scope and target_scope and source_scope != target_scope and kind not in {"invocation", "summary"}:
+                if isinstance(source_scope, str) and isinstance(target_scope, str) and source_scope and target_scope and source_scope != target_scope and kind not in {"invocation", "summary", "dependency", "adaptation", "weight_mapping", "parallel_partition"}:
                     errors.append(f"{edge_prefix}: cross-scope edge must use invocation or summary")
                 if kind == "runtime" and (source_node.get("phase") == "construction" or target_node.get("phase") == "construction"):
                     errors.append(f"{edge_prefix}: construction phase nodes cannot use runtime edges")

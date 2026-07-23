@@ -446,6 +446,7 @@ class ArchitectureVisitor(ast.NodeVisitor):
         self.source_text = source_text
         self.local_module_classes = local_module_classes
         self.context = Context()
+        self.imports: list[dict[str, Any]] = []
         self.classes: list[dict[str, Any]] = []
         self.class_attributes: list[dict[str, Any]] = []
         self.module_assignments: list[dict[str, Any]] = []
@@ -459,6 +460,33 @@ class ArchitectureVisitor(ast.NodeVisitor):
         self.warnings: list[str] = []
         self._seen_parallelism: set[tuple[str, int | None, str]] = set()
         self._seen_weight_mappings: set[tuple[str, str, str]] = set()
+
+    def visit_Import(self, node: ast.Import) -> Any:
+        for alias in node.names:
+            self.imports.append(
+                {
+                    "module": None,
+                    "name": alias.name,
+                    "asname": alias.asname,
+                    "line": node.lineno,
+                    "source": safe_unparse(node),
+                }
+            )
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> Any:
+        module = "." * node.level + (node.module or "")
+        for alias in node.names:
+            self.imports.append(
+                {
+                    "module": module,
+                    "name": alias.name,
+                    "asname": alias.asname,
+                    "line": node.lineno,
+                    "source": safe_unparse(node),
+                }
+            )
+        self.generic_visit(node)
 
     def visit_ClassDef(self, node: ast.ClassDef) -> Any:
         previous = self.context
@@ -479,6 +507,14 @@ class ArchitectureVisitor(ast.NodeVisitor):
             {
                 "name": node.name,
                 "bases": [safe_unparse(base) for base in node.bases],
+                "decorators": [
+                    {
+                        "name": dotted_name(decorator) or safe_unparse(decorator),
+                        "line": getattr(decorator, "lineno", node.lineno),
+                        "source": safe_unparse(decorator),
+                    }
+                    for decorator in node.decorator_list
+                ],
                 "line": node.lineno,
                 "end_line": getattr(node, "end_lineno", node.lineno),
                 "methods": methods,
@@ -757,6 +793,10 @@ def extract_architecture(source_path: Path) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
         "source_file": str(source_path.resolve()),
+        "imports": sorted(
+            visitor.imports,
+            key=lambda item: (item["line"] or 0, item["module"] or "", item["name"]),
+        ),
         "classes": visitor.classes,
         "class_attributes": visitor.class_attributes,
         "module_assignments": visitor.module_assignments,

@@ -6,6 +6,7 @@
   "required": [
     "schema_version",
     "source_file",
+    "imports",
     "classes",
     "class_attributes",
     "module_assignments",
@@ -21,6 +22,7 @@
   "properties": {
     "schema_version": {"const": "0.2"},
     "source_file": {"type": "string"},
+    "imports": {"type": "array", "items": {"type": "object"}},
     "classes": {"type": "array", "items": {"type": "object"}},
     "class_attributes": {"type": "array", "items": {"type": "object"}},
     "module_assignments": {

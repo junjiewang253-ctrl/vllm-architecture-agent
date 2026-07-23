@@ -35,6 +35,14 @@ def decoder_detail(ir: dict[str, Any]) -> dict[str, Any]:
     return next(page for page in ir["pages"] if page["id"] == "decoder_layer_detail")
 
 
+def attention_detail(ir: dict[str, Any]) -> dict[str, Any]:
+    return next(page for page in ir["pages"] if page["id"] == "attention_detail")
+
+
+def adaptation_map(ir: dict[str, Any]) -> dict[str, Any]:
+    return next(page for page in ir["pages"] if page["id"] == "vllm_adaptation_map")
+
+
 def nodes_by_id(ir: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {node["id"]: node for node in overview(ir)["nodes"]}
 
@@ -45,14 +53,20 @@ def detail_nodes_by_id(ir: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 def test_builds_overview_ir_for_hy_v3():
     ir = build_hy_v3_ir()
-    assert ir["schema_version"] == "0.3"
+    assert ir["schema_version"] == "0.4"
     assert ir["detail_level"] == "overview"
     assert overview(ir)["id"] == "overview"
+    assert overview(ir)["page_type"] == "overview"
 
 
-def test_builder_generates_two_pages():
+def test_builder_generates_four_pages():
     ir = build_hy_v3_ir()
-    assert [page["id"] for page in ir["pages"]] == ["overview", "decoder_layer_detail"]
+    assert [page["id"] for page in ir["pages"]] == [
+        "overview",
+        "decoder_layer_detail",
+        "attention_detail",
+        "vllm_adaptation_map",
+    ]
 
 
 def test_identifies_top_level_model():
@@ -155,9 +169,69 @@ def test_display_label_and_hidden_overview_edge_are_generated():
     assert nodes["vocab_parallel_embedding"]["display"]["label"] == "Token Embedding"
     edges = {edge["id"]: edge for edge in overview(ir)["edges"]}
     assert edges["top_invokes_model"]["display"]["visible"] is False
+    assert edges["input_to_embedding"]["display"]["show_label"] is False
+
+
+def test_decoder_residual_edges_have_routes():
+    edges = {edge["id"]: edge for edge in decoder_detail(build_hy_v3_ir())["edges"]}
+    assert edges["decoder_input_residual_to_attention_residual"]["display"]["route"] == "top_lane"
+    assert edges["attention_residual_to_ffn_residual"]["display"]["route"] == "bottom_lane"
 
 
 def test_logits_processor_edges_use_ports():
     edges = {edge["id"]: edge for edge in overview(build_hy_v3_ir())["edges"]}
     assert edges["model_hidden_states_to_logits_processor"]["target_port"] == "hidden_states"
     assert edges["lm_head_to_logits_processor"]["target_port"] == "lm_head"
+
+
+def test_attention_detail_contains_qkv_projection_and_tp_output():
+    nodes = {node["id"]: node for node in attention_detail(build_hy_v3_ir())["nodes"]}
+    assert nodes["qkv_projection"]["display"]["label"] == "QKV Projection"
+    assert nodes["output_projection"]["display"]["subtitle"] == "RowParallelLinear"
+    assert "TP" in nodes["output_projection"]["badges"]
+
+
+def test_attention_detail_has_independent_hpc_and_fallback_branches():
+    page = attention_detail(build_hy_v3_ir())
+    edges = {(edge["source"], edge["target"], edge["kind"]) for edge in page["edges"]}
+    assert ("split_qkv", "hpc_rope_norm", "conditional_true") in edges
+    assert ("split_qkv", "fallback_qk_norm", "conditional_false") in edges
+    assert ("hpc_rope_norm", "attention_core", "runtime") in edges
+    assert ("rotary_embedding", "attention_core", "runtime") in edges
+    assert ("hpc_rope_norm", "fallback_qk_norm", "runtime") not in edges
+
+
+def test_adaptation_map_contains_regions_and_interfaces():
+    nodes = {node["id"]: node for node in adaptation_map(build_hy_v3_ir())["nodes"]}
+    for node_id in [
+        "region_hf_inputs",
+        "region_vllm_config",
+        "region_adapter_interfaces",
+        "region_execution_components",
+        "region_weight_parallel",
+        "supports_pp",
+        "supports_lora",
+        "mixture_of_experts",
+        "support_torch_compile",
+    ]:
+        assert node_id in nodes
+
+
+def test_adaptation_map_contains_parallel_and_weight_mapping_nodes():
+    nodes = {node["id"]: node for node in adaptation_map(build_hy_v3_ir())["nodes"]}
+    for node_id in [
+        "tensor_parallel",
+        "pipeline_parallel",
+        "expert_parallel",
+        "packed_modules_mapping",
+        "stacked_params_mapping",
+        "expert_parameter_mapping",
+    ]:
+        assert node_id in nodes
+
+
+def test_adaptation_map_does_not_include_unseen_vllm_system_components():
+    labels = {node["label"] for node in adaptation_map(build_hy_v3_ir())["nodes"]}
+    assert "Scheduler" not in labels
+    assert "Worker" not in labels
+    assert "EngineCore" not in labels

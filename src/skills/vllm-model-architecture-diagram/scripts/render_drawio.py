@@ -56,6 +56,10 @@ NODE_STYLES: dict[str, str] = {
         "rounded=1;whiteSpace=wrap;html=0;fontFamily=Inter;fontSize=13;"
         "fillColor=#F4F1FF;strokeColor=#7563B8;arcSize=12;"
     ),
+    "output": (
+        "rounded=1;whiteSpace=wrap;html=0;fontFamily=Inter;fontSize=13;"
+        "fillColor=#EAF3FF;strokeColor=#4F83C4;arcSize=12;"
+    ),
     "ffn": (
         "rounded=1;whiteSpace=wrap;html=0;fontFamily=Inter;fontSize=13;"
         "fillColor=#FFF2E8;strokeColor=#C9773A;arcSize=12;"
@@ -113,6 +117,16 @@ EDGE_STYLES: dict[str, str] = {
         "edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;"
         "html=0;fontFamily=Inter;fontSize=12;endArrow=classic;strokeColor=#BE123C;"
     ),
+    "adaptation": (
+        "edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;"
+        "html=0;fontFamily=Inter;fontSize=11;endArrow=classic;dashed=1;"
+        "strokeColor=#2563EB;"
+    ),
+    "parallel_partition": (
+        "edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;"
+        "html=0;fontFamily=Inter;fontSize=11;endArrow=classic;strokeWidth=2;"
+        "strokeColor=#0E7490;"
+    ),
 }
 
 
@@ -140,6 +154,8 @@ def _fmt(value: float) -> str:
 
 
 def _node_label(node: dict[str, Any]) -> str:
+    if node.get("kind") in {"container", "repeated_block"}:
+        return ""
     display = node.get("display")
     label: Any = display.get("label") if isinstance(display, dict) else None
     subtitle: Any = display.get("subtitle") if isinstance(display, dict) else None
@@ -368,8 +384,15 @@ def compute_layout(page: dict[str, Any]) -> tuple[dict[str, LayoutBox], list[Dec
         raise ValueError("page.nodes must be a list")
     boxes: dict[str, LayoutBox] = {}
     decorations: list[Decoration] = []
-    if page.get("id") == "decoder_layer_detail":
+    page_type = page.get("page_type") or page.get("id")
+    if page_type == "overview":
+        return _layout_overview(page, boxes, decorations)
+    if page_type == "decoder_detail" or page.get("id") == "decoder_layer_detail":
         return _layout_decoder_detail(page, boxes, decorations)
+    if page_type == "attention_detail":
+        return _layout_attention_detail(page, boxes, decorations)
+    if page_type == "adaptation_map":
+        return _layout_adaptation_map(page, boxes, decorations)
     roots = _ordered_children(None, nodes)
     if not roots:
         raise ValueError("page must contain at least one root node")
@@ -442,6 +465,135 @@ def _layout_decoder_detail(
     return boxes, decorations
 
 
+def _layout_overview(
+    page: dict[str, Any],
+    boxes: dict[str, LayoutBox],
+    decorations: list[Decoration],
+) -> tuple[dict[str, LayoutBox], list[Decoration]]:
+    boxes.update(
+        {
+            "hyv3_for_causal_lm": LayoutBox(40.0, 52.0, 1160.0, 360.0),
+            "hyv3_model": LayoutBox(24.0, 68.0, 830.0, 250.0),
+            "input": LayoutBox(24.0, 84.0, 130.0, 62.0),
+            "vocab_parallel_embedding": LayoutBox(182.0, 78.0, 170.0, 74.0),
+            "hyv3_decoder_layer": LayoutBox(380.0, 66.0, 190.0, 112.0),
+            "final_residual_add": LayoutBox(610.0, 78.0, 78.0, 72.0),
+            "norm": LayoutBox(720.0, 78.0, 96.0, 72.0),
+            "lm_head": LayoutBox(910.0, 106.0, 180.0, 70.0),
+            "logits_processor": LayoutBox(910.0, 240.0, 200.0, 70.0),
+        }
+    )
+    nodes = {str(node["id"]): node for node in page.get("nodes", []) if isinstance(node, dict) and "id" in node}
+    if "hyv3_decoder_layer" in nodes:
+        decorations.append(
+            Decoration(
+                cell_id="decorative_variants_hyv3_decoder_layer",
+                parent="hyv3_decoder_layer",
+                value="\n".join(_variant_lines(nodes["hyv3_decoder_layer"])),
+                style=(
+                    "rounded=1;whiteSpace=wrap;html=0;fontFamily=Inter;fontSize=11;"
+                    "align=left;verticalAlign=top;spacing=6;fillColor=#FFFBEB;"
+                    "strokeColor=#D6A63B;dashed=1;"
+                ),
+                box=LayoutBox(12.0, 54.0, 166.0, 48.0),
+            )
+        )
+    return boxes, decorations
+
+
+def _layout_attention_detail(
+    page: dict[str, Any],
+    boxes: dict[str, LayoutBox],
+    decorations: list[Decoration],
+) -> tuple[dict[str, LayoutBox], list[Decoration]]:
+    boxes.update(
+        {
+            "attention_input": LayoutBox(40.0, 334.0, 160.0, 68.0),
+            "qkv_projection": LayoutBox(250.0, 330.0, 180.0, 76.0),
+            "split_qkv": LayoutBox(480.0, 334.0, 170.0, 68.0),
+            "attention_path": LayoutBox(700.0, 182.0, 360.0, 360.0),
+            "hpc_rope_norm": LayoutBox(34.0, 78.0, 292.0, 76.0),
+            "fallback_qk_norm": LayoutBox(34.0, 234.0, 144.0, 72.0),
+            "rotary_embedding": LayoutBox(202.0, 234.0, 124.0, 72.0),
+            "attention_core": LayoutBox(1120.0, 330.0, 190.0, 76.0),
+            "output_projection": LayoutBox(1360.0, 330.0, 180.0, 76.0),
+            "attention_output": LayoutBox(1580.0, 334.0, 150.0, 68.0),
+        }
+    )
+    decorations.append(
+        Decoration(
+            cell_id="decorative_attention_branch_note",
+            parent="attention_path",
+            value="HPC and fallback paths are mutually exclusive",
+            style=(
+                "text;html=0;strokeColor=none;fillColor=none;fontFamily=Inter;"
+                "fontSize=11;align=left;verticalAlign=middle;fontColor=#475569;"
+            ),
+            box=LayoutBox(34.0, 44.0, 292.0, 24.0),
+        )
+    )
+    return boxes, decorations
+
+
+def _layout_adaptation_map(
+    page: dict[str, Any],
+    boxes: dict[str, LayoutBox],
+    decorations: list[Decoration],
+) -> tuple[dict[str, LayoutBox], list[Decoration]]:
+    columns = {
+        "region_hf_inputs": (35.0, ["hyv3_config", "hf_checkpoint"]),
+        "region_vllm_config": (365.0, ["vllm_config", "cache_config", "quantization_config", "parallel_config_eplb_config"]),
+        "region_adapter_interfaces": (
+            695.0,
+            [
+                "adapter_hyv3_for_causal_lm",
+                "adapter_hyv3_model",
+                "supports_pp",
+                "supports_lora",
+                "mixture_of_experts",
+                "support_torch_compile",
+            ],
+        ),
+        "region_execution_components": (
+            1025.0,
+            [
+                "adapt_vocab_parallel_embedding",
+                "adapt_qkv_parallel_linear",
+                "adapt_row_parallel_linear",
+                "adapt_vllm_attention",
+                "adapt_fused_moe",
+                "adapt_parallel_lm_head",
+                "adapt_logits_processor",
+            ],
+        ),
+        "region_weight_parallel": (
+            1355.0,
+            [
+                "packed_modules_mapping",
+                "stacked_params_mapping",
+                "expert_parameter_mapping",
+                "auto_weights_loader",
+                "tensor_parallel",
+                "pipeline_parallel",
+                "expert_parallel",
+            ],
+        ),
+    }
+    for region_id, (x, child_ids) in columns.items():
+        boxes[region_id] = LayoutBox(x, 72.0, 300.0, 760.0)
+        y = 70.0
+        for child_id in child_ids:
+            boxes[child_id] = LayoutBox(28.0, y, 244.0, 46.0)
+            y += 62.0
+    return boxes, decorations
+
+
+def _page_size(page: dict[str, Any]) -> tuple[int, int]:
+    if page.get("page_type") in {"attention_detail", "adaptation_map"}:
+        return 1780, 900
+    return 1280, 720
+
+
 def _make_cell(parent: ET.Element, attrs: dict[str, str]) -> ET.Element:
     return ET.SubElement(parent, "mxCell", attrs)
 
@@ -462,6 +614,45 @@ def _add_geometry(cell: ET.Element, box: LayoutBox, *, relative: bool = False) -
     ET.SubElement(cell, "mxGeometry", attrs)
 
 
+def _absolute_box(node_id: str, nodes_by_id: dict[str, dict[str, Any]], boxes: dict[str, LayoutBox]) -> LayoutBox:
+    box = boxes[node_id]
+    parent_id = nodes_by_id.get(node_id, {}).get("parent_id")
+    while isinstance(parent_id, str) and parent_id:
+        parent_box = boxes[parent_id]
+        box = LayoutBox(box.x + parent_box.x, box.y + parent_box.y, box.width, box.height)
+        parent_id = nodes_by_id.get(parent_id, {}).get("parent_id")
+    return box
+
+
+def _edge_points(edge: dict[str, Any], nodes_by_id: dict[str, dict[str, Any]], boxes: dict[str, LayoutBox]) -> list[tuple[float, float]]:
+    display = edge.get("display")
+    route = display.get("route") if isinstance(display, dict) else None
+    if route not in {"top_lane", "bottom_lane"} and edge.get("kind") != "residual":
+        return []
+    source = edge.get("source")
+    target = edge.get("target")
+    if not isinstance(source, str) or not isinstance(target, str) or source not in boxes or target not in boxes:
+        return []
+    source_box = _absolute_box(source, nodes_by_id, boxes)
+    target_box = _absolute_box(target, nodes_by_id, boxes)
+    sx = source_box.x + source_box.width / 2
+    tx = target_box.x + target_box.width / 2
+    if route == "bottom_lane":
+        lane_y = max(source_box.y + source_box.height, target_box.y + target_box.height) + 52.0
+    else:
+        lane_y = min(source_box.y, target_box.y) - 52.0
+    return [(sx, lane_y), (tx, lane_y)]
+
+
+def _add_edge_geometry(cell: ET.Element, points: list[tuple[float, float]]) -> None:
+    geometry = ET.SubElement(cell, "mxGeometry", {"relative": "1", "as": "geometry"})
+    if not points:
+        return
+    points_element = ET.SubElement(geometry, "Array", {"as": "points"})
+    for x, y in points:
+        ET.SubElement(points_element, "mxPoint", {"x": _fmt(x), "y": _fmt(y)})
+
+
 def _node_parent(node: dict[str, Any]) -> str:
     parent_id = node.get("parent_id")
     return str(parent_id) if isinstance(parent_id, str) and parent_id else ROOT_PARENT_ID
@@ -472,9 +663,13 @@ def _edge_label(edge: dict[str, Any]) -> str:
     if isinstance(display, dict):
         if display.get("visible") is False:
             return ""
+        if display.get("show_label") is False:
+            return ""
         display_label = display.get("label")
         if isinstance(display_label, str):
             return display_label
+    if edge.get("kind") == "runtime":
+        return ""
     label = edge.get("label")
     if isinstance(label, str) and label:
         return label
@@ -526,7 +721,7 @@ def render_drawio(ir: dict[str, Any]) -> str:
             "host": "app.diagrams.net",
             "modified": "2026-07-22T00:00:00.000Z",
             "agent": "vllm-architecture-agent",
-            "version": "v0.6",
+            "version": "v0.7",
             "type": "device",
         },
     )
@@ -538,6 +733,7 @@ def render_drawio(ir: dict[str, Any]) -> str:
             "diagram",
             {"id": page_id, "name": str(page.get("title", page_id))},
         )
+        page_width, page_height = _page_size(page)
         model = ET.SubElement(
             diagram,
             "mxGraphModel",
@@ -553,8 +749,8 @@ def render_drawio(ir: dict[str, Any]) -> str:
                 "fold": "1",
                 "page": "1",
                 "pageScale": "1",
-                "pageWidth": "1280",
-                "pageHeight": "720",
+                "pageWidth": str(page_width),
+                "pageHeight": str(page_height),
                 "math": "0",
                 "shadow": "0",
             },
@@ -566,6 +762,11 @@ def render_drawio(ir: dict[str, Any]) -> str:
         boxes, layout_decorations = compute_layout(page)
         nodes = page.get("nodes", [])
         edges = page.get("edges", [])
+        nodes_by_id = {
+            str(node["id"]): node
+            for node in nodes
+            if isinstance(node, dict) and "id" in node
+        }
 
         title_cell = _make_cell(
             root,
@@ -600,6 +801,26 @@ def render_drawio(ir: dict[str, Any]) -> str:
                 },
             )
             _add_geometry(cell, box)
+            if node.get("kind") in {"container", "repeated_block"}:
+                display = node.get("display")
+                label = display.get("label") if isinstance(display, dict) else node.get("label")
+                subtitle = display.get("subtitle") if isinstance(display, dict) else node.get("subtitle")
+                header_value = str(label or node_id)
+                if isinstance(subtitle, str) and subtitle.strip():
+                    header_value = f"{header_value}\n{subtitle}"
+                layout_decorations.append(
+                    Decoration(
+                        cell_id=f"decorative_header_{node_id}",
+                        parent=node_id,
+                        value=header_value,
+                        style=(
+                            "rounded=0;whiteSpace=wrap;html=0;fontFamily=Inter;fontSize=13;"
+                            "fontStyle=1;align=left;verticalAlign=middle;spacingLeft=10;"
+                            "fillColor=#E2E8F0;strokeColor=none;"
+                        ),
+                        box=LayoutBox(0.0, 0.0, box.width, 42.0),
+                    )
+                )
             badge_decorations.extend(_add_badges(root, node, box))
 
         for edge in edges:
@@ -622,7 +843,7 @@ def render_drawio(ir: dict[str, Any]) -> str:
                     "target": str(edge["target"]),
                 },
             )
-            _add_geometry(cell, LayoutBox(0.0, 0.0, 0.0, 0.0), relative=True)
+            _add_edge_geometry(cell, _edge_points(edge, nodes_by_id, boxes))
 
         for decoration in layout_decorations + badge_decorations:
             cell = _make_cell(

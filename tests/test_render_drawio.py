@@ -112,7 +112,7 @@ def test_container_dimensions_exceed_internal_node_range():
 
 def test_repeated_block_displays_repetition():
     cells = cells_by_id(render_xml(hy_v3_ir()))
-    value = cells["hyv3_decoder_layer"].get("value", "")
+    value = cells["decorative_header_hyv3_decoder_layer"].get("value", "")
     assert "N x Decoder Layers" in value
     assert "Pipeline-local transformer stack" in value
 
@@ -131,11 +131,13 @@ def test_badges_generate_decorative_cells():
     assert "decorative_badge_hyv3_decoder_layer_EP" in cells
 
 
-def test_renderer_generates_two_drawio_pages():
+def test_renderer_generates_four_drawio_pages():
     xml = render_xml(hy_v3_ir())
     assert [(diagram.get("id"), diagram.get("name")) for diagram in diagrams(xml)] == [
         ("overview", "Model Overview"),
         ("decoder_layer_detail", "HYV3DecoderLayer Detail"),
+        ("attention_detail", "HYV3Attention Detail"),
+        ("vllm_adaptation_map", "HY V3 Model Adapter in vLLM"),
     ]
 
 
@@ -151,6 +153,34 @@ def test_hidden_edge_still_exists_with_opacity_zero():
 def test_same_input_renders_identical_xml():
     ir = hy_v3_ir()
     assert render_xml(ir) == render_xml(ir)
+
+
+def test_runtime_edges_default_to_no_visible_labels():
+    cells = cells_by_id(render_xml(hy_v3_ir()))
+    assert cells["input_to_embedding"].get("value", "") == ""
+    assert cells["decoder_input_to_input_layernorm"].get("value", "") == ""
+
+
+def test_residual_edges_include_route_waypoints():
+    cells = cells_by_id(render_xml(hy_v3_ir()))
+    for edge_id in ["decoder_input_residual_to_attention_residual", "attention_residual_to_ffn_residual"]:
+        geometry = cells[edge_id].find("mxGeometry")
+        assert geometry is not None
+        assert geometry.find("Array/mxPoint") is not None
+
+
+def test_attention_detail_nodes_are_on_attention_page_only():
+    root = ET.fromstring(render_xml(hy_v3_ir()))
+    by_page = {
+        diagram.get("id"): {
+            cell.get("id")
+            for cell in diagram.findall(".//mxCell")
+            if cell.get("id")
+        }
+        for diagram in root.findall("diagram")
+    }
+    assert "qkv_projection" in by_page["attention_detail"]
+    assert "qkv_projection" not in by_page["overview"]
 
 
 def test_renderer_does_not_generate_extra_semantic_nodes():

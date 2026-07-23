@@ -18,10 +18,12 @@ The user supplies one Python source path. The typical input is a file under:
 
 `vllm/model_executor/models/*.py`
 
-Default output is a two-page architecture diagram:
+Default output is a four-page architecture diagram:
 
 - Model Overview
 - Decoder Layer Detail
+- Attention Detail
+- vLLM Adaptation Map
 
 # Workflow
 
@@ -53,8 +55,9 @@ python <skill-directory>/scripts/build_architecture_ir.py \
   --output outputs/<model-name>-architecture-ir.json
 ```
 
-The builder emits Architecture IR 0.3 with two pages: `overview` and
-`decoder_layer_detail`. The IR is the only semantic source for rendering.
+The builder emits Architecture IR 0.4 with four pages: `overview`,
+`decoder_layer_detail`, `attention_detail`, and `vllm_adaptation_map`. The IR is
+the only semantic source for rendering.
 
 Read `unresolved`. Only supplement or correct IR when source-analysis evidence
 supports the change.
@@ -109,7 +112,23 @@ renderer or a non-semantic MCP edit, then run `validate_drawio.py` again.
 
 ## 7. Call the Draw.io MCP
 
-Use the Draw.io MCP only after both validators pass.
+## 7. Validate visual layout
+
+Run:
+
+```text
+python <skill-directory>/scripts/validate_visual_layout.py \
+  outputs/<model-name>-architecture-ir.json \
+  outputs/<model-name>-architecture.drawio
+```
+
+Visual validation failure blocks export. Fix layout-only issues in
+`render_drawio.py` or with a non-semantic MCP edit, then rerun both Draw.io
+validators.
+
+## 8. Call the Draw.io MCP
+
+Use the Draw.io MCP only after all validators pass.
 
 Allowed MCP work:
 
@@ -125,7 +144,8 @@ Forbidden MCP work:
 - changing edge source or target;
 - reinterpreting architecture.
 
-If MCP edits the `.drawio` file, run `validate_drawio.py` again before export.
+If MCP edits the `.drawio` file, run `validate_drawio.py` and
+`validate_visual_layout.py` again before export.
 
 Use the MCP tools in this order:
 

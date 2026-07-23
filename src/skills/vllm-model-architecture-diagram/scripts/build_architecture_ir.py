@@ -14,13 +14,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
-ARCHITECTURE_IR_VERSION = "0.3"
+ARCHITECTURE_IR_VERSION = "0.4"
 SOURCE_ANALYSIS_VERSION = "0.2"
 
 TP_SYMBOLS = {"QKVParallelLinear", "RowParallelLinear", "VocabParallelEmbedding", "ParallelLMHead"}
 PP_SYMBOLS = {"get_pp_group", "make_layers", "PPMissingLayer"}
 EP_SYMBOLS = {"get_ep_group", "FusedMoE"}
 CONFIG_EXPR_PATTERN = re.compile(r"\bconfig\.[A-Za-z_][A-Za-z0-9_]*\b")
+DISPLAY_ROUTES = {"direct", "top_lane", "bottom_lane"}
 
 
 def _slug(value: str | None, fallback: str) -> str:
@@ -67,6 +68,50 @@ def _class_by_name(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
         for item in data.get("classes", [])
         if isinstance(item, dict) and isinstance(item.get("name"), str)
     }
+
+
+def _import_record(data: dict[str, Any], name: str) -> dict[str, Any] | None:
+    for item in data.get("imports", []):
+        if not isinstance(item, dict):
+            continue
+        if item.get("name") == name or item.get("asname") == name:
+            return item
+    return None
+
+
+def _class_record(data: dict[str, Any], class_name: str | None) -> dict[str, Any] | None:
+    if not class_name:
+        return None
+    return _class_by_name(data).get(class_name)
+
+
+def _class_attribute(data: dict[str, Any], owner_class: str | None, name: str) -> dict[str, Any] | None:
+    for item in data.get("class_attributes", []):
+        if isinstance(item, dict) and item.get("owner_class") == owner_class and item.get("name") == name:
+            return item
+    return None
+
+
+def _parallel_hint(data: dict[str, Any], symbol: str) -> dict[str, Any] | None:
+    for item in data.get("parallelism_hints", []):
+        if isinstance(item, dict) and item.get("symbol") == symbol:
+            return item
+    return None
+
+
+def _weight_mapping_kind(data: dict[str, Any], mapping_kind: str) -> dict[str, Any] | None:
+    for item in data.get("weight_mappings", []):
+        if isinstance(item, dict) and item.get("mapping_kind") == mapping_kind:
+            return item
+    return None
+
+
+def _call_record_any(data: dict[str, Any], class_name: str | None, targets: list[str]) -> dict[str, Any] | None:
+    for target in targets:
+        record = _control_call_record(data, class_name, target)
+        if record:
+            return record
+    return None
 
 
 def _methods(class_record: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
@@ -359,6 +404,22 @@ def _display(label: str | None = None, subtitle: str | None = None, *, show_badg
     return result
 
 
+def _edge_display(
+    *,
+    visible: bool = True,
+    label: str | None = None,
+    show_label: bool | None = None,
+    route: str = "direct",
+) -> dict[str, Any]:
+    if route not in DISPLAY_ROUTES:
+        raise ValueError(f"invalid edge display route: {route}")
+    result: dict[str, Any] = {"visible": visible, "route": route}
+    result["show_label"] = bool(show_label) if show_label is not None else False
+    if label is not None:
+        result["label"] = label
+    return result
+
+
 def _node(
     *,
     node_id: str,
@@ -496,7 +557,7 @@ def _build_overview_page(data: dict[str, Any], core: dict[str, Any], variants: l
             kind="container",
             scope=model_scope,
             parent_id=top_id,
-            badges=_badges_for_contexts(data, [str(model_class)], include_nested=True),
+            badges=[],
             evidence=_evidence("direct", [classes.get(model_class), model_assignment]),
             display=_display(str(model_class), "Pipeline-parallel transformer body"),
         ),
@@ -519,14 +580,14 @@ def _build_overview_page(data: dict[str, Any], core: dict[str, Any], variants: l
                 kind="embedding",
                 scope=model_scope,
                 parent_id=model_id,
-                badges=_badges_for_contexts(data, [f"{model_class}.__init__"]),
+                badges=["TP"],
                 evidence=_evidence("direct", [embedding_assignment]),
                 display=_display("Token Embedding", "Vocabulary-parallel embedding"),
             )
         )
     if layer_factory and decoder_class:
-        decoder_badges = _badges_for_contexts(data, [f"{model_class}.__init__", f"{model_class}.forward"])
-        if any(isinstance(item.get("component"), str) and "MoE" in item["component"] for item in variants) and "EP" not in decoder_badges:
+        decoder_badges = ["TP", "PP"]
+        if any(isinstance(item.get("component"), str) and "MoE" in item["component"] for item in variants):
             decoder_badges.append("EP")
         nodes.append(
             _node(
@@ -582,7 +643,7 @@ def _build_overview_page(data: dict[str, Any], core: dict[str, Any], variants: l
                 kind="head",
                 scope=logits_scope,
                 parent_id=top_id,
-                badges=_badges_for_contexts(data, [f"{top_level_class}.__init__"]),
+                badges=["TP"],
                 evidence=_evidence("direct", [lm_head_assignment]),
                 display=_display("LM Head", "Tensor-parallel output head"),
             )
@@ -610,24 +671,24 @@ def _build_overview_page(data: dict[str, Any], core: dict[str, Any], variants: l
             scope=top_scope,
             label="self.model",
             evidence=_evidence("direct", [model_assignment], lines=[line for line in [_call_line(data, top_level_class, "self.model")] if line]),
-            display={"visible": False, "label": None},
+            display=_edge_display(visible=False),
         )
     ]
     if embedding_assignment:
-        edges.append(_edge(edge_id="input_to_embedding", source="input", target=embedding_id, kind="runtime", scope=model_scope, source_port="input_ids", target_port="input_ids", evidence=_evidence("direct", [embedding_assignment, _control_call_record(data, model_class, "self.embed_input_ids")]), display={"visible": True, "label": "tokens"}))
+        edges.append(_edge(edge_id="input_to_embedding", source="input", target=embedding_id, kind="runtime", scope=model_scope, source_port="input_ids", target_port="input_ids", evidence=_evidence("direct", [embedding_assignment, _control_call_record(data, model_class, "self.embed_input_ids")]), display=_edge_display()))
     if layer_factory and decoder_class:
-        edges.append(_edge(edge_id="embedding_to_decoder_layers", source=embedding_id, target=decoder_id, kind="runtime", scope=model_scope, evidence=_evidence("derived", [embedding_assignment, layer_factory, layer_call]), display={"visible": True, "label": "hidden states"}))
+        edges.append(_edge(edge_id="embedding_to_decoder_layers", source=embedding_id, target=decoder_id, kind="runtime", scope=model_scope, evidence=_evidence("derived", [embedding_assignment, layer_factory, layer_call]), display=_edge_display()))
     if final_add_record and layer_factory and decoder_class:
-        edges.append(_edge(edge_id="decoder_to_final_add", source=decoder_id, target=final_add_id, kind="runtime", scope=model_scope, condition="last PP rank", evidence=_evidence("derived", [layer_factory, final_add_record]), display={"visible": True, "label": "hidden states"}))
-        edges.append(_edge(edge_id="residual_to_final_add", source=decoder_id, target=final_add_id, kind="residual", scope=model_scope, target_port="residual", evidence=_evidence("direct", [final_add_record]), display={"visible": True, "label": "residual"}))
+        edges.append(_edge(edge_id="decoder_to_final_add", source=decoder_id, target=final_add_id, kind="runtime", scope=model_scope, condition="last PP rank", evidence=_evidence("derived", [layer_factory, final_add_record]), display=_edge_display()))
+        edges.append(_edge(edge_id="residual_to_final_add", source=decoder_id, target=final_add_id, kind="residual", scope=model_scope, target_port="residual", evidence=_evidence("direct", [final_add_record]), display=_edge_display(label="residual", show_label=True, route="top_lane")))
     if final_norm_assignment:
-        edges.append(_edge(edge_id="final_add_to_norm", source=final_add_id if final_add_record else decoder_id, target=final_norm_id, kind="runtime", scope=model_scope, evidence=_evidence("direct", [final_add_record, _control_call_record(data, model_class, "self.norm")]), display={"visible": True, "label": "hidden states"}))
+        edges.append(_edge(edge_id="final_add_to_norm", source=final_add_id if final_add_record else decoder_id, target=final_norm_id, kind="runtime", scope=model_scope, evidence=_evidence("direct", [final_add_record, _control_call_record(data, model_class, "self.norm")]), display=_edge_display()))
     if final_norm_assignment and logits_assignment:
-        edges.append(_edge(edge_id="model_hidden_states_to_logits_processor", source=final_norm_id, target="logits_processor", kind="summary", scope=logits_scope, label="hidden_states", source_port="hidden_states", target_port="hidden_states", evidence=_evidence("derived", [final_norm_assignment, logits_method]), display={"visible": True, "label": "hidden states"}))
+        edges.append(_edge(edge_id="model_hidden_states_to_logits_processor", source=final_norm_id, target="logits_processor", kind="summary", scope=logits_scope, label="hidden_states", source_port="hidden_states", target_port="hidden_states", evidence=_evidence("derived", [final_norm_assignment, logits_method]), display=_edge_display(label="hidden states", show_label=True)))
     if lm_head_assignment and logits_assignment:
-        edges.append(_edge(edge_id="lm_head_to_logits_processor", source="lm_head", target="logits_processor", kind="dependency", scope=logits_scope, label="lm_head", source_port="lm_head", target_port="lm_head", evidence=_evidence("direct", [lm_head_assignment, logits_method]), display={"visible": True, "label": "lm_head"}))
+        edges.append(_edge(edge_id="lm_head_to_logits_processor", source="lm_head", target="logits_processor", kind="dependency", scope=logits_scope, label="lm_head", source_port="lm_head", target_port="lm_head", evidence=_evidence("direct", [lm_head_assignment, logits_method]), display=_edge_display(label="lm_head", show_label=True)))
 
-    return {"id": "overview", "title": "Model Overview", "nodes": nodes, "edges": edges}
+    return {"id": "overview", "title": "Model Overview", "page_type": "overview", "nodes": nodes, "edges": edges}
 
 
 def _build_decoder_detail_page(data: dict[str, Any], core: dict[str, Any], variants: list[dict[str, Any]]) -> dict[str, Any]:
@@ -661,17 +722,194 @@ def _build_decoder_detail_page(data: dict[str, Any], core: dict[str, Any], varia
     ]
 
     edges = [
-        _edge(edge_id="decoder_input_to_input_layernorm", source="decoder_input", target="input_layernorm", kind="runtime", scope=scope, evidence=_evidence("direct", [input_norm_call]), display={"visible": True, "label": "hidden states"}),
-        _edge(edge_id="input_layernorm_to_self_attention", source="input_layernorm", target="self_attention", kind="runtime", scope=scope, evidence=_evidence("direct", [input_norm_call, self_attn_call]), display={"visible": True, "label": "hidden states"}),
-        _edge(edge_id="self_attention_to_attention_residual", source="self_attention", target="attention_residual", kind="runtime", scope=scope, evidence=_evidence("derived", [self_attn_call, post_norm_call]), display={"visible": True, "label": "attention output"}),
-        _edge(edge_id="decoder_input_residual_to_attention_residual", source="decoder_input", target="attention_residual", kind="residual", scope=scope, evidence=_evidence("derived", [post_norm_call]), display={"visible": True, "label": "residual"}),
-        _edge(edge_id="attention_residual_to_post_attention_layernorm", source="attention_residual", target="post_attention_layernorm", kind="runtime", scope=scope, evidence=_evidence("direct", [post_norm_call]), display={"visible": True, "label": "hidden states"}),
-        _edge(edge_id="post_attention_layernorm_to_ffn_stage", source="post_attention_layernorm", target="ffn_stage", kind="runtime", scope=scope, evidence=_evidence("direct", [post_norm_call, mlp_call]), display={"visible": True, "label": "hidden states"}),
-        _edge(edge_id="ffn_stage_to_ffn_residual", source="ffn_stage", target="ffn_residual", kind="runtime", scope=scope, evidence=_evidence("direct", [mlp_call]), display={"visible": True, "label": "ffn output"}),
-        _edge(edge_id="attention_residual_to_ffn_residual", source="attention_residual", target="ffn_residual", kind="residual", scope=scope, evidence=_evidence("derived", [post_norm_call, mlp_call]), display={"visible": True, "label": "residual"}),
-        _edge(edge_id="ffn_residual_to_decoder_output", source="ffn_residual", target="decoder_output", kind="runtime", scope=scope, evidence=_evidence("derived", [mlp_call, decoder_forward]), display={"visible": True, "label": "hidden states"}),
+        _edge(edge_id="decoder_input_to_input_layernorm", source="decoder_input", target="input_layernorm", kind="runtime", scope=scope, evidence=_evidence("direct", [input_norm_call]), display=_edge_display()),
+        _edge(edge_id="input_layernorm_to_self_attention", source="input_layernorm", target="self_attention", kind="runtime", scope=scope, evidence=_evidence("direct", [input_norm_call, self_attn_call]), display=_edge_display()),
+        _edge(edge_id="self_attention_to_attention_residual", source="self_attention", target="attention_residual", kind="runtime", scope=scope, evidence=_evidence("derived", [self_attn_call, post_norm_call]), display=_edge_display()),
+        _edge(edge_id="decoder_input_residual_to_attention_residual", source="decoder_input", target="attention_residual", kind="residual", scope=scope, evidence=_evidence("derived", [post_norm_call]), display=_edge_display(label="residual", show_label=True, route="top_lane")),
+        _edge(edge_id="attention_residual_to_post_attention_layernorm", source="attention_residual", target="post_attention_layernorm", kind="runtime", scope=scope, evidence=_evidence("direct", [post_norm_call]), display=_edge_display()),
+        _edge(edge_id="post_attention_layernorm_to_ffn_stage", source="post_attention_layernorm", target="ffn_stage", kind="runtime", scope=scope, evidence=_evidence("direct", [post_norm_call, mlp_call]), display=_edge_display()),
+        _edge(edge_id="ffn_stage_to_ffn_residual", source="ffn_stage", target="ffn_residual", kind="runtime", scope=scope, evidence=_evidence("direct", [mlp_call]), display=_edge_display()),
+        _edge(edge_id="attention_residual_to_ffn_residual", source="attention_residual", target="ffn_residual", kind="residual", scope=scope, evidence=_evidence("derived", [post_norm_call, mlp_call]), display=_edge_display(label="residual", show_label=True, route="bottom_lane")),
+        _edge(edge_id="ffn_residual_to_decoder_output", source="ffn_residual", target="decoder_output", kind="runtime", scope=scope, evidence=_evidence("derived", [mlp_call, decoder_forward]), display=_edge_display()),
     ]
-    return {"id": "decoder_layer_detail", "title": "HYV3DecoderLayer Detail", "nodes": nodes, "edges": edges}
+    return {"id": "decoder_layer_detail", "title": "HYV3DecoderLayer Detail", "page_type": "decoder_detail", "nodes": nodes, "edges": edges}
+
+
+def _build_attention_detail_page(data: dict[str, Any], core: dict[str, Any]) -> dict[str, Any]:
+    attention_class = "HYV3Attention"
+    scope = f"{attention_class}.forward"
+    qkv_assignment = _assignment_by_attribute(data, attention_class, "qkv_proj")
+    o_proj_assignment = _assignment_by_attribute(data, attention_class, "o_proj")
+    attn_assignment = _assignment_by_attribute(data, attention_class, "attn")
+    hpc_assignment = _assignment_by_attribute(data, attention_class, "hpc_rope_norm")
+    rotary_assignment = _assignment_by_attribute(data, attention_class, "rotary_emb")
+    q_norm_assignment = _assignment_by_attribute(data, attention_class, "q_norm")
+    k_norm_assignment = _assignment_by_attribute(data, attention_class, "k_norm")
+    forward = _forward_control_flow(data, attention_class)
+    qkv_call = _control_call_record(data, attention_class, "self.qkv_proj")
+    split_call = _control_call_record(data, attention_class, "qkv.split")
+    hpc_call = _control_call_record(data, attention_class, "self.hpc_rope_norm")
+    q_norm_call = _control_call_record(data, attention_class, "self.q_norm")
+    k_norm_call = _control_call_record(data, attention_class, "self.k_norm")
+    rotary_call = _control_call_record(data, attention_class, "self.rotary_emb")
+    attn_call = _control_call_record(data, attention_class, "self.attn")
+    o_proj_call = _control_call_record(data, attention_class, "self.o_proj")
+    condition = next(
+        (
+            item
+            for item in data.get("conditions", [])
+            if isinstance(item, dict)
+            and item.get("owner_class") == attention_class
+            and "hpc_rope_norm" in str(item.get("condition"))
+        ),
+        None,
+    )
+
+    nodes = [
+        _node(node_id="attention_input", label="hidden_states", kind="input", scope=scope, evidence=_evidence("derived", [forward]), display=_display("Hidden States")),
+        _node(node_id="qkv_projection", label="QKVParallelLinear", kind="attention", scope=scope, badges=["TP"], evidence=_evidence("direct", [qkv_assignment, qkv_call]), display=_display("QKV Projection", "QKVParallelLinear")),
+        _node(node_id="split_qkv", label="Split Q / K / V", kind="note", scope=scope, evidence=_evidence("derived", [split_call, qkv_call]), display=_display("Split Q / K / V")),
+        _node(node_id="attention_path", label="Position & QK Processing", kind="container", scope=scope, evidence=_evidence("derived", [condition, hpc_assignment, rotary_assignment]), display=_display("Position & QK Processing")),
+        _node(node_id="hpc_rope_norm", label="HpcRopeNorm", kind="normalization", scope=scope, parent_id="attention_path", evidence=_evidence("direct", [hpc_assignment, hpc_call]), display=_display("HPC Fused Path", "QK Norm + RoPE + KV Cache Write")),
+        _node(node_id="fallback_qk_norm", label="Q/K RMSNorm", kind="normalization", scope=scope, parent_id="attention_path", evidence=_evidence("direct", [q_norm_assignment, k_norm_assignment, q_norm_call, k_norm_call]), display=_display("Optional Q/K RMSNorm")),
+        _node(node_id="rotary_embedding", label="Rotary Embedding", kind="embedding", scope=scope, parent_id="attention_path", evidence=_evidence("direct", [rotary_assignment, rotary_call]), display=_display("Rotary Embedding")),
+        _node(node_id="attention_core", label="Attention", kind="attention", scope=scope, evidence=_evidence("direct", [attn_assignment, attn_call]), display=_display("vLLM Attention", "Paged KV-cache attention")),
+        _node(node_id="output_projection", label="RowParallelLinear", kind="head", scope=scope, badges=["TP"], evidence=_evidence("direct", [o_proj_assignment, o_proj_call]), display=_display("Output Projection", "RowParallelLinear")),
+        _node(node_id="attention_output", label="Attention Output", kind="output", scope=scope, evidence=_evidence("derived", [o_proj_call, forward]), display=_display("Attention Output")),
+    ]
+    hpc_condition = str(condition.get("condition")) if isinstance(condition, dict) else "self.hpc_rope_norm is not None"
+    edges = [
+        _edge(edge_id="attention_input_to_qkv_projection", source="attention_input", target="qkv_projection", kind="runtime", scope=scope, evidence=_evidence("direct", [qkv_call]), display=_edge_display()),
+        _edge(edge_id="qkv_projection_to_split_qkv", source="qkv_projection", target="split_qkv", kind="runtime", scope=scope, evidence=_evidence("derived", [qkv_call, split_call]), display=_edge_display()),
+        _edge(edge_id="split_qkv_to_hpc_path", source="split_qkv", target="hpc_rope_norm", kind="conditional_true", scope=scope, condition=hpc_condition, evidence=_evidence("direct", [condition, hpc_call]), display=_edge_display(label="HPC supported", show_label=True, route="top_lane")),
+        _edge(edge_id="hpc_path_to_attention_core", source="hpc_rope_norm", target="attention_core", kind="runtime", scope=scope, evidence=_evidence("direct", [hpc_call, attn_call]), display=_edge_display(route="top_lane")),
+        _edge(edge_id="split_qkv_to_fallback_path", source="split_qkv", target="fallback_qk_norm", kind="conditional_false", scope=scope, condition=f"not ({hpc_condition})", evidence=_evidence("derived", [condition, q_norm_call, k_norm_call]), display=_edge_display(label="fallback", show_label=True, route="bottom_lane")),
+        _edge(edge_id="fallback_qk_norm_to_rotary_embedding", source="fallback_qk_norm", target="rotary_embedding", kind="runtime", scope=scope, evidence=_evidence("direct", [q_norm_call, k_norm_call, rotary_call]), display=_edge_display(route="bottom_lane")),
+        _edge(edge_id="rotary_embedding_to_attention_core", source="rotary_embedding", target="attention_core", kind="runtime", scope=scope, evidence=_evidence("direct", [rotary_call, attn_call]), display=_edge_display(route="bottom_lane")),
+        _edge(edge_id="attention_core_to_output_projection", source="attention_core", target="output_projection", kind="runtime", scope=scope, evidence=_evidence("direct", [attn_call, o_proj_call]), display=_edge_display()),
+        _edge(edge_id="output_projection_to_attention_output", source="output_projection", target="attention_output", kind="runtime", scope=scope, evidence=_evidence("derived", [o_proj_call, forward]), display=_edge_display()),
+    ]
+    return {"id": "attention_detail", "title": "HYV3Attention Detail", "page_type": "attention_detail", "nodes": nodes, "edges": edges}
+
+
+def _region_node(node_id: str, label: str, evidence: list[dict[str, Any]]) -> dict[str, Any]:
+    return _node(node_id=node_id, label=label, kind="container", evidence=evidence, display=_display(label, show_badges=False))
+
+
+def _adapt_node(
+    data: dict[str, Any],
+    *,
+    node_id: str,
+    label: str,
+    parent_id: str,
+    kind: str = "note",
+    records: list[dict[str, Any] | None] | None = None,
+    badges: list[str] | None = None,
+    phase: str = "runtime",
+    scope: str | None = None,
+    display_label: str | None = None,
+) -> dict[str, Any]:
+    return _node(
+        node_id=node_id,
+        label=label,
+        kind=kind,
+        phase=phase,
+        scope=scope,
+        parent_id=parent_id,
+        badges=badges,
+        evidence=_evidence("direct", records or [_import_record(data, label)], note=None),
+        display=_display(display_label or label),
+    )
+
+
+def _build_adaptation_map_page(data: dict[str, Any], core: dict[str, Any]) -> dict[str, Any]:
+    top_level_class = core["top_level_class"]
+    model_class = core["model_class"]
+    packed_attr = _class_attribute(data, top_level_class, "packed_modules_mapping")
+    stacked_mapping = _weight_mapping_kind(data, "stacked_parameter")
+    packed_mapping = _weight_mapping_kind(data, "packed_module")
+    expert_hint = next(
+        (
+            item
+            for item in data.get("weight_loading_hints", [])
+            if isinstance(item, dict) and "expert" in str(item.get("value"))
+        ),
+        None,
+    )
+    top_class = _class_record(data, top_level_class)
+    model_class_record = _class_record(data, model_class)
+    model_decorator = next(
+        (
+            item
+            for item in (model_class_record or {}).get("decorators", [])
+            if isinstance(item, dict) and item.get("name") == "support_torch_compile"
+        ),
+        None,
+    )
+    common_evidence = _evidence("derived", [top_class, model_class_record])
+    nodes = [
+        _region_node("region_hf_inputs", "Hugging Face Inputs", _evidence("derived", [_class_record(data, "HYV3Config"), packed_attr])),
+        _region_node("region_vllm_config", "vLLM Configuration", _evidence("derived", [_import_record(data, "VllmConfig"), _import_record(data, "CacheConfig")])),
+        _region_node("region_adapter_interfaces", "Adapter Interfaces", common_evidence),
+        _region_node("region_execution_components", "vLLM Execution Components", _evidence("derived", [_parallel_hint(data, "QKVParallelLinear"), _parallel_hint(data, "FusedMoE")])),
+        _region_node("region_weight_parallel", "Weight and Parallel Adaptation", _evidence("derived", [packed_attr, stacked_mapping, _parallel_hint(data, "get_pp_group"), _parallel_hint(data, "get_ep_group")])),
+        _adapt_node(data, node_id="hyv3_config", label="HYV3Config", parent_id="region_hf_inputs", kind="note", records=[_class_record(data, "HYV3Config")]),
+        _adapt_node(data, node_id="hf_checkpoint", label="Hugging Face Checkpoint", parent_id="region_hf_inputs", kind="note", records=[packed_attr, stacked_mapping, expert_hint]),
+        _adapt_node(data, node_id="vllm_config", label="VllmConfig", parent_id="region_vllm_config", records=[_import_record(data, "VllmConfig")]),
+        _adapt_node(data, node_id="cache_config", label="CacheConfig", parent_id="region_vllm_config", records=[_import_record(data, "CacheConfig"), _assignment_by_attribute(data, "HYV3Attention", "attn")]),
+        _adapt_node(data, node_id="quantization_config", label="QuantizationConfig", parent_id="region_vllm_config", records=[_import_record(data, "QuantizationConfig")]),
+        _adapt_node(data, node_id="parallel_config_eplb_config", label="ParallelConfig / EPLBConfig", parent_id="region_vllm_config", records=[_parallel_hint(data, "get_ep_group"), _parallel_hint(data, "get_pp_group")]),
+        _adapt_node(data, node_id="adapter_hyv3_for_causal_lm", label=str(top_level_class), parent_id="region_adapter_interfaces", kind="container", records=[top_class]),
+        _adapt_node(data, node_id="adapter_hyv3_model", label=str(model_class), parent_id="region_adapter_interfaces", kind="container", records=[model_class_record]),
+        _adapt_node(data, node_id="supports_pp", label="SupportsPP", parent_id="region_adapter_interfaces", records=[_import_record(data, "SupportsPP"), top_class]),
+        _adapt_node(data, node_id="supports_lora", label="SupportsLoRA", parent_id="region_adapter_interfaces", records=[_import_record(data, "SupportsLoRA"), top_class]),
+        _adapt_node(data, node_id="mixture_of_experts", label="MixtureOfExperts", parent_id="region_adapter_interfaces", records=[_import_record(data, "MixtureOfExperts"), model_class_record]),
+        _adapt_node(data, node_id="support_torch_compile", label="support_torch_compile", parent_id="region_adapter_interfaces", records=[_import_record(data, "support_torch_compile"), model_decorator]),
+        _adapt_node(data, node_id="adapt_vocab_parallel_embedding", label="VocabParallelEmbedding", parent_id="region_execution_components", kind="embedding", records=[_assignment_by_attribute(data, model_class, "embed_tokens")], badges=["TP"]),
+        _adapt_node(data, node_id="adapt_qkv_parallel_linear", label="QKVParallelLinear", parent_id="region_execution_components", kind="attention", records=[_assignment_by_attribute(data, "HYV3Attention", "qkv_proj")], badges=["TP"]),
+        _adapt_node(data, node_id="adapt_row_parallel_linear", label="RowParallelLinear", parent_id="region_execution_components", kind="head", records=[_assignment_by_attribute(data, "HYV3Attention", "o_proj")], badges=["TP"]),
+        _adapt_node(data, node_id="adapt_vllm_attention", label="vLLM Attention", parent_id="region_execution_components", kind="attention", records=[_assignment_by_attribute(data, "HYV3Attention", "attn")]),
+        _adapt_node(data, node_id="adapt_fused_moe", label="FusedMoE", parent_id="region_execution_components", kind="moe", records=[_assignment_by_attribute(data, "HYV3MoEFused", "experts")], badges=["EP"]),
+        _adapt_node(data, node_id="adapt_parallel_lm_head", label="ParallelLMHead", parent_id="region_execution_components", kind="head", records=[_assignment_by_attribute(data, top_level_class, "lm_head")], badges=["TP"]),
+        _adapt_node(data, node_id="adapt_logits_processor", label="LogitsProcessor", parent_id="region_execution_components", kind="logits_processor", records=[_assignment_by_attribute(data, top_level_class, "logits_processor")]),
+        _adapt_node(data, node_id="packed_modules_mapping", label="packed_modules_mapping", parent_id="region_weight_parallel", kind="note", phase="checkpoint_loading", records=[packed_attr, packed_mapping]),
+        _adapt_node(data, node_id="stacked_params_mapping", label="stacked_params_mapping", parent_id="region_weight_parallel", kind="note", phase="checkpoint_loading", records=[stacked_mapping]),
+        _adapt_node(data, node_id="expert_parameter_mapping", label="expert parameter mapping", parent_id="region_weight_parallel", kind="note", phase="checkpoint_loading", records=[expert_hint]),
+        _adapt_node(data, node_id="auto_weights_loader", label="AutoWeightsLoader", parent_id="region_weight_parallel", kind="note", phase="checkpoint_loading", records=[_import_record(data, "AutoWeightsLoader"), _methods(top_class).get("load_weights") if top_class else None]),
+        _adapt_node(data, node_id="tensor_parallel", label="Tensor Parallel", parent_id="region_weight_parallel", records=[_parallel_hint(data, "QKVParallelLinear"), _parallel_hint(data, "ParallelLMHead")], display_label="Tensor Parallel"),
+        _adapt_node(data, node_id="pipeline_parallel", label="Pipeline Parallel", parent_id="region_weight_parallel", records=[_parallel_hint(data, "make_layers"), _parallel_hint(data, "get_pp_group")], display_label="Pipeline Parallel"),
+        _adapt_node(data, node_id="expert_parallel", label="Expert Parallel", parent_id="region_weight_parallel", records=[_parallel_hint(data, "FusedMoE"), _parallel_hint(data, "get_ep_group")], display_label="Expert Parallel"),
+    ]
+    e = _evidence
+    edges = [
+        _edge(edge_id="hyv3_config_to_vllm_config", source="hyv3_config", target="vllm_config", kind="dependency", evidence=e("derived", [_import_record(data, "VllmConfig"), _class_record(data, "HYV3Config")]), display=_edge_display(label="model config", show_label=True)),
+        _edge(edge_id="vllm_config_to_cache_config", source="vllm_config", target="cache_config", kind="dependency", evidence=e("direct", [_import_record(data, "CacheConfig")]), display=_edge_display()),
+        _edge(edge_id="vllm_config_to_quant_config", source="vllm_config", target="quantization_config", kind="dependency", evidence=e("direct", [_import_record(data, "QuantizationConfig")]), display=_edge_display()),
+        _edge(edge_id="vllm_config_to_parallel_config", source="vllm_config", target="parallel_config_eplb_config", kind="dependency", evidence=e("derived", [_parallel_hint(data, "get_pp_group"), _parallel_hint(data, "get_ep_group")]), display=_edge_display()),
+        _edge(edge_id="adapter_to_supports_pp", source="adapter_hyv3_for_causal_lm", target="supports_pp", kind="adaptation", evidence=e("direct", [top_class]), display=_edge_display(label="interface", show_label=True)),
+        _edge(edge_id="adapter_to_supports_lora", source="adapter_hyv3_for_causal_lm", target="supports_lora", kind="adaptation", evidence=e("direct", [top_class]), display=_edge_display()),
+        _edge(edge_id="model_to_mixture_of_experts", source="adapter_hyv3_model", target="mixture_of_experts", kind="adaptation", evidence=e("direct", [model_class_record]), display=_edge_display()),
+        _edge(edge_id="compile_decorator_to_model", source="support_torch_compile", target="adapter_hyv3_model", kind="adaptation", evidence=e("direct", [model_decorator]), display=_edge_display()),
+        _edge(edge_id="adapter_to_model_body", source="adapter_hyv3_for_causal_lm", target="adapter_hyv3_model", kind="adaptation", evidence=e("direct", [core.get("model_assignment")]), display=_edge_display()),
+        _edge(edge_id="model_to_embedding_component", source="adapter_hyv3_model", target="adapt_vocab_parallel_embedding", kind="adaptation", evidence=e("direct", [_assignment_by_attribute(data, model_class, "embed_tokens")]), display=_edge_display()),
+        _edge(edge_id="model_to_attention_components", source="adapter_hyv3_model", target="adapt_qkv_parallel_linear", kind="adaptation", evidence=e("direct", [_assignment_by_attribute(data, "HYV3Attention", "qkv_proj")]), display=_edge_display()),
+        _edge(edge_id="attention_to_attention_core_component", source="adapt_qkv_parallel_linear", target="adapt_vllm_attention", kind="adaptation", evidence=e("direct", [_assignment_by_attribute(data, "HYV3Attention", "attn")]), display=_edge_display()),
+        _edge(edge_id="attention_to_output_linear_component", source="adapt_vllm_attention", target="adapt_row_parallel_linear", kind="adaptation", evidence=e("direct", [_assignment_by_attribute(data, "HYV3Attention", "o_proj")]), display=_edge_display()),
+        _edge(edge_id="model_to_fused_moe_component", source="adapter_hyv3_model", target="adapt_fused_moe", kind="adaptation", evidence=e("direct", [_assignment_by_attribute(data, "HYV3MoEFused", "experts")]), display=_edge_display()),
+        _edge(edge_id="adapter_to_lm_head_component", source="adapter_hyv3_for_causal_lm", target="adapt_parallel_lm_head", kind="adaptation", evidence=e("direct", [_assignment_by_attribute(data, top_level_class, "lm_head")]), display=_edge_display()),
+        _edge(edge_id="adapter_to_logits_processor_component", source="adapter_hyv3_for_causal_lm", target="adapt_logits_processor", kind="adaptation", evidence=e("direct", [_assignment_by_attribute(data, top_level_class, "logits_processor")]), display=_edge_display()),
+        _edge(edge_id="checkpoint_to_packed_mapping", source="hf_checkpoint", target="packed_modules_mapping", kind="weight_mapping", phase="checkpoint_loading", evidence=e("direct", [packed_attr, packed_mapping]), display=_edge_display(label="packed", show_label=True)),
+        _edge(edge_id="checkpoint_to_stacked_mapping", source="hf_checkpoint", target="stacked_params_mapping", kind="weight_mapping", phase="checkpoint_loading", evidence=e("direct", [stacked_mapping]), display=_edge_display(label="stacked", show_label=True)),
+        _edge(edge_id="checkpoint_to_expert_mapping", source="hf_checkpoint", target="expert_parameter_mapping", kind="weight_mapping", phase="checkpoint_loading", evidence=e("direct", [expert_hint]), display=_edge_display(label="expert", show_label=True)),
+        _edge(edge_id="mappings_to_loader_packed", source="packed_modules_mapping", target="auto_weights_loader", kind="weight_mapping", phase="checkpoint_loading", evidence=e("direct", [packed_attr, _methods(top_class).get("load_weights") if top_class else None]), display=_edge_display()),
+        _edge(edge_id="mappings_to_loader_stacked", source="stacked_params_mapping", target="auto_weights_loader", kind="weight_mapping", phase="checkpoint_loading", evidence=e("direct", [stacked_mapping, _methods(model_class_record).get("load_weights") if model_class_record else None]), display=_edge_display()),
+        _edge(edge_id="tp_to_embedding", source="tensor_parallel", target="adapt_vocab_parallel_embedding", kind="parallel_partition", phase="parallel_partition", evidence=e("direct", [_parallel_hint(data, "VocabParallelEmbedding")]), display=_edge_display(label="TP", show_label=True)),
+        _edge(edge_id="tp_to_linear_layers", source="tensor_parallel", target="adapt_qkv_parallel_linear", kind="parallel_partition", phase="parallel_partition", evidence=e("direct", [_parallel_hint(data, "QKVParallelLinear")]), display=_edge_display(label="TP", show_label=True)),
+        _edge(edge_id="tp_to_lm_head", source="tensor_parallel", target="adapt_parallel_lm_head", kind="parallel_partition", phase="parallel_partition", evidence=e("direct", [_parallel_hint(data, "ParallelLMHead")]), display=_edge_display(label="TP", show_label=True)),
+        _edge(edge_id="pp_to_model_body", source="pipeline_parallel", target="adapter_hyv3_model", kind="parallel_partition", phase="parallel_partition", evidence=e("direct", [_parallel_hint(data, "make_layers"), _parallel_hint(data, "get_pp_group")]), display=_edge_display(label="PP", show_label=True)),
+        _edge(edge_id="ep_to_fused_moe", source="expert_parallel", target="adapt_fused_moe", kind="parallel_partition", phase="parallel_partition", evidence=e("direct", [_parallel_hint(data, "FusedMoE"), _parallel_hint(data, "get_ep_group")]), display=_edge_display(label="EP", show_label=True)),
+    ]
+    return {"id": "vllm_adaptation_map", "title": "HY V3 Model Adapter in vLLM", "page_type": "adaptation_map", "nodes": nodes, "edges": edges}
 
 
 def _add_builder_unresolved(unresolved: list[dict[str, Any]], core: dict[str, Any], variants: list[dict[str, Any]]) -> None:
@@ -692,7 +930,7 @@ def _add_builder_unresolved(unresolved: list[dict[str, Any]], core: dict[str, An
 
 
 def build_architecture_ir(data: dict[str, Any]) -> dict[str, Any]:
-    """Build a two-page Architecture IR from source-analysis data."""
+    """Build a four-page Architecture IR from source-analysis data."""
     if data.get("schema_version") != SOURCE_ANALYSIS_VERSION:
         raise ValueError(f"source-analysis schema_version must be {SOURCE_ANALYSIS_VERSION!r}")
 
@@ -717,6 +955,8 @@ def build_architecture_ir(data: dict[str, Any]) -> dict[str, Any]:
         "pages": [
             _build_overview_page(data, core, variants),
             _build_decoder_detail_page(data, core, variants),
+            _build_attention_detail_page(data, core),
+            _build_adaptation_map_page(data, core),
         ],
         "unresolved": unresolved,
     }

@@ -5,7 +5,7 @@
   "type": "object",
   "required": ["schema_version", "model_name", "detail_level", "pages", "unresolved"],
   "properties": {
-    "schema_version": {"const": "0.3"},
+    "schema_version": {"const": "0.4"},
     "model_name": {"type": "string", "minLength": 1},
     "detail_level": {"enum": ["overview", "full"]},
     "pages": {
@@ -13,10 +13,13 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "title", "nodes", "edges"],
+        "required": ["id", "title", "page_type", "nodes", "edges"],
         "properties": {
           "id": {"type": "string", "minLength": 1},
           "title": {"type": "string", "minLength": 1},
+          "page_type": {
+            "enum": ["overview", "decoder_detail", "attention_detail", "adaptation_map"]
+          },
           "nodes": {
             "type": "array",
             "items": {
@@ -120,7 +123,9 @@
                     "conditional_false",
                     "weight_mapping",
                     "invocation",
-                    "summary"
+                    "summary",
+                    "adaptation",
+                    "parallel_partition"
                   ]
                 },
                 "phase": {
@@ -140,6 +145,8 @@
                   "type": "object",
                   "properties": {
                     "visible": {"type": "boolean"},
+                    "show_label": {"type": "boolean"},
+                    "route": {"enum": ["direct", "top_lane", "bottom_lane"]},
                     "label": {"type": ["string", "null"]}
                   },
                   "additionalProperties": false

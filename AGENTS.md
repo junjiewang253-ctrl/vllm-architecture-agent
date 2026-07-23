@@ -50,4 +50,5 @@ python src/skills/vllm-model-architecture-diagram/scripts/build_architecture_ir.
 python src/skills/vllm-model-architecture-diagram/scripts/validate_architecture_ir.py outputs/hy-v3-architecture-ir.json
 python src/skills/vllm-model-architecture-diagram/scripts/render_drawio.py outputs/hy-v3-architecture-ir.json --output outputs/hy-v3-architecture.drawio
 python src/skills/vllm-model-architecture-diagram/scripts/validate_drawio.py outputs/hy-v3-architecture-ir.json outputs/hy-v3-architecture.drawio
+python src/skills/vllm-model-architecture-diagram/scripts/validate_visual_layout.py outputs/hy-v3-architecture-ir.json outputs/hy-v3-architecture.drawio
 ```
