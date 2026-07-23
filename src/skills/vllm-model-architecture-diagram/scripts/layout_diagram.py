@@ -59,8 +59,9 @@ PAGE_SIZES: dict[str, tuple[int, int]] = {
     "decoder_detail": (1280, 720),
     "attention_detail": (1500, 820),
     "moe_detail": (1280, 720),
-    "adapter_integration": (1440, 810),
-    "parallelism_weight_loading": (1500, 900),
+    "adapter_integration": (1600, 900),
+    "parallelism": (1500, 840),
+    "weight_loading": (1600, 900),
 }
 
 
@@ -80,6 +81,7 @@ LAYOUTS: dict[str, dict[str, LayoutBox]] = {
     },
     "decoder_layer_detail": {
         "decoder_input": _box(60, 160, 145, 64),
+        "residual_initialization": _box(82, 310, 150, 58),
         "input_rmsnorm": _box(245, 150, 150, 78),
         "self_attention": _box(435, 150, 155, 78),
         "post_attention_rmsnorm": _box(630, 150, 176, 78),
@@ -114,7 +116,8 @@ LAYOUTS: dict[str, dict[str, LayoutBox]] = {
         "shared_experts": _box(850, 220, 172, 58),
         "expert_bias": _box(520, 86, 120, 54),
         "eplb_metadata": _box(690, 86, 130, 54),
-        "moe_output": _box(1085, 222, 115, 54),
+        "restore_original_shape": _box(1065, 220, 165, 58),
+        "moe_output": _box(1110, 330, 115, 54),
     },
     "adapter_integration": {
         "external_hf_config": _box(65, 210, 135, 58),
@@ -128,35 +131,70 @@ LAYOUTS: dict[str, dict[str, LayoutBox]] = {
         "supports_lora": _box(1010, 155, 118, 48),
         "mixture_of_experts": _box(1010, 300, 150, 48),
         "support_torch_compile": _box(1010, 360, 170, 48),
-        "exec_input_group": _box(1215, 105, 145, 56),
-        "exec_attention_group": _box(1215, 190, 145, 56),
-        "exec_ffn_moe_group": _box(1215, 275, 145, 56),
-        "exec_output_group": _box(1215, 360, 145, 56),
+        "exec_input_group": _box(1190, 70, 210, 112),
+        "component_vocab_embedding": _box(1210, 122, 165, 44),
+        "exec_attention_group": _box(1190, 200, 210, 225),
+        "component_qkv_linear": _box(1210, 250, 160, 38),
+        "component_hpc_rope_norm": _box(1210, 294, 160, 38),
+        "component_attention": _box(1210, 338, 160, 38),
+        "component_row_parallel": _box(1210, 382, 160, 38),
+        "exec_ffn_moe_group": _box(1190, 430, 210, 230),
+        "component_merged_linear": _box(1210, 480, 185, 38),
+        "component_silu_and_mul": _box(1210, 524, 150, 38),
+        "component_gate_linear": _box(1210, 568, 150, 38),
+        "component_fused_moe": _box(1210, 612, 150, 38),
+        "exec_output_group": _box(1190, 685, 210, 150),
+        "component_lm_head": _box(1210, 735, 150, 38),
+        "component_logits_processor": _box(1210, 779, 160, 38),
     },
-    "parallelism_weight_loading": {
-        "tensor_parallel_lane": _box(55, 120, 170, 54),
-        "tp_components": _box(285, 120, 210, 54),
-        "pipeline_parallel_lane": _box(55, 205, 170, 54),
-        "pp_components": _box(285, 205, 230, 54),
-        "expert_parallel_lane": _box(55, 290, 170, 54),
-        "ep_components": _box(285, 290, 210, 54),
-        "hf_checkpoint": _box(55, 560, 145, 58),
-        "qkv_checkpoint_weights": _box(285, 470, 185, 54),
-        "qkv_proj_mapping": _box(535, 470, 145, 54),
-        "gate_up_checkpoint_weights": _box(285, 555, 185, 54),
-        "gate_up_proj_mapping": _box(535, 555, 145, 54),
-        "expert_checkpoint_weights": _box(285, 640, 185, 54),
-        "fused_moe_parameter_mapping": _box(535, 640, 185, 54),
-        "remaining_weights": _box(770, 555, 145, 54),
-        "auto_weights_loader": _box(1010, 555, 160, 54),
-        "pp_missing_filter": _box(770, 470, 170, 54),
-        "fp8_kv_scale_remap": _box(770, 640, 170, 54),
+    "parallelism": {
+        "tp_lane": _box(50, 80, 1380, 160),
+        "tp_world_size": _box(80, 150, 135, 48),
+        "tp_head_partition": _box(250, 150, 145, 48),
+        "tp_kv_partition": _box(430, 150, 150, 48),
+        "tp_embedding_linear_components": _box(620, 145, 245, 58),
+        "pp_lane": _box(50, 310, 1380, 180),
+        "pp_make_layers": _box(80, 390, 120, 48),
+        "pp_layer_range": _box(235, 390, 135, 48),
+        "pp_missing_layer": _box(405, 390, 140, 48),
+        "pp_rank_flows": _box(580, 385, 220, 58),
+        "pp_missing_filter": _box(835, 390, 155, 48),
+        "ep_lane": _box(50, 560, 1380, 180),
+        "ep_group": _box(80, 640, 120, 48),
+        "ep_rank_size": _box(235, 640, 135, 48),
+        "ep_physical_local_experts": _box(405, 635, 175, 58),
+        "ep_fused_moe": _box(620, 635, 140, 58),
+        "ep_eplb_update": _box(800, 640, 180, 48),
+    },
+    "weight_loading": {
+        "wrapper_weights": _box(60, 105, 120, 50),
+        "wrapper_filter_weights": _box(220, 100, 135, 60),
+        "wrapper_speculative_filter": _box(395, 100, 150, 60),
+        "wrapper_tied_lm_head_filter": _box(585, 100, 155, 60),
+        "wrapper_auto_weights_loader": _box(780, 100, 165, 60),
+        "wrapper_loaded_set": _box(985, 105, 120, 50),
+        "model_loaded_weight": _box(60, 375, 135, 50),
+        "model_fp8_scale_remap": _box(235, 370, 145, 60),
+        "mapping_dispatch": _box(430, 250, 520, 335),
+        "packed_modules_mapping": _box(455, 310, 150, 46),
+        "stacked_params_mapping": _box(455, 370, 150, 46),
+        "qkv_stacked_target": _box(630, 345, 145, 46),
+        "gate_up_stacked_target": _box(630, 405, 170, 46),
+        "expert_params_mapping": _box(455, 485, 170, 46),
+        "expert_id_shard_id": _box(650, 485, 150, 46),
+        "regular_parameter": _box(815, 405, 130, 46),
+        "bias_skip": _box(1020, 300, 105, 48),
+        "pp_missing_parameter_filter": _box(1020, 380, 150, 54),
+        "router_gate_rename": _box(1210, 380, 145, 54),
+        "param_weight_loader": _box(1210, 475, 145, 54),
+        "default_weight_loader_fallback": _box(1390, 475, 170, 54),
+        "model_loaded_params": _box(1390, 590, 125, 50),
     },
 }
 
 
 def _side_for_port(port_id: str, direction: str) -> str:
-    if port_id in {"residual", "updated_residual"}:
+    if port_id in {"residual", "updated_residual", "residual_out"}:
         return "bottom" if direction == "output" else "left"
     if port_id in {"write", "weights_in", "config_in", "capability_in", "control_in"}:
         return "left"
@@ -294,7 +332,7 @@ def _manual_route(page_id: str, edge_id: str) -> list[tuple[float, float]] | Non
     semantic view alone.
     """
     attention_routes: dict[str, list[tuple[float, float]]] = {
-        "qkv_split_to_hpc_fused": [(535, 372), (600, 372), (600, 218), (610, 218)],
+        "qkv_projection_to_hpc_fused": [(360, 385), (382, 385), (382, 300), (590, 300), (590, 218), (610, 218)],
         "qkv_split_to_q_stream": [(535, 372), (590, 372), (590, 403)],
         "qkv_split_to_k_stream": [(535, 386), (590, 386), (590, 498)],
         "qkv_split_to_v_stream": [(535, 400), (590, 400), (590, 593)],
@@ -305,11 +343,13 @@ def _manual_route(page_id: str, edge_id: str) -> list[tuple[float, float]] | Non
         "v_stream_to_attention": [(662, 593), (1090, 593), (1090, 404), (1110, 404)],
     }
     parallel_routes: dict[str, list[tuple[float, float]]] = {
-        "checkpoint_to_remaining_weights": [(200, 589), (240, 589), (240, 735), (770, 735), (770, 582)],
+        "mapping_dispatch_to_pp_filter_stacked": [(775, 368), (985, 368), (985, 407), (1020, 407)],
+        "mapping_dispatch_to_pp_filter_expert": [(800, 508), (985, 508), (985, 407), (1020, 407)],
+        "mapping_dispatch_to_pp_filter_regular": [(925, 428), (985, 428), (985, 407), (1020, 407)],
     }
     if page_id == "attention_detail":
         return attention_routes.get(edge_id)
-    if page_id == "parallelism_weight_loading":
+    if page_id == "weight_loading":
         return parallel_routes.get(edge_id)
     return None
 

@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+"""Validate semantic coverage from source-analysis through Architecture IR."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+COVERAGE_VERSION = "0.1"
+
+
+def _load_json(path: Path, label: str) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"unable to read {label}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{label} root must be an object")
+    return data
+
+
+def _evidence_fact_ids(ir: dict[str, Any]) -> set[str]:
+    result: set[str] = set()
+    for page in ir.get("pages", []):
+        if not isinstance(page, dict):
+            continue
+        for collection in ("nodes", "edges"):
+            for item in page.get(collection, []):
+                if not isinstance(item, dict):
+                    continue
+                for evidence in item.get("evidence", []):
+                    if not isinstance(evidence, dict):
+                        continue
+                    for fact_id in evidence.get("fact_ids", []):
+                        if isinstance(fact_id, str):
+                            result.add(fact_id)
+    return result
+
+
+def _fact_by_id(source_analysis: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
+    for key in (
+        "semantic_facts",
+        "imports",
+        "classes",
+        "class_attributes",
+        "module_assignments",
+        "layer_factories",
+        "methods",
+        "method_control_flows",
+        "calls",
+        "assignments",
+        "branches",
+        "returns",
+        "config_accesses",
+        "parallelism_hints",
+        "parallelism_facts",
+        "weight_mappings",
+        "weight_loading_hints",
+    ):
+        for fact in source_analysis.get(key, []):
+            if isinstance(fact, dict) and isinstance(fact.get("fact_id"), str):
+                result[fact["fact_id"]] = fact
+    for flow in source_analysis.get("weight_loading_flows", []):
+        if not isinstance(flow, dict):
+            continue
+        for stage in flow.get("stages", []):
+            if isinstance(stage, dict) and isinstance(stage.get("fact_id"), str):
+                result[stage["fact_id"]] = stage
+    return result
+
+
+def _status_for_fact(fact: dict[str, Any], consumed: set[str]) -> tuple[str, str | None]:
+    fact_id = str(fact["fact_id"])
+    if fact_id in consumed:
+        return "consumed", None
+    relevance = fact.get("relevance")
+    category = fact.get("category")
+    if relevance == "excluded":
+        return "excluded", str(fact.get("exclusion_reason") or "Excluded by inventory.")
+    if relevance == "informational":
+        return "excluded", str(fact.get("exclusion_reason") or "Informational fact outside required diagram coverage.")
+    if category == "external_boundary":
+        return "unresolved", "External component behavior is outside single-file proof boundary."
+    return "unresolved", "Required semantic fact is tracked but not rendered as a standalone IR node or edge."
+
+
+def validate_semantic_coverage(
+    source_analysis: dict[str, Any],
+    inventory: dict[str, Any],
+    ir: dict[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
+    errors: list[str] = []
+    if source_analysis.get("schema_version") != "0.3":
+        errors.append("source-analysis schema_version must be '0.3'")
+    if ir.get("schema_version") != "0.6":
+        errors.append("Architecture IR schema_version must be '0.6'")
+
+    source_facts = _fact_by_id(source_analysis)
+    consumed_ids = _evidence_fact_ids(ir)
+    facts = [fact for fact in inventory.get("facts", []) if isinstance(fact, dict)]
+    statuses: list[dict[str, Any]] = []
+    required_count = consumed_count = excluded_count = unresolved_count = orphaned_count = 0
+
+    for fact in facts:
+        fact_id = fact.get("fact_id")
+        if not isinstance(fact_id, str):
+            continue
+        if fact_id not in source_facts and not fact_id.startswith("stage:"):
+            errors.append(f"inventory fact is not present in source-analysis: {fact_id}")
+        status, reason = _status_for_fact(fact, consumed_ids)
+        if fact.get("relevance") == "required":
+            required_count += 1
+        if status == "consumed":
+            consumed_count += 1
+        elif status == "excluded":
+            excluded_count += 1
+        elif status == "unresolved":
+            unresolved_count += 1
+        if fact.get("relevance") == "required" and status not in {"consumed", "excluded", "unresolved"}:
+            orphaned_count += 1
+        entry = {"fact_id": fact_id, "status": status, "category": fact.get("category"), "relevance": fact.get("relevance")}
+        if reason:
+            if status == "excluded":
+                entry["exclusion_reason"] = reason
+            else:
+                entry["unresolved_reason"] = reason
+        statuses.append(entry)
+
+    for fact_id in consumed_ids:
+        if fact_id not in source_facts and not fact_id.startswith("stage:"):
+            errors.append(f"IR evidence references unknown fact_id: {fact_id}")
+
+    summary = {
+        "required_fact_count": required_count,
+        "consumed_fact_count": consumed_count,
+        "excluded_fact_count": excluded_count,
+        "unresolved_fact_count": unresolved_count,
+        "orphaned_fact_count": orphaned_count,
+    }
+    if orphaned_count:
+        errors.append(f"orphaned required facts found: {orphaned_count}")
+    return {
+        "schema_version": COVERAGE_VERSION,
+        "model_name": ir.get("model_name", inventory.get("model_name", "unknown-model")),
+        "summary": summary,
+        "facts": statuses,
+    }, errors
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Validate semantic coverage.")
+    parser.add_argument("source_analysis", type=Path, help="source-analysis JSON")
+    parser.add_argument("semantic_inventory", type=Path, help="semantic inventory JSON")
+    parser.add_argument("architecture_ir", type=Path, help="Architecture IR JSON")
+    parser.add_argument("--output", "-o", type=Path, required=True, help="Output semantic coverage JSON")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    try:
+        coverage, errors = validate_semantic_coverage(
+            _load_json(args.source_analysis, "source-analysis"),
+            _load_json(args.semantic_inventory, "semantic inventory"),
+            _load_json(args.architecture_ir, "Architecture IR"),
+        )
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(coverage, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if errors:
+        for error in errors:
+            print(f"error: {error}", file=sys.stderr)
+        return 1
+    print("Semantic coverage validation passed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

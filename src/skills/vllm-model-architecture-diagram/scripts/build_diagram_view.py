@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 DIAGRAM_VIEW_VERSION = "0.1"
-SOURCE_IR_VERSION = "0.5"
+SOURCE_IR_VERSION = "0.6"
 
 PAGE_REGION_PRESETS: dict[str, list[tuple[str, str, str]]] = {
     "overview": [("overview_flow", "Top-level inference flow", "horizontal")],
@@ -42,9 +42,15 @@ PAGE_REGION_PRESETS: dict[str, list[tuple[str, str, str]]] = {
         ("interfaces_compilation", "Interfaces & Compilation", "vertical"),
         ("execution_components", "Execution Components", "grid"),
     ],
-    "parallelism_weight_loading": [
-        ("parallelism_region", "Parallelism", "horizontal"),
-        ("weight_loading_region", "Weight Loading", "horizontal"),
+    "parallelism": [
+        ("tensor_parallel_region", "Tensor Parallel", "horizontal"),
+        ("pipeline_parallel_region", "Pipeline Parallel", "horizontal"),
+        ("expert_parallel_region", "Expert Parallel", "horizontal"),
+    ],
+    "weight_loading": [
+        ("wrapper_weight_flow", "HYV3ForCausalLM.load_weights", "horizontal"),
+        ("model_weight_flow", "HYV3Model.load_weights", "horizontal"),
+        ("mapping_dispatch_region", "Mapping dispatch", "grid"),
     ],
 }
 
@@ -54,17 +60,20 @@ PAGE_LANE_PRESETS: dict[str, list[tuple[str, str, str, list[str]]]] = {
         ("residual_lane", "residual state", "horizontal", ["decoder_input", "input_rmsnorm", "post_attention_rmsnorm", "decoder_output"]),
     ],
     "attention_detail": [
-        ("hpc_fused_lane", "HPC fused", "horizontal", ["qkv_split", "hpc_fused_processing", "kv_cache", "attention_core"]),
+        ("hpc_fused_lane", "HPC fused", "horizontal", ["qkv_projection", "hpc_fused_processing", "kv_cache", "attention_core"]),
         ("fallback_lane", "fallback", "horizontal", ["q_stream", "k_stream", "v_stream", "fallback_q_norm", "fallback_k_norm", "rotary_embedding", "attention_core"]),
         ("q_lane", "Q", "horizontal", ["q_stream", "fallback_q_norm", "rotary_embedding", "attention_core"]),
         ("k_lane", "K", "horizontal", ["k_stream", "fallback_k_norm", "rotary_embedding", "attention_core"]),
         ("v_lane", "V", "horizontal", ["v_stream", "attention_core"]),
     ],
-    "parallelism_weight_loading": [
-        ("tp_lane", "Tensor Parallel", "horizontal", ["tensor_parallel_lane", "tp_components"]),
-        ("pp_lane", "Pipeline Parallel", "horizontal", ["pipeline_parallel_lane", "pp_components"]),
-        ("ep_lane", "Expert Parallel", "horizontal", ["expert_parallel_lane", "ep_components"]),
-        ("weight_mapping_lane", "Weight Loading", "horizontal", []),
+    "parallelism": [
+        ("tp_lane", "Tensor Parallel", "horizontal", ["tp_lane", "tp_world_size", "tp_head_partition", "tp_kv_partition", "tp_embedding_linear_components"]),
+        ("pp_lane", "Pipeline Parallel", "horizontal", ["pp_lane", "pp_make_layers", "pp_layer_range", "pp_missing_layer", "pp_rank_flows", "pp_missing_filter"]),
+        ("ep_lane", "Expert Parallel", "horizontal", ["ep_lane", "ep_group", "ep_rank_size", "ep_physical_local_experts", "ep_fused_moe", "ep_eplb_update"]),
+    ],
+    "weight_loading": [
+        ("wrapper_load_weights_lane", "HYV3ForCausalLM.load_weights", "horizontal", ["wrapper_weights", "wrapper_filter_weights", "wrapper_speculative_filter", "wrapper_tied_lm_head_filter", "wrapper_auto_weights_loader", "wrapper_loaded_set"]),
+        ("model_load_weights_lane", "HYV3Model.load_weights", "horizontal", ["model_loaded_weight", "model_fp8_scale_remap", "mapping_dispatch", "pp_missing_parameter_filter", "router_gate_rename", "param_weight_loader", "default_weight_loader_fallback", "model_loaded_params"]),
     ],
 }
 
@@ -115,10 +124,18 @@ def _region_for_node(page_type: str, node_id: str) -> str | None:
         if node_id in {"supports_pp", "supports_lora", "mixture_of_experts", "support_torch_compile"}:
             return "interfaces_compilation"
         return "execution_components"
-    if page_type == "parallelism_weight_loading":
-        if node_id in {"tensor_parallel_lane", "pipeline_parallel_lane", "expert_parallel_lane", "tp_components", "pp_components", "ep_components"}:
-            return "parallelism_region"
-        return "weight_loading_region"
+    if page_type == "parallelism":
+        if node_id.startswith("tp_"):
+            return "tensor_parallel_region"
+        if node_id.startswith("pp_"):
+            return "pipeline_parallel_region"
+        return "expert_parallel_region"
+    if page_type == "weight_loading":
+        if node_id.startswith("wrapper_"):
+            return "wrapper_weight_flow"
+        if node_id in {"mapping_dispatch", "packed_modules_mapping", "stacked_params_mapping", "qkv_stacked_target", "gate_up_stacked_target", "expert_params_mapping", "expert_id_shard_id", "regular_parameter"}:
+            return "mapping_dispatch_region"
+        return "model_weight_flow"
     return "overview_flow"
 
 

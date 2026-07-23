@@ -1,0 +1,30 @@
+{
+  "schema_version": "0.1",
+  "model": "hy-v3",
+  "assertions": {
+    "hpc_input_source": "qkv_projection",
+    "hpc_input_port": "qkv_out",
+    "fallback_qk_norm_optional": true,
+    "v_bypasses_qk_norm": true,
+    "decoder_outputs": ["hidden_out", "residual_out"],
+    "residual_none_initialization": true,
+    "expert_bias_phase": "construction",
+    "eplb_metadata_not_runtime": true,
+    "moe_restore_shape": true,
+    "adapter_config_direction": "VllmConfig -> HYV3Config",
+    "contains_edge": "HYV3ForCausalLM contains HYV3Model",
+    "execution_components_expanded": true,
+    "pp_rank_facts": ["first", "non_first", "non_last", "last"],
+    "weight_loading_entrypoints": [
+      "HYV3ForCausalLM.load_weights",
+      "HYV3Model.load_weights"
+    ],
+    "fp8_remap_before_mapping_dispatch": true,
+    "pp_filter_applies_to_multiple_dispatch_paths": true,
+    "tied_lm_head_filtering": true,
+    "router_gate_rename": true,
+    "default_weight_loader_fallback": true,
+    "external_kv_cache_read_not_direct": true,
+    "forbidden_components": ["Scheduler", "Worker", "EngineCore"]
+  }
+}

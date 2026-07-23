@@ -10,14 +10,15 @@ from pathlib import Path
 from typing import Any
 
 VIEW_VERSION = "0.1"
-IR_VERSION = "0.5"
+IR_VERSION = "0.6"
 REQUIRED_PAGE_IDS = {
     "overview",
     "decoder_layer_detail",
     "attention_detail",
     "moe_detail",
     "adapter_integration",
-    "parallelism_weight_loading",
+    "parallelism",
+    "weight_loading",
 }
 
 
@@ -82,8 +83,8 @@ def validate_diagram_view(ir: dict[str, Any], view: dict[str, Any]) -> list[str]
     missing = sorted(REQUIRED_PAGE_IDS - {item for item in view_page_ids if isinstance(item, str)})
     if missing:
         errors.append(f"Diagram View missing required pages: {', '.join(missing)}")
-    if "vllm_adaptation_map" in view_page_ids:
-        errors.append("vllm_adaptation_map must be split into adapter_integration and parallelism_weight_loading")
+    if "vllm_adaptation_map" in view_page_ids or "parallelism_weight_loading" in view_page_ids:
+        errors.append("legacy adaptation/parallelism_weight_loading pages must be split into adapter_integration, parallelism, and weight_loading")
 
     nodes_by_page = _nodes_by_page(ir)
     edges_by_page = _edges_by_page(ir)
@@ -134,6 +135,15 @@ def validate_diagram_view(ir: dict[str, Any], view: dict[str, Any]) -> list[str]
                 continue
             if edge.get("source") != ir_edge.get("source") or edge.get("target") != ir_edge.get("target"):
                 errors.append(f"page {page_id}: visible edge {semantic_id} changes source/target")
+            if edge.get("style_kind") != ir_edge.get("kind"):
+                errors.append(f"page {page_id}: visible edge {semantic_id} changes edge kind")
+            if ir_edge.get("kind") in {"dependency", "adaptation", "weight_mapping", "parallel_partition"} and edge.get("style_kind") == "runtime":
+                errors.append(f"page {page_id}: view must not turn {ir_edge.get('kind')} into runtime")
+            ir_display = ir_edge.get("display")
+            if isinstance(ir_display, dict) and ir_display.get("show_label") is True and edge.get("label_visible") is not True:
+                errors.append(f"page {page_id}: edge {semantic_id} hides a required correctness label")
+            if ir_edge.get("condition") and edge.get("label_visible") is not True:
+                errors.append(f"page {page_id}: optional/conditional edge {semantic_id} must show optional or condition label")
             source_node = ir_nodes.get(str(ir_edge.get("source")))
             target_node = ir_nodes.get(str(ir_edge.get("target")))
             if source_node and edge.get("source_port") not in _port_ids(source_node):
@@ -169,10 +179,14 @@ def _validate_page_semantics(page: dict[str, Any], errors: list[str]) -> None:
             errors.append("adapter_integration must not contain checkpoint mapping nodes")
         if ("supports_pp", "supports_lora") in edge_pairs or ("supports_lora", "mixture_of_experts") in edge_pairs:
             errors.append("Adapter interfaces must not form a fake inheritance chain")
-    if page_id == "parallelism_weight_loading":
+    if page_id == "parallelism":
         region_ids = {region.get("id") for region in page.get("regions", []) if isinstance(region, dict)}
-        if not {"parallelism_region", "weight_loading_region"}.issubset(region_ids):
-            errors.append("parallelism_weight_loading must contain Parallelism and Weight Loading regions")
+        if not {"tensor_parallel_region", "pipeline_parallel_region", "expert_parallel_region"}.issubset(region_ids):
+            errors.append("parallelism must contain TP, PP, and EP regions")
+    if page_id == "weight_loading":
+        region_ids = {region.get("id") for region in page.get("regions", []) if isinstance(region, dict)}
+        if not {"wrapper_weight_flow", "model_weight_flow", "mapping_dispatch_region"}.issubset(region_ids):
+            errors.append("weight_loading must contain wrapper, model, and mapping regions")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

@@ -48,8 +48,10 @@ PAGE_TYPES = {
     "attention_detail",
     "moe_detail",
     "adapter_integration",
-    "parallelism_weight_loading",
+    "parallelism",
+    "weight_loading",
 }
+EVIDENCE_TYPES = {"direct", "derived", "external", "unresolved"}
 PORT_DIRECTIONS = {"input", "output", "bidirectional"}
 PORT_DATA_KINDS = {"tensor", "config", "weights", "cache", "capability", "control"}
 EDGE_DISPLAY_ROUTES = {
@@ -72,6 +74,50 @@ def _is_non_empty_evidence(value: Any) -> bool:
 
 def _has_derived_evidence(value: Any) -> bool:
     return isinstance(value, list) and any(isinstance(item, dict) and item.get("type") == "derived" for item in value)
+
+
+def _fact_ids(evidence: Any) -> list[str]:
+    if not isinstance(evidence, list):
+        return []
+    result: list[str] = []
+    for item in evidence:
+        if not isinstance(item, dict):
+            continue
+        for fact_id in item.get("fact_ids", []):
+            if isinstance(fact_id, str):
+                result.append(fact_id)
+    return result
+
+
+def _evidence_types(evidence: Any) -> set[str]:
+    if not isinstance(evidence, list):
+        return set()
+    return {str(item.get("type")) for item in evidence if isinstance(item, dict)}
+
+
+def _validate_evidence(value: Any, prefix: str, errors: list[str], known_fact_ids: set[str]) -> None:
+    if not _is_non_empty_evidence(value):
+        errors.append(f"{prefix} must include source evidence")
+        return
+    for index, item in enumerate(value):
+        item_prefix = f"{prefix}.evidence[{index}]"
+        evidence_type = item.get("type")
+        if evidence_type not in EVIDENCE_TYPES:
+            errors.append(f"{item_prefix}.type is invalid: {evidence_type!r}")
+        fact_ids = item.get("fact_ids")
+        if fact_ids is not None:
+            if not isinstance(fact_ids, list) or not all(isinstance(fact_id, str) and fact_id for fact_id in fact_ids):
+                errors.append(f"{item_prefix}.fact_ids must be a list of non-empty strings")
+            elif known_fact_ids:
+                for fact_id in fact_ids:
+                    if fact_id not in known_fact_ids:
+                        errors.append(f"{item_prefix}.fact_ids references unknown fact_id: {fact_id}")
+        if evidence_type == "direct" and not item.get("fact_ids"):
+            errors.append(f"{item_prefix}: direct evidence must include fact_ids")
+        if evidence_type == "derived" and not item.get("fact_ids") and not item.get("note") and not item.get("derivation_rule"):
+            errors.append(f"{item_prefix}: derived evidence must include fact_ids, note, or derivation_rule")
+        if evidence_type == "external" and not item.get("note"):
+            errors.append(f"{item_prefix}: external evidence must describe the external boundary")
 
 
 def _validate_node_display(value: Any, prefix: str, errors: list[str]) -> None:
@@ -164,12 +210,28 @@ def _edge_port_data_compatible(kind: str, source_kind: str | None, target_kind: 
 def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
     errors: list[str] = []
 
-    if data.get("schema_version") != "0.5":
-        errors.append("schema_version must be '0.5'")
+    if data.get("schema_version") != "0.6":
+        errors.append("schema_version must be '0.6'")
     if not isinstance(data.get("model_name"), str) or not data["model_name"].strip():
         errors.append("model_name must be a non-empty string")
     if data.get("detail_level") not in {"overview", "full"}:
         errors.append("detail_level must be 'overview' or 'full'")
+    source_fact_ids_value = data.get("source_fact_ids")
+    if source_fact_ids_value is not None and not isinstance(source_fact_ids_value, list):
+        errors.append("source_fact_ids must be a list when present")
+        known_fact_ids: set[str] = set()
+    else:
+        known_fact_ids = {
+            fact_id
+            for fact_id in (source_fact_ids_value or [])
+            if isinstance(fact_id, str)
+        }
+    entrypoints = data.get("weight_loading_entrypoints")
+    if entrypoints is not None:
+        if not isinstance(entrypoints, list) or not all(isinstance(item, str) for item in entrypoints):
+            errors.append("weight_loading_entrypoints must be a list of strings")
+        elif {"HYV3ForCausalLM.load_weights", "HYV3Model.load_weights"} - set(entrypoints):
+            errors.append("weight_loading_entrypoints must keep wrapper and model load_weights flows separate")
 
     pages = data.get("pages")
     if not isinstance(pages, list) or not pages:
@@ -272,8 +334,10 @@ def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
                         if isinstance(component, str) and ("MoE" in component or "FeedForward" in component or "FFN" in component) and variant.get("phase") != "construction":
                             errors.append(f"{variant_prefix}: Dense/MoE variants must use construction phase")
 
-            if kind not in NON_MAJOR_NODE_KINDS and not _is_non_empty_evidence(node.get("evidence")):
-                errors.append(f"{node_prefix} must include source evidence")
+            if kind not in NON_MAJOR_NODE_KINDS:
+                _validate_evidence(node.get("evidence"), node_prefix, errors, known_fact_ids)
+            elif _is_non_empty_evidence(node.get("evidence")):
+                _validate_evidence(node.get("evidence"), node_prefix, errors, known_fact_ids)
             if kind in {"add", "merge"} and str(node.get("label", "")).lower().find("handoff") >= 0 and not _has_derived_evidence(node.get("evidence")):
                 errors.append(f"{node_prefix}: derived Add/Handoff node must include derived evidence")
 
@@ -322,14 +386,26 @@ def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
                 errors.append(f"{edge_prefix}.kind is invalid: {kind!r}")
             if phase not in PHASES:
                 errors.append(f"{edge_prefix}.phase is invalid: {phase!r}")
-            if not _is_non_empty_evidence(edge.get("evidence")):
-                errors.append(f"{edge_prefix} must include source evidence")
+            _validate_evidence(edge.get("evidence"), edge_prefix, errors, known_fact_ids)
+            evidence_types = _evidence_types(edge.get("evidence"))
+            fact_ids = _fact_ids(edge.get("evidence"))
+            if kind in {"runtime", "weight_mapping"} and "direct" in evidence_types and fact_ids and all(":import:" in fact_id for fact_id in fact_ids):
+                errors.append(f"{edge_prefix}: import fact cannot be the only direct behavioral evidence")
+            if "external" in evidence_types and "direct" in evidence_types:
+                errors.append(f"{edge_prefix}: external behavior cannot also be marked direct")
             if isinstance(source, str):
                 outgoing.setdefault(source, []).append(edge)
             if kind == "residual" and target in node_by_id and node_by_id[target].get("kind") not in {"add", "merge", "normalization", "output"}:
                 errors.append(f"{edge_prefix}: residual edge must target an add, merge, normalization, or output node")
             if kind == "weight_mapping" and phase != "checkpoint_loading":
                 errors.append(f"{edge_prefix}: weight_mapping edge must use checkpoint_loading phase")
+            if kind == "residual" and edge.get("source_port") == "hidden_out":
+                errors.append(f"{edge_prefix}: residual edge cannot use hidden_out as residual_out")
+            if phase == "construction" and kind == "runtime":
+                errors.append(f"{edge_prefix}: constructor dependency must not be marked runtime")
+            if isinstance(edge.get("condition"), str) and edge["condition"].strip():
+                if not any(":branch:" in fact_id for fact_id in fact_ids):
+                    errors.append(f"{edge_prefix}: optional/conditional edge must cite a branch fact")
 
             if source in node_by_id and target in node_by_id:
                 source_node = node_by_id[source]

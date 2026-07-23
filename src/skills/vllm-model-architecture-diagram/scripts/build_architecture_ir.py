@@ -14,8 +14,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-ARCHITECTURE_IR_VERSION = "0.5"
-SOURCE_ANALYSIS_VERSION = "0.2"
+ARCHITECTURE_IR_VERSION = "0.6"
+SOURCE_ANALYSIS_VERSION = "0.3"
 
 TP_SYMBOLS = {"QKVParallelLinear", "RowParallelLinear", "VocabParallelEmbedding", "ParallelLMHead"}
 PP_SYMBOLS = {"get_pp_group", "make_layers", "PPMissingLayer"}
@@ -52,14 +52,23 @@ def _evidence(
 ) -> list[dict[str, Any]]:
     """Create compact source evidence while preserving line numbers."""
     all_lines = sorted(set(lines or []) | set(_lines(records or [])))
+    fact_ids = sorted(
+        {
+            str(record.get("fact_id"))
+            for record in (records or [])
+            if isinstance(record, dict) and isinstance(record.get("fact_id"), str)
+        }
+    )
     item: dict[str, Any] = {"type": evidence_type}
+    if fact_ids:
+        item["fact_ids"] = fact_ids
     if len(all_lines) == 1:
         item["line"] = all_lines[0]
     elif all_lines:
         item["lines"] = all_lines
     if note:
         item["note"] = note
-    return [item] if all_lines or note else []
+    return [item] if all_lines or note or fact_ids else []
 
 
 def _class_by_name(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -207,6 +216,16 @@ def _control_call_record(
     *,
     resolved_collection: str | None = None,
 ) -> dict[str, Any] | None:
+    for call in data.get("calls", []):
+        if not isinstance(call, dict):
+            continue
+        if class_name is not None and call.get("owner_class") not in {None, class_name}:
+            continue
+        if call.get("target") != target:
+            continue
+        if resolved_collection and call.get("resolved_collection") != resolved_collection:
+            continue
+        return call
     flow = _forward_control_flow(data, class_name)
     if not flow:
         return None
@@ -218,8 +237,138 @@ def _control_call_record(
             continue
         if resolved_collection and value.get("resolved_collection") != resolved_collection:
             continue
-        return {"line": value.get("line"), "source": value.get("source")}
+        return value
     return None
+
+
+def _call_record(data: dict[str, Any], owner_class: str | None, method: str | None, target: str) -> dict[str, Any] | None:
+    for item in data.get("calls", []):
+        if isinstance(item, dict) and item.get("owner_class") == owner_class and item.get("method") == method and item.get("target") == target:
+            return item
+    for item in data.get("calls", []):
+        if isinstance(item, dict) and item.get("target") == target:
+            return item
+    return None
+
+
+def _method_control_record(data: dict[str, Any], owner_class: str | None, method: str | None) -> dict[str, Any] | None:
+    for item in data.get("method_control_flows", []):
+        if isinstance(item, dict) and item.get("owner_class") == owner_class and item.get("method") == method:
+            return item
+    return None
+
+
+def _assignment_record(data: dict[str, Any], owner_class: str | None, method: str | None, target: str | None = None, contains: str | None = None) -> dict[str, Any] | None:
+    for item in data.get("assignments", []):
+        if not isinstance(item, dict):
+            continue
+        if owner_class is not None and item.get("owner_class") != owner_class:
+            continue
+        if method is not None and item.get("method") != method:
+            continue
+        targets = item.get("targets", [])
+        source = str(item.get("source") or item.get("expression") or "")
+        if target is not None and target not in targets:
+            continue
+        if contains is not None and contains not in source:
+            continue
+        return item
+    return None
+
+
+def _branch_record(data: dict[str, Any], owner_class: str | None, method: str | None, contains: str) -> dict[str, Any] | None:
+    for item in data.get("branches", []):
+        if isinstance(item, dict) and item.get("owner_class") == owner_class and item.get("method") == method and contains in str(item.get("condition")):
+            return item
+    return None
+
+
+def _parallel_fact(data: dict[str, Any], category: str, symbol: str | None = None, contains: str | None = None) -> dict[str, Any] | None:
+    for item in data.get("parallelism_facts", []):
+        if not isinstance(item, dict) or item.get("category") != category:
+            continue
+        if symbol is not None and item.get("symbol") != symbol:
+            continue
+        if contains is not None and contains not in str(item.get("summary")):
+            continue
+        return item
+    return None
+
+
+def _config_access(data: dict[str, Any], owner_class: str | None, target: str | None = None, path_contains: str | None = None) -> dict[str, Any] | None:
+    for item in data.get("config_accesses", []):
+        if not isinstance(item, dict):
+            continue
+        if owner_class is not None and item.get("owner_class") != owner_class:
+            continue
+        if target is not None and item.get("target") != target:
+            continue
+        if path_contains is not None and path_contains not in str(item.get("path")):
+            continue
+        return item
+
+
+def _weight_stage(data: dict[str, Any], entrypoint: str, contains: str | None = None, stage_kind: str | None = None) -> dict[str, Any] | None:
+    for flow in data.get("weight_loading_flows", []):
+        if not isinstance(flow, dict) or flow.get("entrypoint") != entrypoint:
+            continue
+        for stage in flow.get("stages", []):
+            if not isinstance(stage, dict):
+                continue
+            if stage_kind is not None and stage.get("stage_kind") != stage_kind:
+                continue
+            if contains is not None and contains not in str(stage.get("summary")):
+                continue
+            return stage
+    return None
+
+
+def _source_fact_ids(data: dict[str, Any]) -> list[str]:
+    """Collect stable fact IDs known to the Architecture IR builder."""
+    result: set[str] = set()
+    for key in (
+        "imports",
+        "classes",
+        "class_attributes",
+        "module_assignments",
+        "layer_factories",
+        "conditions",
+        "methods",
+        "method_control_flows",
+        "calls",
+        "assignments",
+        "branches",
+        "returns",
+        "config_accesses",
+        "parallelism_hints",
+        "parallelism_facts",
+        "weight_mappings",
+        "weight_loading_hints",
+        "semantic_facts",
+    ):
+        for item in data.get(key, []):
+            if isinstance(item, dict) and isinstance(item.get("fact_id"), str):
+                result.add(item["fact_id"])
+    for flow in data.get("weight_loading_flows", []):
+        if not isinstance(flow, dict):
+            continue
+        for stage in flow.get("stages", []):
+            if not isinstance(stage, dict):
+                continue
+            if isinstance(stage.get("fact_id"), str):
+                result.add(stage["fact_id"])
+            for fact_id in stage.get("evidence_fact_ids", []):
+                if isinstance(fact_id, str):
+                    result.add(fact_id)
+    return sorted(result)
+
+
+def _weight_flow_entrypoints(data: dict[str, Any]) -> list[str]:
+    return sorted(
+        str(flow["entrypoint"])
+        for flow in data.get("weight_loading_flows", [])
+        if isinstance(flow, dict) and isinstance(flow.get("entrypoint"), str)
+    )
 
 
 def _call_line(data: dict[str, Any], class_name: str | None, target: str) -> int | None:
@@ -536,7 +685,7 @@ def _build_overview_page(data: dict[str, Any], core: dict[str, Any], variants: l
     model_scope = f"{model_class}.forward" if model_class else None
     logits_scope = f"{top_level_class}.compute_logits" if top_level_class else None
 
-    final_add_record = _find_add_record(data, model_class)
+    final_add_record = _assignment_record(data, model_class, "forward", target="hidden_states", contains="hidden_states + residual") or _find_add_record(data, model_class)
     logits_method = _methods(classes.get(top_level_class)).get("compute_logits") if top_level_class else None
     layer_call = _control_call_record(data, model_class, "layer", resolved_collection="self.layers")
 
@@ -701,6 +850,8 @@ def _build_decoder_detail_page(data: dict[str, Any], core: dict[str, Any], varia
     self_attn_call = _control_call_record(data, decoder_class, "self.self_attn")
     input_norm_call = _control_call_record(data, decoder_class, "self.input_layernorm")
     post_norm_call = _control_call_record(data, decoder_class, "self.post_attention_layernorm")
+    residual_none_branch = _branch_record(data, decoder_class, "forward", "residual is None")
+    residual_init_assignment = _assignment_record(data, decoder_class, "forward", target="residual", contains="hidden_states")
     decoder_forward = _forward_control_flow(data, decoder_class)
     scope = f"{decoder_class}.forward" if decoder_class else None
     variant_records = []
@@ -1061,7 +1212,7 @@ def _build_overview_page_v08(data: dict[str, Any], core: dict[str, Any], variant
     final_norm_assignment = core["final_norm_assignment"]
     lm_head_assignment = core["lm_head_assignment"]
     logits_assignment = core["logits_assignment"]
-    final_add_record = _find_add_record(data, model_class)
+    final_add_record = _assignment_record(data, model_class, "forward", target="hidden_states", contains="hidden_states + residual") or _find_add_record(data, model_class)
     layer_call = _control_call_record(data, model_class, "layer", resolved_collection="self.layers")
     logits_method = _methods(classes.get(top_level_class)).get("compute_logits") if top_level_class else None
     model_scope = f"{model_class}.forward" if model_class else None
@@ -1070,9 +1221,9 @@ def _build_overview_page_v08(data: dict[str, Any], core: dict[str, Any], variant
     nodes = [
         _node_v08("hyv3_for_causal_lm", str(top_level_class), "container", _evidence("direct", [classes.get(top_level_class)]), display_subtitle="Causal LM wrapper", ports=[_port("model_out", "model output", "output", "tensor")]),
         _node_v08("hyv3_model", str(model_class), "container", _evidence("direct", [classes.get(model_class), model_assignment]), parent_id="hyv3_for_causal_lm", display_subtitle="Transformer body", ports=TENSOR_IO),
-        _node_v08("input", "Input IDs / Embeds", "input", _evidence("derived", [_forward_control_flow(data, model_class)]), parent_id="hyv3_model", display_label="Input", ports=[_port("tokens_out", "tokens", "output", "tensor")]),
+        _node_v08("input", "Input IDs / Embeds", "input", _evidence("derived", [_method_control_record(data, model_class, "forward")], note="Forward input is derived from HYV3Model.forward parameters."), parent_id="hyv3_model", display_label="Input", ports=[_port("tokens_out", "tokens", "output", "tensor")]),
         _node_v08("vocab_parallel_embedding", "VocabParallelEmbedding", "embedding", _evidence("direct", [embedding_assignment]), parent_id="hyv3_model", display_label="Token Embedding", display_subtitle="Vocab-parallel", badges=["TP"], ports=[_port("tokens_in", "tokens", "input", "tensor"), _port("hidden_out", "hidden states", "output", "tensor")]),
-        _node_v08("hyv3_decoder_layer", str(decoder_class), "repeated_block", _evidence("derived", [classes.get(decoder_class), layer_factory, layer_call]), parent_id="hyv3_model", display_label="N x Decoder Layers", display_subtitle="Pipeline-local stack", badges=decoder_badges, ports=TENSOR_IO, repetition={"count_expression": layer_factory.get("repeat_expression") if layer_factory else "config.num_hidden_layers", "local_start": "self.start_layer", "local_end": "self.end_layer"}, variants=variants),
+        _node_v08("hyv3_decoder_layer", str(decoder_class), "repeated_block", _evidence("derived", [classes.get(decoder_class), layer_factory, layer_call]), parent_id="hyv3_model", display_label="N x Decoder Layers", display_subtitle="Pipeline-local stack", badges=decoder_badges, ports=[_port("hidden_in", "hidden states", "input", "tensor"), _port("residual_in", "residual", "input", "tensor"), _port("hidden_out", "hidden states", "output", "tensor"), _port("residual_out", "residual", "output", "tensor")], repetition={"count_expression": layer_factory.get("repeat_expression") if layer_factory else "config.num_hidden_layers", "local_start": "self.start_layer", "local_end": "self.end_layer"}, variants=variants),
         _node_v08("final_residual_add", "Final Residual Add", "add", _evidence("direct", [final_add_record]), parent_id="hyv3_model", display_label="Final Residual Add", ports=[_port("hidden_in", "hidden states", "input", "tensor"), _port("residual_in", "residual", "input", "tensor"), _port("hidden_out", "hidden states", "output", "tensor")]),
         _node_v08("norm", "RMSNorm", "normalization", _evidence("direct", [final_norm_assignment, _control_call_record(data, model_class, "self.norm")]), parent_id="hyv3_model", display_label="Final RMSNorm", ports=TENSOR_IO),
         _node_v08("hidden_states_output", "Hidden States", "output", _evidence("derived", [final_norm_assignment]), display_label="Hidden States", ports=[_port("hidden_in", "hidden states", "input", "tensor"), _port("hidden_out", "hidden states", "output", "tensor")]),
@@ -1085,7 +1236,7 @@ def _build_overview_page_v08(data: dict[str, Any], core: dict[str, Any], variant
         _edge_v08("input_to_embedding", "input", "vocab_parallel_embedding", "runtime", _evidence("direct", [embedding_assignment, _control_call_record(data, model_class, "self.embed_input_ids")]), source_port="tokens_out", target_port="tokens_in", scope=model_scope, route="horizontal_lane"),
         _edge_v08("embedding_to_decoder_layers", "vocab_parallel_embedding", "hyv3_decoder_layer", "runtime", _evidence("derived", [embedding_assignment, layer_factory, layer_call]), source_port="hidden_out", target_port="hidden_in", scope=model_scope, route="horizontal_lane"),
         _edge_v08("decoder_to_final_add", "hyv3_decoder_layer", "final_residual_add", "runtime", _evidence("derived", [layer_factory, final_add_record]), source_port="hidden_out", target_port="hidden_in", scope=model_scope, route="horizontal_lane"),
-        _edge_v08("decoder_residual_to_final_add", "hyv3_decoder_layer", "final_residual_add", "residual", _evidence("direct", [final_add_record]), source_port="hidden_out", target_port="residual_in", scope=model_scope, label="residual", show_label=True, route="horizontal_lane"),
+        _edge_v08("decoder_residual_to_final_add", "hyv3_decoder_layer", "final_residual_add", "residual", _evidence("direct", [final_add_record]), source_port="residual_out", target_port="residual_in", scope=model_scope, label="residual", show_label=True, route="horizontal_lane"),
         _edge_v08("final_add_to_norm", "final_residual_add", "norm", "runtime", _evidence("direct", [final_add_record, _control_call_record(data, model_class, "self.norm")]), source_port="hidden_out", target_port="hidden_in", scope=model_scope, route="horizontal_lane"),
         _edge_v08("norm_to_hidden_states_output", "norm", "hidden_states_output", "runtime", _evidence("derived", [final_norm_assignment]), source_port="hidden_out", target_port="hidden_in", route="horizontal_lane"),
         _edge_v08("hidden_states_to_logits_processor", "hidden_states_output", "logits_processor", "runtime", _evidence("derived", [final_norm_assignment, logits_method]), source_port="hidden_out", target_port="hidden_states", scope=logits_scope, route="horizontal_lane"),
@@ -1105,6 +1256,8 @@ def _build_decoder_detail_page_v08(data: dict[str, Any], core: dict[str, Any], v
     self_attn_call = _control_call_record(data, decoder_class, "self.self_attn")
     input_norm_call = _control_call_record(data, decoder_class, "self.input_layernorm")
     post_norm_call = _control_call_record(data, decoder_class, "self.post_attention_layernorm")
+    residual_none_branch = _branch_record(data, decoder_class, "forward", "residual is None")
+    residual_init_assignment = _assignment_record(data, decoder_class, "forward", target="residual", contains="hidden_states")
     decoder_forward = _forward_control_flow(data, decoder_class)
     variant_records = [item for item in data.get("conditions", []) if isinstance(item, dict) and item.get("owner_class") == decoder_class and "first_k_dense_replace" in str(item.get("condition"))]
     norm_ports = [
@@ -1114,7 +1267,8 @@ def _build_decoder_detail_page_v08(data: dict[str, Any], core: dict[str, Any], v
         _port("updated_residual", "updated residual", "output", "tensor"),
     ]
     nodes = [
-        _node_v08("decoder_input", "Hidden States + Residual", "input", _evidence("derived", [decoder_forward]), display_label="Decoder Input", ports=[_port("hidden_states", "hidden states", "output", "tensor"), _port("residual", "residual", "output", "tensor")]),
+        _node_v08("decoder_input", "Hidden States + Residual", "input", _evidence("derived", [_method_control_record(data, decoder_class, "forward")], note="Decoder input ports are derived from HYV3DecoderLayer.forward parameters."), display_label="Decoder Input", ports=[_port("hidden_states", "hidden states", "output", "tensor"), _port("residual", "residual", "output", "tensor")]),
+        _node_v08("residual_initialization", "Initialize Residual", "note", _evidence("direct", [residual_none_branch, residual_init_assignment]), display_label="Initialize Residual", display_subtitle="if residual is None", ports=[_port("hidden_in", "hidden states", "input", "tensor"), _port("residual_out", "residual", "output", "tensor")]),
         _node_v08("input_rmsnorm", "RMSNorm", "normalization", _evidence("direct", [input_norm, input_norm_call]), display_label="Input RMSNorm", display_subtitle="fused residual", ports=norm_ports),
         _node_v08("self_attention", "HYV3Attention", "attention", _evidence("direct", [_class_record(data, str(attention_assignment.get("constructor"))) if attention_assignment else None, attention_assignment, self_attn_call]), display_label="Self Attention", badges=["TP"], ports=[_port("hidden_states", "hidden states", "input", "tensor"), _port("attention_output", "attention output", "output", "tensor")]),
         _node_v08("post_attention_rmsnorm", "RMSNorm", "normalization", _evidence("direct", [post_norm, post_norm_call]), display_label="Post-Attention RMSNorm", display_subtitle="fused residual", ports=[_port("attention_output", "attention output", "input", "tensor"), _port("residual", "residual", "input", "tensor"), _port("normalized_hidden", "normalized hidden", "output", "tensor"), _port("updated_residual", "updated residual", "output", "tensor")]),
@@ -1125,6 +1279,8 @@ def _build_decoder_detail_page_v08(data: dict[str, Any], core: dict[str, Any], v
     ]
     edges = [
         _edge_v08("decoder_hidden_to_input_norm", "decoder_input", "input_rmsnorm", "runtime", _evidence("direct", [input_norm_call]), source_port="hidden_states", target_port="hidden_states", scope=scope, route="horizontal_lane"),
+        _edge_v08("decoder_hidden_to_residual_initialization", "decoder_input", "residual_initialization", "conditional_true", _evidence("direct", [residual_none_branch, residual_init_assignment]), source_port="hidden_states", target_port="hidden_in", scope=scope, condition="residual is None", label="init", show_label=True, route="local_branch"),
+        _edge_v08("residual_initialization_to_input_norm", "residual_initialization", "input_rmsnorm", "residual", _evidence("direct", [residual_none_branch, residual_init_assignment]), source_port="residual_out", target_port="residual", scope=scope, label="residual", show_label=True, route="horizontal_lane"),
         _edge_v08("input_norm_to_attention", "input_rmsnorm", "self_attention", "runtime", _evidence("direct", [input_norm_call, self_attn_call]), source_port="normalized_hidden", target_port="hidden_states", scope=scope, route="horizontal_lane"),
         _edge_v08("attention_to_post_norm", "self_attention", "post_attention_rmsnorm", "runtime", _evidence("derived", [self_attn_call, post_norm_call]), source_port="attention_output", target_port="attention_output", scope=scope, route="horizontal_lane"),
         _edge_v08("post_norm_to_ffn", "post_attention_rmsnorm", "ffn_stage", "runtime", _evidence("direct", [post_norm_call, mlp_call]), source_port="normalized_hidden", target_port="hidden_states", scope=scope, route="horizontal_lane"),
@@ -1139,7 +1295,7 @@ def _build_decoder_detail_page_v08(data: dict[str, Any], core: dict[str, Any], v
 def _build_attention_detail_page_v08(data: dict[str, Any], core: dict[str, Any]) -> dict[str, Any]:
     attention_class = "HYV3Attention"
     scope = f"{attention_class}.forward"
-    condition = next((item for item in data.get("conditions", []) if isinstance(item, dict) and item.get("owner_class") == attention_class and "hpc_rope_norm" in str(item.get("condition"))), None)
+    condition = _branch_record(data, attention_class, "forward", "self.hpc_rope_norm")
     qkv_assignment = _assignment_by_attribute(data, attention_class, "qkv_proj")
     o_proj_assignment = _assignment_by_attribute(data, attention_class, "o_proj")
     attn_assignment = _assignment_by_attribute(data, attention_class, "attn")
@@ -1156,7 +1312,7 @@ def _build_attention_detail_page_v08(data: dict[str, Any], core: dict[str, Any])
     o_proj_call = _control_call_record(data, attention_class, "self.o_proj")
     forward = _forward_control_flow(data, attention_class)
     nodes = [
-        _node_v08("attention_input", "Hidden States", "input", _evidence("derived", [forward]), display_label="Hidden States", ports=[_port("hidden_out", "hidden states", "output", "tensor")]),
+        _node_v08("attention_input", "Hidden States", "input", _evidence("derived", [_method_control_record(data, attention_class, "forward")], note="Attention input is derived from HYV3Attention.forward parameters."), display_label="Hidden States", ports=[_port("hidden_out", "hidden states", "output", "tensor")]),
         _node_v08("qkv_projection", "QKVParallelLinear", "attention", _evidence("direct", [qkv_assignment, qkv_call]), display_label="QKV Projection", display_subtitle="QKVParallelLinear", badges=["TP"], ports=[_port("hidden_in", "hidden states", "input", "tensor"), _port("qkv_out", "qkv", "output", "tensor")]),
         _node_v08("qkv_split", "Split Q/K/V", "note", _evidence("derived", [qkv_call]), display_label="Split Q / K / V", ports=[_port("qkv_in", "qkv", "input", "tensor"), _port("q", "Q", "output", "tensor"), _port("k", "K", "output", "tensor"), _port("v", "V", "output", "tensor")]),
         _node_v08("q_stream", "Q Stream", "note", _evidence("derived", [qkv_call]), display_label="Q", ports=[_port("q_in", "Q", "input", "tensor"), _port("q_out", "Q", "output", "tensor")]),
@@ -1172,20 +1328,23 @@ def _build_attention_detail_page_v08(data: dict[str, Any], core: dict[str, Any])
         _node_v08("attention_output", "Attention Output", "output", _evidence("derived", [o_proj_call, forward]), display_label="Attention Output", ports=[_port("hidden_in", "hidden states", "input", "tensor")]),
     ]
     hpc_condition = str(condition.get("condition")) if isinstance(condition, dict) else "self.hpc_rope_norm is not None"
+    qk_norm_branch = _branch_record(data, attention_class, "forward", "self.use_qk_norm")
     edges = [
         _edge_v08("attention_input_to_qkv_projection", "attention_input", "qkv_projection", "runtime", _evidence("direct", [qkv_call]), source_port="hidden_out", target_port="hidden_in", scope=scope, route="horizontal_lane"),
         _edge_v08("qkv_projection_to_qkv_split", "qkv_projection", "qkv_split", "runtime", _evidence("derived", [qkv_call]), source_port="qkv_out", target_port="qkv_in", scope=scope, route="horizontal_lane"),
-        _edge_v08("qkv_split_to_hpc_fused", "qkv_split", "hpc_fused_processing", "conditional_true", _evidence("direct", [condition, hpc_call]), source_port="q", target_port="qkv_in", scope=scope, condition=hpc_condition, label="HPC fused", show_label=True, route="local_branch"),
+        _edge_v08("qkv_projection_to_hpc_fused", "qkv_projection", "hpc_fused_processing", "conditional_true", _evidence("direct", [condition, hpc_call]), source_port="qkv_out", target_port="qkv_in", scope=scope, condition=hpc_condition, label="HPC fused", show_label=True, route="local_branch"),
         _edge_v08("hpc_processed_q_to_attention", "hpc_fused_processing", "attention_core", "runtime", _evidence("direct", [hpc_call, attn_call]), source_port="processed_q", target_port="q", scope=scope, route="local_branch"),
         _edge_v08("hpc_kv_write_to_cache", "hpc_fused_processing", "kv_cache", "runtime", _evidence("direct", [hpc_call]), source_port="kv_write", target_port="write", scope=scope, label="cache write", show_label=False, route="cache_write"),
-        _edge_v08("kv_cache_read_to_attention", "kv_cache", "attention_core", "runtime", _evidence("derived", [hpc_call, attn_call]), source_port="read", target_port="kv_cache", scope=scope, label="cache read", show_label=False, route="cache_read"),
+        _edge_v08("kv_cache_read_to_attention", "kv_cache", "attention_core", "runtime", _evidence("external", [hpc_call, attn_call], note="KV cache read is performed inside the external vLLM Attention component."), source_port="read", target_port="kv_cache", scope=scope, label="cache read", show_label=False, route="cache_read"),
         _edge_v08("qkv_split_to_q_stream", "qkv_split", "q_stream", "conditional_false", _evidence("derived", [condition, q_norm_call]), source_port="q", target_port="q_in", scope=scope, condition=f"not ({hpc_condition})", label="fallback", show_label=True, route="local_branch"),
-        _edge_v08("qkv_split_to_k_stream", "qkv_split", "k_stream", "conditional_false", _evidence("derived", [condition, k_norm_call]), source_port="k", target_port="k_in", scope=scope, condition=f"not ({hpc_condition})", route="local_branch"),
-        _edge_v08("qkv_split_to_v_stream", "qkv_split", "v_stream", "conditional_false", _evidence("derived", [condition, attn_call]), source_port="v", target_port="v_in", scope=scope, condition=f"not ({hpc_condition})", route="local_branch"),
-        _edge_v08("q_stream_to_q_norm", "q_stream", "fallback_q_norm", "runtime", _evidence("direct", [q_norm_call]), source_port="q_out", target_port="q_in", scope=scope, route="horizontal_lane"),
-        _edge_v08("k_stream_to_k_norm", "k_stream", "fallback_k_norm", "runtime", _evidence("direct", [k_norm_call]), source_port="k_out", target_port="k_in", scope=scope, route="horizontal_lane"),
+        _edge_v08("qkv_split_to_k_stream", "qkv_split", "k_stream", "conditional_false", _evidence("derived", [condition, k_norm_call]), source_port="k", target_port="k_in", scope=scope, condition=f"not ({hpc_condition})", label="fallback", show_label=True, route="local_branch"),
+        _edge_v08("qkv_split_to_v_stream", "qkv_split", "v_stream", "conditional_false", _evidence("derived", [condition, attn_call]), source_port="v", target_port="v_in", scope=scope, condition=f"not ({hpc_condition})", label="fallback", show_label=True, route="local_branch"),
+        _edge_v08("q_stream_to_q_norm", "q_stream", "fallback_q_norm", "conditional_true", _evidence("direct", [qk_norm_branch, q_norm_call]), source_port="q_out", target_port="q_in", scope=scope, condition="self.use_qk_norm", label="optional", show_label=True, route="horizontal_lane"),
+        _edge_v08("k_stream_to_k_norm", "k_stream", "fallback_k_norm", "conditional_true", _evidence("direct", [qk_norm_branch, k_norm_call]), source_port="k_out", target_port="k_in", scope=scope, condition="self.use_qk_norm", label="optional", show_label=True, route="horizontal_lane"),
         _edge_v08("q_norm_to_rotary", "fallback_q_norm", "rotary_embedding", "runtime", _evidence("direct", [q_norm_call, rotary_call]), source_port="q_out", target_port="q_in", scope=scope, route="horizontal_lane"),
         _edge_v08("k_norm_to_rotary", "fallback_k_norm", "rotary_embedding", "runtime", _evidence("direct", [k_norm_call, rotary_call]), source_port="k_out", target_port="k_in", scope=scope, route="horizontal_lane"),
+        _edge_v08("q_stream_optional_bypass_to_rotary", "q_stream", "rotary_embedding", "conditional_false", _evidence("derived", [qk_norm_branch, rotary_call], note="Bypass is derived from self.use_qk_norm branch."), source_port="q_out", target_port="q_in", scope=scope, condition="not self.use_qk_norm", label="optional bypass", show_label=True, route="local_branch"),
+        _edge_v08("k_stream_optional_bypass_to_rotary", "k_stream", "rotary_embedding", "conditional_false", _evidence("derived", [qk_norm_branch, rotary_call], note="Bypass is derived from self.use_qk_norm branch."), source_port="k_out", target_port="k_in", scope=scope, condition="not self.use_qk_norm", label="optional bypass", show_label=True, route="local_branch"),
         _edge_v08("rotary_q_to_attention", "rotary_embedding", "attention_core", "runtime", _evidence("direct", [rotary_call, attn_call]), source_port="q_out", target_port="q", scope=scope, route="local_branch"),
         _edge_v08("rotary_k_to_attention", "rotary_embedding", "attention_core", "runtime", _evidence("direct", [rotary_call, attn_call]), source_port="k_out", target_port="k", scope=scope, route="local_branch"),
         _edge_v08("v_stream_to_attention", "v_stream", "attention_core", "runtime", _evidence("direct", [attn_call]), source_port="v_out", target_port="v", scope=scope, route="local_branch"),
@@ -1204,29 +1363,32 @@ def _build_moe_detail_page_v08(data: dict[str, Any]) -> dict[str, Any]:
     expert_bias_assignment = _assignment_by_attribute(data, moe_class, "expert_bias")
     gate_call = _control_call_record(data, moe_class, "self.gate")
     experts_call = _control_call_record(data, moe_class, "self.experts")
+    restore_call = _call_record(data, moe_class, "forward", "final_hidden_states.view")
     forward = _forward_control_flow(data, moe_class)
     ep_hint = _parallel_hint(data, "get_ep_group")
     nodes = [
-        _node_v08("moe_input", "Hidden States", "input", _evidence("derived", [forward]), display_label="Hidden States", ports=[_port("hidden_out", "hidden states", "output", "tensor")]),
-        _node_v08("reshape_tokens", "Flatten Tokens", "note", _evidence("derived", [forward]), display_label="Flatten Tokens", ports=TENSOR_IO),
+        _node_v08("moe_input", "Hidden States", "input", _evidence("derived", [_method_control_record(data, moe_class, "forward")], note="MoE input is derived from HYV3MoEFused.forward parameters."), display_label="Hidden States", ports=[_port("hidden_out", "hidden states", "output", "tensor")]),
+        _node_v08("reshape_tokens", "Flatten Tokens", "note", _evidence("direct", [_call_record(data, moe_class, "forward", "hidden_states.view")]), display_label="Flatten Tokens", ports=TENSOR_IO),
         _node_v08("gate_linear", "GateLinear", "ffn", _evidence("direct", [gate_assignment, gate_call]), display_label="GateLinear", ports=[_port("hidden_in", "hidden states", "input", "tensor"), _port("router_logits", "router logits", "output", "tensor")]),
         _node_v08("router_logits", "Router Logits", "note", _evidence("direct", [gate_call]), display_label="Router Logits", display_subtitle="Top-K routing", ports=[_port("router_in", "router logits", "input", "tensor"), _port("router_out", "router logits", "output", "tensor")]),
-        _node_v08("fused_moe", "FusedMoE", "container", _evidence("direct", [experts_assignment, experts_call, ep_hint]), display_label="FusedMoE", display_subtitle="Expert parallel", badges=["EP"], ports=[_port("hidden_in", "hidden states", "input", "tensor"), _port("router_logits", "router logits", "input", "tensor"), _port("expert_bias", "expert bias", "input", "tensor"), _port("eplb_metadata", "EPLB metadata", "input", "control"), _port("moe_out", "moe output", "output", "tensor")]),
+        _node_v08("fused_moe", "FusedMoE", "container", _evidence("direct", [experts_assignment, experts_call, ep_hint]), display_label="FusedMoE", display_subtitle="Expert parallel", badges=["EP"], ports=[_port("hidden_in", "hidden states", "input", "tensor"), _port("router_logits", "router logits", "input", "tensor"), _port("expert_bias", "expert bias", "input", "weights"), _port("eplb_metadata", "EPLB metadata", "input", "control"), _port("moe_out", "moe output", "output", "tensor")]),
         _node_v08("routed_experts", "Routed Experts", "moe", _evidence("direct", [experts_assignment]), parent_id="fused_moe", display_label="Routed experts", ports=TENSOR_IO),
         _node_v08("shared_experts", "Optional Shared Experts", "ffn", _evidence("direct", [shared_assignment]), parent_id="fused_moe", display_label="Optional shared experts", ports=TENSOR_IO),
-        _node_v08("expert_bias", "Expert Bias", "note", _evidence("direct", [expert_bias_assignment]), display_label="Expert Bias", ports=[_port("bias_out", "expert bias", "output", "tensor")]),
-        _node_v08("eplb_metadata", "EPLB Metadata", "note", _evidence("derived", [ep_hint], note="EPLB and physical/local expert metadata are recorded from HYV3MoEFused initialization."), display_label="EPLB metadata", ports=[_port("metadata_out", "EPLB metadata", "output", "control")]),
+        _node_v08("expert_bias", "Expert Bias", "note", _evidence("direct", [expert_bias_assignment]), phase="construction", display_label="Expert Bias", ports=[_port("bias_out", "expert bias", "output", "weights")]),
+        _node_v08("eplb_metadata", "EPLB Metadata", "note", _evidence("derived", [ep_hint], note="EPLB and physical/local expert metadata are recorded from HYV3MoEFused initialization."), phase="parallel_partition", display_label="EPLB metadata", ports=[_port("metadata_out", "EPLB metadata", "output", "control")]),
+        _node_v08("restore_original_shape", "Restore Original Shape", "note", _evidence("direct", [restore_call]), display_label="Restore Original Shape", ports=TENSOR_IO),
         _node_v08("moe_output", "Output", "output", _evidence("derived", [experts_call, forward]), display_label="Output", ports=[_port("hidden_in", "hidden states", "input", "tensor")]),
     ]
     edges = [
-        _edge_v08("moe_input_to_reshape", "moe_input", "reshape_tokens", "runtime", _evidence("derived", [forward]), source_port="hidden_out", target_port="hidden_in", scope=scope, route="horizontal_lane"),
+        _edge_v08("moe_input_to_reshape", "moe_input", "reshape_tokens", "runtime", _evidence("direct", [_call_record(data, moe_class, "forward", "hidden_states.view")]), source_port="hidden_out", target_port="hidden_in", scope=scope, route="horizontal_lane"),
         _edge_v08("reshape_to_gate", "reshape_tokens", "gate_linear", "runtime", _evidence("direct", [gate_call]), source_port="hidden_out", target_port="hidden_in", scope=scope, route="horizontal_lane"),
         _edge_v08("gate_to_router_logits", "gate_linear", "router_logits", "runtime", _evidence("direct", [gate_call]), source_port="router_logits", target_port="router_in", scope=scope, route="horizontal_lane"),
         _edge_v08("router_logits_to_fused_moe", "router_logits", "fused_moe", "runtime", _evidence("direct", [experts_call]), source_port="router_out", target_port="router_logits", scope=scope, label="Top-K routing", show_label=False, route="horizontal_lane"),
         _edge_v08("reshape_to_fused_moe", "reshape_tokens", "fused_moe", "runtime", _evidence("direct", [experts_call]), source_port="hidden_out", target_port="hidden_in", scope=scope, route="horizontal_lane"),
-        _edge_v08("expert_bias_to_fused_moe", "expert_bias", "fused_moe", "runtime", _evidence("direct", [expert_bias_assignment, experts_assignment]), source_port="bias_out", target_port="expert_bias", label="bias", show_label=False, route="vertical_branch"),
+        _edge_v08("expert_bias_to_fused_moe", "expert_bias", "fused_moe", "dependency", _evidence("direct", [expert_bias_assignment, experts_assignment]), source_port="bias_out", target_port="expert_bias", phase="construction", label="bias", show_label=False, route="vertical_branch"),
         _edge_v08("eplb_metadata_to_fused_moe", "eplb_metadata", "fused_moe", "parallel_partition", _evidence("derived", [ep_hint]), source_port="metadata_out", target_port="eplb_metadata", phase="parallel_partition", label="EPLB", show_label=True, route="vertical_branch"),
-        _edge_v08("fused_moe_to_output", "fused_moe", "moe_output", "runtime", _evidence("direct", [experts_call]), source_port="moe_out", target_port="hidden_in", scope=scope, route="horizontal_lane"),
+        _edge_v08("fused_moe_to_restore_shape", "fused_moe", "restore_original_shape", "runtime", _evidence("direct", [experts_call, restore_call]), source_port="moe_out", target_port="hidden_in", scope=scope, route="horizontal_lane"),
+        _edge_v08("restore_shape_to_output", "restore_original_shape", "moe_output", "runtime", _evidence("direct", [restore_call]), source_port="hidden_out", target_port="hidden_in", scope=scope, route="horizontal_lane"),
     ]
     return {"id": "moe_detail", "title": "HYV3MoEFused Detail", "page_type": "moe_detail", "nodes": nodes, "edges": edges}
 
@@ -1237,32 +1399,48 @@ def _build_adapter_integration_page_v08(data: dict[str, Any], core: dict[str, An
     top_class = _class_record(data, top)
     model_class = _class_record(data, model)
     model_decorator = next((item for item in (model_class or {}).get("decorators", []) if isinstance(item, dict) and item.get("name") == "support_torch_compile"), None)
+    hf_config_access = _config_access(data, model, "config", "model_config.hf_config") or _config_access(data, top, "config", "model_config.hf_config")
+    cache_access = _config_access(data, model, "cache_config", "cache_config")
+    quant_access = _config_access(data, model, "quant_config", "quant_config") or _config_access(data, top, "quant_config", "quant_config")
+    parallel_access = _config_access(data, model, "parallel_config", "parallel_config") or _config_access(data, top, "parallel_config", "parallel_config")
     nodes = [
-        _node_v08("external_hf_config", "HYV3Config", "note", _evidence("direct", [_class_record(data, "HYV3Config")]), display_label="HYV3Config", ports=[_port("config_out", "HF config", "output", "config")]),
-        _node_v08("vllm_config", "VllmConfig", "note", _evidence("direct", [_import_record(data, "VllmConfig")]), display_label="VllmConfig", ports=[_port("config_in", "config", "input", "config"), _port("config_out", "config", "output", "config")]),
-        _node_v08("cache_config", "CacheConfig", "note", _evidence("direct", [_import_record(data, "CacheConfig")]), display_label="CacheConfig", ports=[_port("config_in", "config", "input", "config")]),
-        _node_v08("quantization_config", "QuantizationConfig", "note", _evidence("direct", [_import_record(data, "QuantizationConfig")]), display_label="QuantizationConfig", ports=[_port("config_in", "config", "input", "config")]),
-        _node_v08("parallel_config_eplb", "ParallelConfig / EPLBConfig", "note", _evidence("derived", [_parallel_hint(data, "get_pp_group"), _parallel_hint(data, "get_ep_group")]), display_label="ParallelConfig / EPLBConfig", ports=[_port("config_in", "config", "input", "config")]),
+        _node_v08("vllm_config", "VllmConfig", "note", _evidence("direct", [hf_config_access, cache_access, quant_access, parallel_access]), display_label="VllmConfig", ports=[_port("config_out", "config", "output", "config")]),
+        _node_v08("external_hf_config", "HYV3Config", "note", _evidence("direct", [hf_config_access, _class_record(data, "HYV3Config")]), display_label="HYV3Config", ports=[_port("config_in", "HF config", "input", "config"), _port("config_out", "HF config", "output", "config")]),
+        _node_v08("cache_config", "CacheConfig", "note", _evidence("direct", [cache_access]), display_label="CacheConfig", ports=[_port("config_in", "config", "input", "config")]),
+        _node_v08("quantization_config", "QuantizationConfig", "note", _evidence("direct", [quant_access]), display_label="QuantizationConfig", ports=[_port("config_in", "config", "input", "config")]),
+        _node_v08("parallel_config_eplb", "ParallelConfig / EPLBConfig", "note", _evidence("direct", [parallel_access, _config_access(data, model, "eplb_config", "eplb_config")]), display_label="ParallelConfig / EPLBConfig", ports=[_port("config_in", "config", "input", "config")]),
         _node_v08("adapter_for_causal_lm", str(top), "container", _evidence("direct", [top_class]), display_label=str(top), badges=["PP"], ports=[_port("capability_out", "interfaces", "output", "capability"), _port("component_out", "components", "output", "control")]),
-        _node_v08("adapter_model", str(model), "container", _evidence("direct", [model_class]), display_label=str(model), ports=[_port("capability_out", "interfaces", "output", "capability"), _port("component_out", "components", "output", "control")]),
+        _node_v08("adapter_model", str(model), "container", _evidence("direct", [model_class, core.get("model_assignment")]), display_label=str(model), ports=[_port("control_in", "contains", "input", "control"), _port("capability_out", "interfaces", "output", "capability"), _port("component_out", "components", "output", "control")]),
         _node_v08("supports_pp", "SupportsPP", "note", _evidence("direct", [_import_record(data, "SupportsPP"), top_class]), display_label="SupportsPP", ports=CAP_IN),
         _node_v08("supports_lora", "SupportsLoRA", "note", _evidence("direct", [_import_record(data, "SupportsLoRA"), top_class]), display_label="SupportsLoRA", ports=CAP_IN),
         _node_v08("mixture_of_experts", "MixtureOfExperts", "note", _evidence("direct", [_import_record(data, "MixtureOfExperts"), model_class]), display_label="MixtureOfExperts", ports=CAP_IN),
-        _node_v08("support_torch_compile", "support_torch_compile", "note", _evidence("direct", [_import_record(data, "support_torch_compile"), model_decorator]), display_label="support_torch_compile", ports=CAP_IN),
-        _node_v08("exec_input_group", "Input Components", "container", _evidence("direct", [_assignment_by_attribute(data, model, "embed_tokens")]), display_label="Input", ports=[_port("control_in", "component", "input", "control")]),
-        _node_v08("exec_attention_group", "Attention Components", "container", _evidence("direct", [_assignment_by_attribute(data, "HYV3Attention", "qkv_proj"), _assignment_by_attribute(data, "HYV3Attention", "attn")]), display_label="Attention", ports=[_port("control_in", "component", "input", "control")]),
-        _node_v08("exec_ffn_moe_group", "FFN/MoE Components", "container", _evidence("direct", [_assignment_by_attribute(data, "HYV3FeedForward", "gate_up_proj"), _assignment_by_attribute(data, "HYV3MoEFused", "experts")]), display_label="FFN / MoE", ports=[_port("control_in", "component", "input", "control")]),
-        _node_v08("exec_output_group", "Output Components", "container", _evidence("direct", [_assignment_by_attribute(data, top, "lm_head"), _assignment_by_attribute(data, top, "logits_processor")]), display_label="Output", ports=[_port("control_in", "component", "input", "control")]),
+        _node_v08("support_torch_compile", "support_torch_compile", "note", _evidence("direct", [model_class], note="HYV3Model class declaration carries the support_torch_compile decorator."), display_label="support_torch_compile", ports=CAP_IN),
+        _node_v08("exec_input_group", "Input Components", "container", _evidence("direct", [_assignment_by_attribute(data, model, "embed_tokens")]), display_label="Input", ports=[_port("control_in", "component", "input", "control"), _port("control_out", "component", "output", "control")]),
+        _node_v08("exec_attention_group", "Attention Components", "container", _evidence("direct", [_assignment_by_attribute(data, "HYV3Attention", "qkv_proj"), _assignment_by_attribute(data, "HYV3Attention", "attn")]), display_label="Attention", ports=[_port("control_in", "component", "input", "control"), _port("control_out", "component", "output", "control")]),
+        _node_v08("exec_ffn_moe_group", "FFN/MoE Components", "container", _evidence("direct", [_assignment_by_attribute(data, "HYV3FeedForward", "gate_up_proj"), _assignment_by_attribute(data, "HYV3MoEFused", "experts")]), display_label="FFN / MoE", ports=[_port("control_in", "component", "input", "control"), _port("control_out", "component", "output", "control")]),
+        _node_v08("exec_output_group", "Output Components", "container", _evidence("direct", [_assignment_by_attribute(data, top, "lm_head"), _assignment_by_attribute(data, top, "logits_processor")]), display_label="Output", ports=[_port("control_in", "component", "input", "control"), _port("control_out", "component", "output", "control")]),
+        _node_v08("component_vocab_embedding", "VocabParallelEmbedding", "embedding", _evidence("direct", [_assignment_by_attribute(data, model, "embed_tokens")]), parent_id="exec_input_group", display_label="VocabParallelEmbedding", ports=[_port("control_in", "component", "input", "control")]),
+        _node_v08("component_qkv_linear", "QKVParallelLinear", "attention", _evidence("direct", [_assignment_by_attribute(data, "HYV3Attention", "qkv_proj")]), parent_id="exec_attention_group", display_label="QKVParallelLinear", ports=[_port("control_in", "component", "input", "control")]),
+        _node_v08("component_hpc_rope_norm", "HpcRopeNorm", "normalization", _evidence("direct", [_assignment_by_attribute(data, "HYV3Attention", "hpc_rope_norm")]), parent_id="exec_attention_group", display_label="HpcRopeNorm", ports=[_port("control_in", "component", "input", "control")]),
+        _node_v08("component_attention", "Attention", "attention", _evidence("direct", [_assignment_by_attribute(data, "HYV3Attention", "attn")]), parent_id="exec_attention_group", display_label="vLLM Attention", ports=[_port("control_in", "component", "input", "control")]),
+        _node_v08("component_row_parallel", "RowParallelLinear", "head", _evidence("direct", [_assignment_by_attribute(data, "HYV3Attention", "o_proj")]), parent_id="exec_attention_group", display_label="RowParallelLinear", ports=[_port("control_in", "component", "input", "control")]),
+        _node_v08("component_merged_linear", "MergedColumnParallelLinear", "ffn", _evidence("direct", [_assignment_by_attribute(data, "HYV3FeedForward", "gate_up_proj")]), parent_id="exec_ffn_moe_group", display_label="MergedColumnParallelLinear", ports=[_port("control_in", "component", "input", "control")]),
+        _node_v08("component_silu_and_mul", "SiluAndMul", "ffn", _evidence("direct", [_assignment_by_attribute(data, "HYV3FeedForward", "act_fn")]), parent_id="exec_ffn_moe_group", display_label="SiluAndMul", ports=[_port("control_in", "component", "input", "control")]),
+        _node_v08("component_gate_linear", "GateLinear", "ffn", _evidence("direct", [_assignment_by_attribute(data, "HYV3MoEFused", "gate")]), parent_id="exec_ffn_moe_group", display_label="GateLinear", ports=[_port("control_in", "component", "input", "control")]),
+        _node_v08("component_fused_moe", "FusedMoE", "moe", _evidence("direct", [_assignment_by_attribute(data, "HYV3MoEFused", "experts")]), parent_id="exec_ffn_moe_group", display_label="FusedMoE", ports=[_port("control_in", "component", "input", "control")]),
+        _node_v08("component_lm_head", "ParallelLMHead", "head", _evidence("direct", [_assignment_by_attribute(data, top, "lm_head")]), parent_id="exec_output_group", display_label="ParallelLMHead", ports=[_port("control_in", "component", "input", "control")]),
+        _node_v08("component_logits_processor", "LogitsProcessor", "logits_processor", _evidence("direct", [_assignment_by_attribute(data, top, "logits_processor")]), parent_id="exec_output_group", display_label="LogitsProcessor", ports=[_port("control_in", "component", "input", "control")]),
     ]
     edges = [
-        _edge_v08("hf_config_to_vllm_config", "external_hf_config", "vllm_config", "dependency", _evidence("derived", [_class_record(data, "HYV3Config"), _import_record(data, "VllmConfig")]), source_port="config_out", target_port="config_in", label="hf_config", show_label=True, route="local_branch"),
-        _edge_v08("vllm_to_cache_config", "vllm_config", "cache_config", "dependency", _evidence("direct", [_import_record(data, "CacheConfig")]), source_port="config_out", target_port="config_in", route="local_branch"),
-        _edge_v08("vllm_to_quant_config", "vllm_config", "quantization_config", "dependency", _evidence("direct", [_import_record(data, "QuantizationConfig")]), source_port="config_out", target_port="config_in", route="local_branch"),
-        _edge_v08("vllm_to_parallel_config", "vllm_config", "parallel_config_eplb", "dependency", _evidence("derived", [_parallel_hint(data, "get_pp_group"), _parallel_hint(data, "get_ep_group")]), source_port="config_out", target_port="config_in", route="local_branch"),
+        _edge_v08("vllm_config_to_hf_config", "vllm_config", "external_hf_config", "dependency", _evidence("direct", [hf_config_access]), source_port="config_out", target_port="config_in", label="hf_config", show_label=True, route="local_branch"),
+        _edge_v08("vllm_to_cache_config", "vllm_config", "cache_config", "dependency", _evidence("direct", [cache_access]), source_port="config_out", target_port="config_in", route="local_branch"),
+        _edge_v08("vllm_to_quant_config", "vllm_config", "quantization_config", "dependency", _evidence("direct", [quant_access]), source_port="config_out", target_port="config_in", route="local_branch"),
+        _edge_v08("vllm_to_parallel_config", "vllm_config", "parallel_config_eplb", "dependency", _evidence("direct", [parallel_access]), source_port="config_out", target_port="config_in", route="local_branch"),
+        _edge_v08("causal_lm_contains_model", "adapter_for_causal_lm", "adapter_model", "containment", _evidence("direct", [core.get("model_assignment")]), source_port="component_out", target_port="control_in", route="local_branch"),
         _edge_v08("causal_lm_to_supports_pp", "adapter_for_causal_lm", "supports_pp", "adaptation", _evidence("direct", [top_class]), source_port="capability_out", target_port="capability_in", route="local_branch"),
         _edge_v08("causal_lm_to_supports_lora", "adapter_for_causal_lm", "supports_lora", "adaptation", _evidence("direct", [top_class]), source_port="capability_out", target_port="capability_in", route="local_branch"),
         _edge_v08("model_to_moe_interface", "adapter_model", "mixture_of_experts", "adaptation", _evidence("direct", [model_class]), source_port="capability_out", target_port="capability_in", route="local_branch"),
-        _edge_v08("model_to_compile_decorator", "adapter_model", "support_torch_compile", "adaptation", _evidence("direct", [model_decorator]), source_port="capability_out", target_port="capability_in", route="local_branch"),
+        _edge_v08("model_to_compile_decorator", "adapter_model", "support_torch_compile", "adaptation", _evidence("direct", [model_class], note="HYV3Model class declaration carries the support_torch_compile decorator."), source_port="capability_out", target_port="capability_in", route="local_branch"),
         _edge_v08("model_to_input_components", "adapter_model", "exec_input_group", "adaptation", _evidence("direct", [_assignment_by_attribute(data, model, "embed_tokens")]), source_port="component_out", target_port="control_in", route="local_branch"),
         _edge_v08("model_to_attention_components", "adapter_model", "exec_attention_group", "adaptation", _evidence("direct", [_assignment_by_attribute(data, "HYV3Attention", "qkv_proj")]), source_port="component_out", target_port="control_in", route="local_branch"),
         _edge_v08("model_to_ffn_moe_components", "adapter_model", "exec_ffn_moe_group", "adaptation", _evidence("direct", [_assignment_by_attribute(data, "HYV3MoEFused", "experts")]), source_port="component_out", target_port="control_in", route="local_branch"),
@@ -1314,8 +1492,115 @@ def _build_parallelism_weight_loading_page_v08(data: dict[str, Any], core: dict[
     return {"id": "parallelism_weight_loading", "title": "Parallelism & Weight Loading", "page_type": "parallelism_weight_loading", "nodes": nodes, "edges": edges}
 
 
+def _build_parallelism_page_v081(data: dict[str, Any], core: dict[str, Any]) -> dict[str, Any]:
+    tp = _parallel_fact(data, "tensor_parallel")
+    pp = _parallel_fact(data, "pipeline_parallel")
+    ep = _parallel_fact(data, "expert_parallel")
+    make_layers = _parallel_fact(data, "pipeline_parallel", "make_layers")
+    pp_missing = _parallel_fact(data, "pipeline_parallel", "PPMissingLayer")
+    ep_group = _parallel_fact(data, "expert_parallel", "get_ep_group")
+    eplb_update = _call_record(data, "HYV3Model", "update_physical_experts_metadata", "moe.experts.update_expert_map")
+    nodes = [
+        _node_v08("tp_lane", "Tensor Parallel", "container", _evidence("direct", [tp]), display_label="Tensor Parallel", ports=CAP_OUT),
+        _node_v08("tp_world_size", "TP world size", "note", _evidence("direct", [_assignment_record(data, "HYV3Attention", "__init__", contains="get_tensor_model_parallel_world_size")]), parent_id="tp_lane", display_label="TP world size", ports=CAP_IN + CAP_OUT),
+        _node_v08("tp_head_partition", "Head partition", "note", _evidence("direct", [_assignment_record(data, "HYV3Attention", "__init__", contains="num_heads")]), parent_id="tp_lane", display_label="Head partition", ports=CAP_IN + CAP_OUT),
+        _node_v08("tp_kv_partition", "KV head partition", "note", _evidence("direct", [_branch_record(data, "HYV3Attention", "__init__", "total_num_kv_heads")]), parent_id="tp_lane", display_label="KV head partition", ports=CAP_IN + CAP_OUT),
+        _node_v08("tp_embedding_linear_components", "Vocab / QKV / Row / LM Head", "note", _evidence("direct", [_parallel_fact(data, "tensor_parallel", "VocabParallelEmbedding"), _parallel_fact(data, "tensor_parallel", "QKVParallelLinear"), _parallel_fact(data, "tensor_parallel", "MergedColumnParallelLinear"), _parallel_fact(data, "tensor_parallel", "RowParallelLinear"), _parallel_fact(data, "tensor_parallel", "ParallelLMHead")]), parent_id="tp_lane", display_label="Parallel layers", ports=CAP_IN),
+        _node_v08("pp_lane", "Pipeline Parallel", "container", _evidence("direct", [pp]), display_label="Pipeline Parallel", ports=CAP_OUT),
+        _node_v08("pp_make_layers", "make_layers", "note", _evidence("direct", [make_layers, core.get("layer_factory")]), parent_id="pp_lane", display_label="make_layers", ports=CAP_IN + CAP_OUT),
+        _node_v08("pp_layer_range", "start_layer / end_layer", "note", _evidence("direct", [core.get("layer_factory")]), parent_id="pp_lane", display_label="start/end layer", ports=CAP_IN + CAP_OUT),
+        _node_v08("pp_missing_layer", "PPMissingLayer", "note", _evidence("direct", [pp_missing]), parent_id="pp_lane", display_label="PPMissingLayer", ports=CAP_IN + CAP_OUT),
+        _node_v08("pp_rank_flows", "first / non-first / non-last / last rank", "note", _evidence("direct", [_branch_record(data, core.get("model_class"), "forward", "is_first_rank"), _branch_record(data, core.get("model_class"), "forward", "is_last_rank")]), parent_id="pp_lane", display_label="PP rank flow", ports=CAP_IN + CAP_OUT),
+        _node_v08("pp_missing_filter", "PP missing parameter filtering", "note", _evidence("direct", [_weight_stage(data, "HYV3Model.load_weights", "is_pp_missing_parameter")]), parent_id="pp_lane", display_label="PP missing filter", ports=CAP_IN),
+        _node_v08("ep_lane", "Expert Parallel", "container", _evidence("direct", [ep, ep_group]), display_label="Expert Parallel", ports=CAP_OUT),
+        _node_v08("ep_group", "get_ep_group", "note", _evidence("direct", [ep_group]), parent_id="ep_lane", display_label="get_ep_group", ports=CAP_IN + CAP_OUT),
+        _node_v08("ep_rank_size", "ep_rank / ep_size", "note", _evidence("direct", [_assignment_record(data, "HYV3MoEFused", "__init__", contains="ep_rank"), _assignment_record(data, "HYV3MoEFused", "__init__", contains="ep_size")]), parent_id="ep_lane", display_label="ep_rank / ep_size", ports=CAP_IN + CAP_OUT),
+        _node_v08("ep_physical_local_experts", "physical/local experts", "note", _evidence("direct", [_assignment_record(data, "HYV3MoEFused", "__init__", contains="physical_expert"), _assignment_record(data, "HYV3MoEFused", "__init__", contains="local_num_experts")]), parent_id="ep_lane", display_label="physical/local experts", ports=CAP_IN + CAP_OUT),
+        _node_v08("ep_fused_moe", "FusedMoE", "moe", _evidence("direct", [_parallel_fact(data, "expert_parallel", "FusedMoE"), _assignment_by_attribute(data, "HYV3MoEFused", "experts")]), parent_id="ep_lane", display_label="FusedMoE", badges=["EP"], ports=CAP_IN + CAP_OUT),
+        _node_v08("ep_eplb_update", "EPLB metadata update", "note", _evidence("direct", [eplb_update]), parent_id="ep_lane", display_label="EPLB metadata update", ports=CAP_IN),
+    ]
+    edges = [
+        _edge_v08("tp_world_to_heads", "tp_world_size", "tp_head_partition", "parallel_partition", _evidence("direct", [tp]), source_port="capability_out", target_port="capability_in", phase="parallel_partition", route="horizontal_lane"),
+        _edge_v08("tp_heads_to_kv", "tp_head_partition", "tp_kv_partition", "parallel_partition", _evidence("direct", [tp]), source_port="capability_out", target_port="capability_in", phase="parallel_partition", route="horizontal_lane"),
+        _edge_v08("tp_kv_to_layers", "tp_kv_partition", "tp_embedding_linear_components", "parallel_partition", _evidence("direct", [tp]), source_port="capability_out", target_port="capability_in", phase="parallel_partition", route="horizontal_lane"),
+        _edge_v08("pp_make_layers_to_range", "pp_make_layers", "pp_layer_range", "parallel_partition", _evidence("direct", [make_layers]), source_port="capability_out", target_port="capability_in", phase="parallel_partition", route="horizontal_lane"),
+        _edge_v08("pp_range_to_missing_layer", "pp_layer_range", "pp_missing_layer", "parallel_partition", _evidence("direct", [pp_missing, core.get("layer_factory")]), source_port="capability_out", target_port="capability_in", phase="parallel_partition", route="horizontal_lane"),
+        _edge_v08("pp_missing_to_rank_flows", "pp_missing_layer", "pp_rank_flows", "parallel_partition", _evidence("direct", [pp]), source_port="capability_out", target_port="capability_in", phase="parallel_partition", route="horizontal_lane"),
+        _edge_v08("pp_rank_to_filter", "pp_rank_flows", "pp_missing_filter", "parallel_partition", _evidence("direct", [_weight_stage(data, "HYV3Model.load_weights", "is_pp_missing_parameter")]), source_port="capability_out", target_port="capability_in", phase="parallel_partition", route="horizontal_lane"),
+        _edge_v08("ep_group_to_rank_size", "ep_group", "ep_rank_size", "parallel_partition", _evidence("direct", [ep_group]), source_port="capability_out", target_port="capability_in", phase="parallel_partition", route="horizontal_lane"),
+        _edge_v08("ep_rank_to_physical", "ep_rank_size", "ep_physical_local_experts", "parallel_partition", _evidence("direct", [ep]), source_port="capability_out", target_port="capability_in", phase="parallel_partition", route="horizontal_lane"),
+        _edge_v08("ep_physical_to_fused_moe", "ep_physical_local_experts", "ep_fused_moe", "parallel_partition", _evidence("direct", [_parallel_fact(data, "expert_parallel", "FusedMoE")]), source_port="capability_out", target_port="capability_in", phase="parallel_partition", route="horizontal_lane"),
+        _edge_v08("ep_fused_moe_to_eplb_update", "ep_fused_moe", "ep_eplb_update", "parallel_partition", _evidence("direct", [eplb_update]), source_port="capability_out", target_port="capability_in", phase="parallel_partition", route="horizontal_lane"),
+    ]
+    return {"id": "parallelism", "title": "Parallelism", "page_type": "parallelism", "nodes": nodes, "edges": edges}
+
+
+def _build_weight_loading_page_v081(data: dict[str, Any], core: dict[str, Any]) -> dict[str, Any]:
+    top = core["top_level_class"]
+    packed_attr = _class_attribute(data, top, "packed_modules_mapping")
+    stacked_mapping = _weight_mapping_kind(data, "stacked_parameter")
+    packed_mapping = _weight_mapping_kind(data, "packed_module")
+    expert_hint = next((item for item in data.get("weight_loading_hints", []) if isinstance(item, dict) and "expert" in str(item.get("value"))), None)
+    wrapper_entry = "HYV3ForCausalLM.load_weights"
+    model_entry = "HYV3Model.load_weights"
+    wrapper_method = _method_control_record(data, "HYV3ForCausalLM", "load_weights")
+    filter_method = _method_control_record(data, "HYV3ForCausalLM", "_filter_weights")
+    spec_filter = _branch_record(data, "HYV3ForCausalLM", "_filter_weights", "spec_layer is not None")
+    top_tied_filter = _weight_stage(data, wrapper_entry, "tie_word_embeddings") or _weight_stage(data, wrapper_entry, "AutoWeightsLoader")
+    model_method = _method_control_record(data, "HYV3Model", "load_weights")
+    router_gate_branch = _branch_record(data, "HYV3Model", "load_weights", "router.gate")
+    router_gate_assignment = _assignment_record(data, "HYV3Model", "load_weights", target="name", contains="router.")
+    nodes = [
+        _node_v08("wrapper_weights", "Wrapper Weights", "input", _evidence("derived", [wrapper_method], note="Input weights are parameters of HYV3ForCausalLM.load_weights."), display_label="Weights", ports=[_port("weights_out", "weights", "output", "weights")], phase="checkpoint_loading"),
+        _node_v08("wrapper_filter_weights", "_filter_weights", "note", _evidence("direct", [filter_method]), display_label="_filter_weights", ports=[_port("weights_in", "weights", "input", "weights"), _port("weights_out", "weights", "output", "weights")], phase="checkpoint_loading"),
+        _node_v08("wrapper_speculative_filter", "speculative layer filtering", "note", _evidence("direct", [spec_filter]), display_label="Speculative filter", ports=[_port("weights_in", "weights", "input", "weights"), _port("weights_out", "weights", "output", "weights")], phase="checkpoint_loading"),
+        _node_v08("wrapper_tied_lm_head_filter", "tied lm_head filtering", "note", _evidence("direct", [top_tied_filter]), display_label="tied lm_head filter", ports=[_port("weights_in", "weights", "input", "weights"), _port("weights_out", "weights", "output", "weights")], phase="checkpoint_loading"),
+        _node_v08("wrapper_auto_weights_loader", "AutoWeightsLoader", "note", _evidence("direct", [_weight_stage(data, wrapper_entry, "AutoWeightsLoader")]), display_label="AutoWeightsLoader", ports=[_port("weights_in", "weights", "input", "weights"), _port("weights_out", "weights", "output", "weights")], phase="checkpoint_loading"),
+        _node_v08("wrapper_loaded_set", "Loaded set", "output", _evidence("direct", [_weight_stage(data, wrapper_entry, stage_kind="return")]), display_label="loaded set", ports=[_port("weights_in", "weights", "input", "weights")], phase="checkpoint_loading"),
+        _node_v08("model_loaded_weight", "Model loaded weight", "input", _evidence("derived", [model_method], note="Loaded weight tuples are yielded by HYV3Model.load_weights input iteration."), display_label="Loaded weight", ports=[_port("weights_out", "weights", "output", "weights")], phase="checkpoint_loading"),
+        _node_v08("model_fp8_scale_remap", "FP8 scale remap", "note", _evidence("direct", [_weight_stage(data, model_entry, "maybe_remap_kv_scale_name")]), display_label="FP8 scale remap", ports=[_port("weights_in", "weights", "input", "weights"), _port("weights_out", "weights", "output", "weights")], phase="checkpoint_loading"),
+        _node_v08("mapping_dispatch", "Mapping dispatch", "container", _evidence("derived", [packed_attr, stacked_mapping, packed_mapping, expert_hint]), display_label="Mapping dispatch", ports=[_port("weights_in", "weights", "input", "weights"), _port("weights_out", "weights", "output", "weights")], phase="checkpoint_loading"),
+        _node_v08("packed_modules_mapping", "packed_modules_mapping", "note", _evidence("direct", [packed_attr, packed_mapping]), parent_id="mapping_dispatch", display_label="packed modules", ports=[_port("weights_in", "weights", "input", "weights"), _port("weights_out", "weights", "output", "weights")], phase="checkpoint_loading"),
+        _node_v08("stacked_params_mapping", "stacked_params_mapping", "note", _evidence("direct", [stacked_mapping]), parent_id="mapping_dispatch", display_label="stacked params", ports=[_port("weights_in", "weights", "input", "weights"), _port("weights_out", "weights", "output", "weights")], phase="checkpoint_loading"),
+        _node_v08("qkv_stacked_target", "q/k/v -> qkv_proj", "note", _evidence("direct", [stacked_mapping]), parent_id="mapping_dispatch", display_label="q/k/v -> qkv_proj", ports=[_port("weights_in", "weights", "input", "weights"), _port("weights_out", "weights", "output", "weights")], phase="checkpoint_loading"),
+        _node_v08("gate_up_stacked_target", "gate/up -> gate_up_proj", "note", _evidence("direct", [stacked_mapping]), parent_id="mapping_dispatch", display_label="gate/up -> gate_up_proj", ports=[_port("weights_in", "weights", "input", "weights"), _port("weights_out", "weights", "output", "weights")], phase="checkpoint_loading"),
+        _node_v08("expert_params_mapping", "expert params mapping", "note", _evidence("direct", [expert_hint]), parent_id="mapping_dispatch", display_label="expert params mapping", ports=[_port("weights_in", "weights", "input", "weights"), _port("weights_out", "weights", "output", "weights")], phase="checkpoint_loading"),
+        _node_v08("expert_id_shard_id", "expert_id + shard_id", "note", _evidence("direct", [expert_hint]), parent_id="mapping_dispatch", display_label="expert_id + shard_id", ports=[_port("weights_in", "weights", "input", "weights"), _port("weights_out", "weights", "output", "weights")], phase="checkpoint_loading"),
+        _node_v08("regular_parameter", "regular parameter", "note", _evidence("derived", [_weight_stage(data, model_entry, "weight_loader")]), parent_id="mapping_dispatch", display_label="regular parameter", ports=[_port("weights_in", "weights", "input", "weights"), _port("weights_out", "weights", "output", "weights")], phase="checkpoint_loading"),
+        _node_v08("bias_skip", "bias skip", "note", _evidence("direct", [_weight_stage(data, model_entry, "name.endswith")]), display_label="bias skip", ports=[_port("weights_in", "weights", "input", "weights")], phase="checkpoint_loading"),
+        _node_v08("pp_missing_parameter_filter", "PP missing parameter filtering", "note", _evidence("direct", [_weight_stage(data, model_entry, "is_pp_missing_parameter")]), display_label="PP missing filter", ports=[_port("weights_in", "weights", "input", "weights"), _port("weights_out", "weights", "output", "weights")], phase="checkpoint_loading"),
+        _node_v08("router_gate_rename", "router.gate rename", "note", _evidence("direct", [router_gate_branch, router_gate_assignment]), display_label="router.gate rename", ports=[_port("weights_in", "weights", "input", "weights"), _port("weights_out", "weights", "output", "weights")], phase="checkpoint_loading"),
+        _node_v08("param_weight_loader", "param.weight_loader", "note", _evidence("direct", [_weight_stage(data, model_entry, "weight_loader")]), display_label="param.weight_loader", ports=[_port("weights_in", "weights", "input", "weights"), _port("weights_out", "weights", "output", "weights")], phase="checkpoint_loading"),
+        _node_v08("default_weight_loader_fallback", "default_weight_loader fallback", "note", _evidence("direct", [_weight_stage(data, model_entry, "default_weight_loader")]), display_label="default loader fallback", ports=[_port("weights_in", "weights", "input", "weights"), _port("weights_out", "weights", "output", "weights")], phase="checkpoint_loading"),
+        _node_v08("model_loaded_params", "loaded_params.add / return", "output", _evidence("direct", [_weight_stage(data, model_entry, "loaded_params.add"), _weight_stage(data, model_entry, stage_kind="return")]), display_label="loaded_params", ports=[_port("weights_in", "weights", "input", "weights")], phase="checkpoint_loading"),
+    ]
+    edges = [
+        _edge_v08("wrapper_weights_to_filter", "wrapper_weights", "wrapper_filter_weights", "weight_mapping", _evidence("derived", [wrapper_method, filter_method], note="Wrapper passes weights into the nested _filter_weights generator."), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", route="weight_mapping"),
+        _edge_v08("wrapper_filter_to_speculative", "wrapper_filter_weights", "wrapper_speculative_filter", "weight_mapping", _evidence("direct", [spec_filter]), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", route="weight_mapping"),
+        _edge_v08("wrapper_speculative_to_tied", "wrapper_speculative_filter", "wrapper_tied_lm_head_filter", "weight_mapping", _evidence("direct", [top_tied_filter]), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", route="weight_mapping"),
+        _edge_v08("wrapper_tied_to_auto_loader", "wrapper_tied_lm_head_filter", "wrapper_auto_weights_loader", "weight_mapping", _evidence("direct", [_weight_stage(data, wrapper_entry, "AutoWeightsLoader")]), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", route="weight_mapping"),
+        _edge_v08("wrapper_loader_to_loaded_set", "wrapper_auto_weights_loader", "wrapper_loaded_set", "weight_mapping", _evidence("direct", [_weight_stage(data, wrapper_entry, stage_kind="loader")]), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", route="weight_mapping"),
+        _edge_v08("model_weight_to_fp8_remap", "model_loaded_weight", "model_fp8_scale_remap", "weight_mapping", _evidence("direct", [_weight_stage(data, model_entry, "maybe_remap_kv_scale_name")]), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", route="weight_mapping"),
+        _edge_v08("fp8_remap_to_mapping_dispatch", "model_fp8_scale_remap", "mapping_dispatch", "weight_mapping", _evidence("direct", [_weight_stage(data, model_entry, "maybe_remap_kv_scale_name")]), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", route="weight_mapping"),
+        _edge_v08("dispatch_to_qkv_stacked", "mapping_dispatch", "qkv_stacked_target", "weight_mapping", _evidence("direct", [stacked_mapping]), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", label="q/k/v", show_label=True, route="weight_mapping"),
+        _edge_v08("dispatch_to_gate_up_stacked", "mapping_dispatch", "gate_up_stacked_target", "weight_mapping", _evidence("direct", [stacked_mapping]), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", label="gate/up", show_label=True, route="weight_mapping"),
+        _edge_v08("dispatch_to_expert_mapping", "mapping_dispatch", "expert_params_mapping", "weight_mapping", _evidence("direct", [expert_hint]), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", label="expert", show_label=True, route="weight_mapping"),
+        _edge_v08("expert_mapping_to_shard", "expert_params_mapping", "expert_id_shard_id", "weight_mapping", _evidence("direct", [expert_hint]), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", route="weight_mapping"),
+        _edge_v08("dispatch_to_regular_parameter", "mapping_dispatch", "regular_parameter", "weight_mapping", _evidence("derived", [_weight_stage(data, model_entry, "weight_loader")]), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", route="weight_mapping"),
+        _edge_v08("mapping_dispatch_to_bias_skip", "mapping_dispatch", "bias_skip", "weight_mapping", _evidence("direct", [_weight_stage(data, model_entry, "name.endswith")]), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", route="weight_mapping"),
+        _edge_v08("mapping_dispatch_to_pp_filter_stacked", "qkv_stacked_target", "pp_missing_parameter_filter", "weight_mapping", _evidence("direct", [_weight_stage(data, model_entry, "is_pp_missing_parameter")]), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", route="weight_mapping"),
+        _edge_v08("mapping_dispatch_to_pp_filter_expert", "expert_id_shard_id", "pp_missing_parameter_filter", "weight_mapping", _evidence("direct", [_weight_stage(data, model_entry, "is_pp_missing_parameter")]), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", route="weight_mapping"),
+        _edge_v08("mapping_dispatch_to_pp_filter_regular", "regular_parameter", "pp_missing_parameter_filter", "weight_mapping", _evidence("direct", [_weight_stage(data, model_entry, "is_pp_missing_parameter")]), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", route="weight_mapping"),
+        _edge_v08("pp_filter_to_router_rename", "pp_missing_parameter_filter", "router_gate_rename", "weight_mapping", _evidence("direct", [router_gate_branch, router_gate_assignment]), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", route="weight_mapping"),
+        _edge_v08("router_rename_to_param_loader", "router_gate_rename", "param_weight_loader", "weight_mapping", _evidence("direct", [_weight_stage(data, model_entry, "weight_loader")]), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", route="weight_mapping"),
+        _edge_v08("param_loader_to_default_loader", "param_weight_loader", "default_weight_loader_fallback", "weight_mapping", _evidence("direct", [_weight_stage(data, model_entry, "default_weight_loader")]), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", route="weight_mapping"),
+        _edge_v08("default_loader_to_loaded_params", "default_weight_loader_fallback", "model_loaded_params", "weight_mapping", _evidence("direct", [_weight_stage(data, model_entry, "loaded_params.add")]), source_port="weights_out", target_port="weights_in", phase="checkpoint_loading", route="weight_mapping"),
+    ]
+    return {"id": "weight_loading", "title": "Weight Loading", "page_type": "weight_loading", "nodes": nodes, "edges": edges}
+
+
 def build_architecture_ir(data: dict[str, Any]) -> dict[str, Any]:
-    """Build a six-page Architecture IR 0.5 with semantic ports."""
+    """Build a seven-page Architecture IR 0.6 with source-grounded evidence."""
     if data.get("schema_version") != SOURCE_ANALYSIS_VERSION:
         raise ValueError(f"source-analysis schema_version must be {SOURCE_ANALYSIS_VERSION!r}")
     unresolved: list[dict[str, Any]] = []
@@ -1335,13 +1620,17 @@ def build_architecture_ir(data: dict[str, Any]) -> dict[str, Any]:
         "schema_version": ARCHITECTURE_IR_VERSION,
         "model_name": _model_name(data, core.get("top_level_class")),
         "detail_level": "full",
+        "source_analysis_version": SOURCE_ANALYSIS_VERSION,
+        "source_fact_ids": _source_fact_ids(data),
+        "weight_loading_entrypoints": _weight_flow_entrypoints(data),
         "pages": [
             _build_overview_page_v08(data, core, variants),
             _build_decoder_detail_page_v08(data, core, variants),
             _build_attention_detail_page_v08(data, core),
             _build_moe_detail_page_v08(data),
             _build_adapter_integration_page_v08(data, core),
-            _build_parallelism_weight_loading_page_v08(data, core),
+            _build_parallelism_page_v081(data, core),
+            _build_weight_loading_page_v081(data, core),
         ],
         "unresolved": unresolved,
     }

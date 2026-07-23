@@ -25,7 +25,8 @@ EDGE_CROSSING_THRESHOLDS = {
     "attention_detail": 2,
     "moe_detail": 2,
     "adapter_integration": 4,
-    "parallelism_weight_loading": 4,
+    "parallelism": 4,
+    "weight_loading": 4,
 }
 
 
@@ -449,7 +450,7 @@ def _validate_attention_branches(ir_page: dict[str, Any], errors: list[str]) -> 
         if isinstance(edge, dict)
     }
     required = {
-        ("qkv_split", "hpc_fused_processing"),
+        ("qkv_projection", "hpc_fused_processing"),
         ("hpc_fused_processing", "attention_core"),
         ("qkv_split", "q_stream"),
         ("q_stream", "fallback_q_norm"),

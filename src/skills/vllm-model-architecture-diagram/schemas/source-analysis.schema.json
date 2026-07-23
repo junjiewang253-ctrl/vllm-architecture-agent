@@ -17,10 +17,20 @@
     "parallelism_hints",
     "weight_loading_hints",
     "weight_mappings",
+    "methods",
+    "method_control_flows",
+    "calls",
+    "assignments",
+    "branches",
+    "returns",
+    "config_accesses",
+    "parallelism_facts",
+    "weight_loading_flows",
+    "semantic_facts",
     "warnings"
   ],
   "properties": {
-    "schema_version": {"const": "0.2"},
+    "schema_version": {"const": "0.3"},
     "source_file": {"type": "string"},
     "imports": {"type": "array", "items": {"type": "object"}},
     "classes": {"type": "array", "items": {"type": "object"}},
@@ -74,6 +84,16 @@
         ]
       }
     },
+    "methods": {"type": "array", "items": {"type": "object"}},
+    "method_control_flows": {"type": "array", "items": {"type": "object"}},
+    "calls": {"type": "array", "items": {"type": "object"}},
+    "assignments": {"type": "array", "items": {"type": "object"}},
+    "branches": {"type": "array", "items": {"type": "object"}},
+    "returns": {"type": "array", "items": {"type": "object"}},
+    "config_accesses": {"type": "array", "items": {"type": "object"}},
+    "parallelism_facts": {"type": "array", "items": {"type": "object"}},
+    "weight_loading_flows": {"type": "array", "items": {"type": "object"}},
+    "semantic_facts": {"type": "array", "items": {"type": "object"}},
     "warnings": {"type": "array", "items": {"type": "string"}}
   },
   "additionalProperties": false

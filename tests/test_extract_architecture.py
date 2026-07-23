@@ -177,4 +177,4 @@ def test_every_major_record_has_line_numbers():
 def test_result_is_json_serializable():
     result = extract(SIMPLE_PATH)
     rendered = json.dumps(result, ensure_ascii=False)
-    assert '"schema_version": "0.2"' in rendered
+    assert '"schema_version": "0.3"' in rendered

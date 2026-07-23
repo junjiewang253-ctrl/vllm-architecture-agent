@@ -6,7 +6,7 @@
   "required": ["schema_version", "source_ir_version", "model_name", "pages", "style_profile", "unresolved"],
   "properties": {
     "schema_version": {"const": "0.1"},
-    "source_ir_version": {"const": "0.5"},
+    "source_ir_version": {"const": "0.6"},
     "model_name": {"type": "string", "minLength": 1},
     "style_profile": {"type": "string", "minLength": 1},
     "unresolved": {"type": "array", "items": {"type": "object"}},

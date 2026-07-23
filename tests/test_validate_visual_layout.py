@@ -117,12 +117,12 @@ def test_attention_branch_validation_fails_when_branch_removed(tmp_path: Path):
 
 def test_edge_node_intersection_fails(tmp_path: Path):
     ir, tree = artifacts()
-    geometry = find_cell(tree, "checkpoint_to_remaining_weights").find("mxGeometry")
+    geometry = find_cell(tree, "qkv_projection_to_hpc_fused").find("mxGeometry")
     assert geometry is not None
     points = geometry.find("Array")
     assert points is not None
     points.clear()
-    for x, y in [(200, 589), (485, 589), (485, 582), (770, 582)]:
+    for x, y in [(360, 385), (520, 385), (520, 218), (610, 218)]:
         ET.SubElement(points, "mxPoint", {"x": str(x), "y": str(y)})
     errors = validate(ir, write_tree(tmp_path / "intersects.drawio", tree))
     assert any("edge_node_intersection_count must be 0" in error for error in errors)

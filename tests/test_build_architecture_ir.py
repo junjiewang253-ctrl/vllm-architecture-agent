@@ -45,16 +45,18 @@ def port_ids(node: dict[str, Any]) -> set[str]:
     return {port["id"] for port in node.get("ports", [])}
 
 
-def test_schema_version_and_six_pages():
+def test_schema_version_and_seven_pages():
     ir = build_hy_v3_ir()
-    assert ir["schema_version"] == "0.5"
+    assert ir["schema_version"] == "0.6"
+    assert ir["source_analysis_version"] == "0.3"
     assert [item["id"] for item in ir["pages"]] == [
         "overview",
         "decoder_layer_detail",
         "attention_detail",
         "moe_detail",
         "adapter_integration",
-        "parallelism_weight_loading",
+        "parallelism",
+        "weight_loading",
     ]
 
 
@@ -94,7 +96,12 @@ def test_decoder_detail_uses_hidden_and_residual_ports_without_handoff_nodes():
     assert {"attention_output", "residual", "normalized_hidden", "updated_residual"} <= port_ids(decoder_nodes["post_attention_rmsnorm"])
     assert decoder_nodes["dense_ffn"]["phase"] == "construction"
     assert decoder_nodes["moe_ffn"]["phase"] == "construction"
-    assert {edge["kind"] for edge in page(ir, "decoder_layer_detail")["edges"]}.isdisjoint({"conditional_true", "conditional_false"})
+    assert "residual_initialization" in decoder_nodes
+    assert all(
+        not ({edge["source"], edge["target"]} & {"dense_ffn", "moe_ffn"})
+        for edge in page(ir, "decoder_layer_detail")["edges"]
+        if edge["kind"] in {"conditional_true", "conditional_false", "runtime"}
+    )
 
 
 def test_attention_detail_has_qkv_ports_and_cache_ports():
@@ -108,7 +115,7 @@ def test_attention_detail_has_qkv_ports_and_cache_ports():
 
 def test_attention_hpc_and_fallback_are_independent_and_v_bypasses_qk_norm():
     attention_edges = {(edge["source"], edge["target"]) for edge in page(build_hy_v3_ir(), "attention_detail")["edges"]}
-    assert ("qkv_split", "hpc_fused_processing") in attention_edges
+    assert ("qkv_projection", "hpc_fused_processing") in attention_edges
     assert ("hpc_fused_processing", "attention_core") in attention_edges
     assert ("qkv_split", "q_stream") in attention_edges
     assert ("qkv_split", "k_stream") in attention_edges
@@ -138,13 +145,13 @@ def test_adapter_integration_scope_excludes_weight_loading_and_vllm_engine():
 
 def test_parallelism_and_weight_loading_contains_expected_mapping_ports():
     ir = build_hy_v3_ir()
-    parallel_nodes = nodes(ir, "parallelism_weight_loading")
-    for node_id in ["tensor_parallel_lane", "pipeline_parallel_lane", "expert_parallel_lane"]:
+    parallel_nodes = nodes(ir, "parallelism")
+    for node_id in ["tp_lane", "pp_lane", "ep_lane", "tp_embedding_linear_components", "pp_rank_flows", "ep_fused_moe"]:
         assert node_id in parallel_nodes
-    for node_id in ["qkv_checkpoint_weights", "qkv_proj_mapping", "gate_up_checkpoint_weights", "gate_up_proj_mapping", "fused_moe_parameter_mapping"]:
-        assert "weights_in" in port_ids(parallel_nodes[node_id])
-        assert "weights_out" in port_ids(parallel_nodes[node_id])
-    weight_edges = [edge for edge in page(ir, "parallelism_weight_loading")["edges"] if edge["kind"] == "weight_mapping"]
+    weight_nodes = nodes(ir, "weight_loading")
+    for node_id in ["qkv_stacked_target", "gate_up_stacked_target", "expert_params_mapping", "param_weight_loader", "default_weight_loader_fallback"]:
+        assert "weights_in" in port_ids(weight_nodes[node_id])
+    weight_edges = [edge for edge in page(ir, "weight_loading")["edges"] if edge["kind"] == "weight_mapping"]
     assert weight_edges
     assert all(edge["source_port"] == "weights_out" and edge["target_port"] == "weights_in" for edge in weight_edges)
 

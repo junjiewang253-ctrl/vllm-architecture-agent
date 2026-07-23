@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 from typing import Any, Iterable
 
-SCHEMA_VERSION = "0.2"
+SCHEMA_VERSION = "0.3"
 
 PARALLELISM_SYMBOLS = {
     "get_pp_group",
@@ -38,6 +38,10 @@ IMPORTANT_METHODS = {
     "forward",
     "compute_logits",
     "load_weights",
+    "get_expert_mapping",
+    "update_physical_experts_metadata",
+    "embed_input_ids",
+    "_filter_weights",
 }
 
 KNOWN_SUBMODULE_CONSTRUCTORS = {
@@ -155,6 +159,36 @@ def self_attribute(node: ast.AST | None) -> str | None:
     return None
 
 
+def slug(value: str | None, fallback: str = "unknown") -> str:
+    text = value or fallback
+    rendered = "".join(ch if ch.isalnum() or ch in "._" else "_" for ch in text)
+    rendered = "_".join(part for part in rendered.split("_") if part)
+    return rendered[:96] or fallback
+
+
+def make_fact_id(
+    owner_class: str | None,
+    method: str | None,
+    line: int | None,
+    kind: str,
+    label: str | None,
+) -> str:
+    qualified = ".".join(part for part in (owner_class, method) if part) or "<module>"
+    return f"fact:{qualified}:{line or 0}:{kind}:{slug(label)}"
+
+
+def collect_references(node: ast.AST | None) -> list[str]:
+    """Collect stable name/attribute references from an expression."""
+    if node is None:
+        return []
+    refs: set[str] = set()
+    for candidate in ast.walk(node):
+        name = dotted_name(candidate)
+        if name:
+            refs.add(name)
+    return sorted(refs)
+
+
 def collect_local_module_classes(tree: ast.Module) -> set[str]:
     """Find locally declared Module subclasses, including indirect subclasses."""
     class_bases: dict[str, list[str]] = {}
@@ -263,15 +297,41 @@ def find_self_collections(node: ast.AST) -> list[str]:
 def serialize_call(
     node: ast.Call,
     local_bindings: dict[str, str] | None = None,
+    *,
+    owner_class: str | None = None,
+    method: str | None = None,
+    assignment_targets: list[str] | None = None,
 ) -> dict[str, Any]:
     local_bindings = local_bindings or {}
     target = dotted_name(node.func) or safe_unparse(node.func) or "<call>"
+    receiver = None
+    if isinstance(node.func, ast.Attribute):
+        receiver = dotted_name(node.func.value)
     result: dict[str, Any] = {
+        "fact_id": make_fact_id(owner_class, method, getattr(node, "lineno", None), "call", target),
         "type": "call",
         "target": target,
+        "receiver": receiver,
         "line": getattr(node, "lineno", None),
+        "args": [
+            {
+                "position": index,
+                "expression": safe_unparse(argument),
+                "references": collect_references(argument),
+            }
+            for index, argument in enumerate(node.args)
+        ],
+        "kwargs": {
+            keyword.arg or "**": {
+                "expression": safe_unparse(keyword.value),
+                "references": collect_references(keyword.value),
+            }
+            for keyword in node.keywords
+        },
         "source": safe_unparse(node),
     }
+    if assignment_targets:
+        result["assignment_targets"] = assignment_targets
     if target in local_bindings:
         result["resolved_collection"] = local_bindings[target]
     return result
@@ -280,11 +340,21 @@ def serialize_call(
 def serialize_expression(
     node: ast.AST | None,
     local_bindings: dict[str, str] | None = None,
+    *,
+    owner_class: str | None = None,
+    method: str | None = None,
+    assignment_targets: list[str] | None = None,
 ) -> dict[str, Any] | None:
     if node is None:
         return None
     if isinstance(node, ast.Call):
-        return serialize_call(node, local_bindings)
+        return serialize_call(
+            node,
+            local_bindings,
+            owner_class=owner_class,
+            method=method,
+            assignment_targets=assignment_targets,
+        )
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
         return {
             "type": "add",
@@ -303,6 +373,9 @@ def serialize_expression(
 def serialize_statements(
     statements: Iterable[ast.stmt],
     local_bindings: dict[str, str] | None = None,
+    *,
+    owner_class: str | None = None,
+    method: str | None = None,
 ) -> list[dict[str, Any]]:
     local_bindings = dict(local_bindings or {})
     result: list[dict[str, Any]] = []
@@ -311,11 +384,13 @@ def serialize_statements(
         if isinstance(statement, ast.If):
             result.append(
                 {
+                    "fact_id": make_fact_id(owner_class, method, statement.lineno, "branch", safe_unparse(statement.test)),
                     "type": "if",
                     "condition": safe_unparse(statement.test),
+                    "condition_references": collect_references(statement.test),
                     "line": statement.lineno,
-                    "then": serialize_statements(statement.body, local_bindings),
-                    "else": serialize_statements(statement.orelse, local_bindings),
+                    "then": serialize_statements(statement.body, local_bindings, owner_class=owner_class, method=method),
+                    "else": serialize_statements(statement.orelse, local_bindings, owner_class=owner_class, method=method),
                 }
             )
             continue
@@ -331,12 +406,13 @@ def serialize_statements(
                         loop_bindings[name] = collection
             result.append(
                 {
+                    "fact_id": make_fact_id(owner_class, method, statement.lineno, "for", safe_unparse(statement.iter)),
                     "type": "for",
                     "target": safe_unparse(statement.target),
                     "iterable": safe_unparse(statement.iter),
                     "line": statement.lineno,
-                    "body": serialize_statements(statement.body, loop_bindings),
-                    "else": serialize_statements(statement.orelse, loop_bindings),
+                    "body": serialize_statements(statement.body, loop_bindings, owner_class=owner_class, method=method),
+                    "else": serialize_statements(statement.orelse, loop_bindings, owner_class=owner_class, method=method),
                 }
             )
             continue
@@ -344,9 +420,10 @@ def serialize_statements(
         if isinstance(statement, ast.Return):
             result.append(
                 {
+                    "fact_id": make_fact_id(owner_class, method, statement.lineno, "return", safe_unparse(statement.value)),
                     "type": "return",
                     "line": statement.lineno,
-                    "value": serialize_expression(statement.value, local_bindings),
+                    "value": serialize_expression(statement.value, local_bindings, owner_class=owner_class, method=method),
                 }
             )
             continue
@@ -357,10 +434,17 @@ def serialize_statements(
                 targets.extend(target_names(target))
             result.append(
                 {
+                    "fact_id": make_fact_id(owner_class, method, statement.lineno, "assignment", ",".join(targets)),
                     "type": "assignment",
                     "targets": targets,
                     "line": statement.lineno,
-                    "value": serialize_expression(statement.value, local_bindings),
+                    "value": serialize_expression(
+                        statement.value,
+                        local_bindings,
+                        owner_class=owner_class,
+                        method=method,
+                        assignment_targets=targets,
+                    ),
                     "source": safe_unparse(statement),
                 }
             )
@@ -369,22 +453,30 @@ def serialize_statements(
         if isinstance(statement, ast.AnnAssign):
             result.append(
                 {
+                    "fact_id": make_fact_id(owner_class, method, statement.lineno, "assignment", ",".join(target_names(statement.target))),
                     "type": "assignment",
                     "targets": target_names(statement.target),
                     "line": statement.lineno,
-                    "value": serialize_expression(statement.value, local_bindings),
+                    "value": serialize_expression(
+                        statement.value,
+                        local_bindings,
+                        owner_class=owner_class,
+                        method=method,
+                        assignment_targets=target_names(statement.target),
+                    ),
                     "source": safe_unparse(statement),
                 }
             )
             continue
 
         if isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Call):
-            result.append(serialize_call(statement.value, local_bindings))
+            result.append(serialize_call(statement.value, local_bindings, owner_class=owner_class, method=method))
             continue
 
         if isinstance(statement, (ast.Assert, ast.Raise, ast.Continue, ast.Break)):
             result.append(
                 {
+                    "fact_id": make_fact_id(owner_class, method, getattr(statement, "lineno", None), statement.__class__.__name__.lower(), safe_unparse(statement)),
                     "type": statement.__class__.__name__.lower(),
                     "line": getattr(statement, "lineno", None),
                     "source": safe_unparse(statement),
@@ -401,7 +493,7 @@ def serialize_statements(
                     "type": "statement",
                     "line": getattr(statement, "lineno", None),
                     "source": safe_unparse(statement),
-                    "calls": [serialize_call(call, local_bindings) for call in calls],
+                    "calls": [serialize_call(call, local_bindings, owner_class=owner_class, method=method) for call in calls],
                 }
             )
 
@@ -431,6 +523,7 @@ def extract_make_layers(
             )
 
     return {
+        "fact_id": make_fact_id(None, None, getattr(statement, "lineno", None), "call", factory),
         "targets": target_names(target),
         "factory": factory,
         "repeat_expression": repeat_expression,
@@ -439,6 +532,60 @@ def extract_make_layers(
         "line": getattr(statement, "lineno", None),
         "source": safe_unparse(statement),
     }
+
+
+def assignment_value_kind(value: ast.AST) -> str:
+    if isinstance(value, ast.Call):
+        return "call"
+    if isinstance(value, ast.Attribute):
+        return "attribute"
+    if isinstance(value, ast.Constant):
+        return "constant"
+    if isinstance(value, ast.BinOp):
+        return "binary_operation"
+    if isinstance(value, (ast.List, ast.Tuple, ast.Dict, ast.Set)):
+        return "collection"
+    if isinstance(value, ast.Subscript):
+        return "subscript"
+    if isinstance(value, ast.Name):
+        return "name"
+    return "unknown"
+
+
+def config_accesses_from_expression(
+    value: ast.AST,
+    targets: list[str],
+    *,
+    owner_class: str | None,
+    method: str | None,
+    line: int | None,
+) -> list[dict[str, Any]]:
+    accesses: list[dict[str, Any]] = []
+    target = targets[0] if targets else None
+    for node in ast.walk(value):
+        name = dotted_name(node)
+        if not name or "." not in name:
+            continue
+        parts = name.split(".")
+        root = parts[0]
+        if root not in {"config", "vllm_config", "parallel_config", "eplb_config", "self.config"}:
+            continue
+        accesses.append(
+            {
+                "fact_id": make_fact_id(owner_class, method, line, "config_access", name),
+                "root": root,
+                "path": ".".join(parts[1:]),
+                "owner_class": owner_class,
+                "method": method,
+                "line": line,
+                "target": target,
+                "source": name,
+            }
+        )
+    unique: dict[tuple[str, str, str | None], dict[str, Any]] = {}
+    for access in accesses:
+        unique[(access["root"], access["path"], access["target"])] = access
+    return list(unique.values())
 
 
 class ArchitectureVisitor(ast.NodeVisitor):
@@ -453,12 +600,23 @@ class ArchitectureVisitor(ast.NodeVisitor):
         self.layer_factories: list[dict[str, Any]] = []
         self.forward_flows: list[dict[str, Any]] = []
         self.forward_control_flows: list[dict[str, Any]] = []
+        self.methods: list[dict[str, Any]] = []
+        self.method_control_flows: list[dict[str, Any]] = []
+        self.calls: list[dict[str, Any]] = []
+        self.assignments: list[dict[str, Any]] = []
+        self.branches: list[dict[str, Any]] = []
+        self.returns: list[dict[str, Any]] = []
+        self.config_accesses: list[dict[str, Any]] = []
+        self.parallelism_facts: list[dict[str, Any]] = []
+        self.weight_loading_flows: list[dict[str, Any]] = []
+        self.semantic_facts: list[dict[str, Any]] = []
         self.conditions: list[dict[str, Any]] = []
         self.parallelism_hints: list[dict[str, Any]] = []
         self.weight_loading_hints: list[dict[str, Any]] = []
         self.weight_mappings: list[dict[str, Any]] = []
         self.warnings: list[str] = []
         self._seen_parallelism: set[tuple[str, int | None, str]] = set()
+        self._seen_parallelism_facts: set[tuple[str, str, int | None]] = set()
         self._seen_weight_mappings: set[tuple[str, str, str]] = set()
 
     def visit_Import(self, node: ast.Import) -> Any:
@@ -468,6 +626,7 @@ class ArchitectureVisitor(ast.NodeVisitor):
                     "module": None,
                     "name": alias.name,
                     "asname": alias.asname,
+                    "fact_id": make_fact_id(None, None, node.lineno, "import", alias.asname or alias.name),
                     "line": node.lineno,
                     "source": safe_unparse(node),
                 }
@@ -482,6 +641,7 @@ class ArchitectureVisitor(ast.NodeVisitor):
                     "module": module,
                     "name": alias.name,
                     "asname": alias.asname,
+                    "fact_id": make_fact_id(None, None, node.lineno, "import", alias.asname or alias.name),
                     "line": node.lineno,
                     "source": safe_unparse(node),
                 }
@@ -494,6 +654,7 @@ class ArchitectureVisitor(ast.NodeVisitor):
 
         methods = [
             {
+                "fact_id": make_fact_id(node.name, item.name, item.lineno, "method", item.name),
                 "name": item.name,
                 "line": item.lineno,
                 "end_line": getattr(item, "end_lineno", item.lineno),
@@ -502,10 +663,25 @@ class ArchitectureVisitor(ast.NodeVisitor):
             for item in node.body
             if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
         ]
+        self.methods.extend(
+            {
+                **method,
+                "owner_class": node.name,
+                "qualified_name": f"{node.name}.{method['name']}",
+                "parameters": [
+                    arg.arg for arg in item.args.args
+                ],
+            }
+            for method, item in zip(
+                methods,
+                [item for item in node.body if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))],
+            )
+        )
 
         self.classes.append(
             {
                 "name": node.name,
+                "fact_id": make_fact_id(node.name, None, node.lineno, "class", node.name),
                 "bases": [safe_unparse(base) for base in node.bases],
                 "decorators": [
                     {
@@ -530,6 +706,7 @@ class ArchitectureVisitor(ast.NodeVisitor):
                     value = literal_value(item.value)
                     self.class_attributes.append(
                         {
+                            "fact_id": make_fact_id(node.name, None, item.lineno, "class_attribute", target),
                             "owner_class": node.name,
                             "name": target,
                             "value": value,
@@ -552,6 +729,26 @@ class ArchitectureVisitor(ast.NodeVisitor):
     def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         previous = self.context
         self.context = Context(previous.class_name, node.name)
+        qualified_name = f"{previous.class_name}.{node.name}" if previous.class_name else node.name
+        body = serialize_statements(
+            node.body,
+            owner_class=previous.class_name,
+            method=node.name,
+        )
+        if previous.class_name and (node.name in IMPORTANT_METHODS or node.name.startswith("_")):
+            self.method_control_flows.append(
+                {
+                    "fact_id": make_fact_id(previous.class_name, node.name, node.lineno, "method_control_flow", node.name),
+                    "owner_class": previous.class_name,
+                    "method": node.name,
+                    "qualified_name": qualified_name,
+                    "line": node.lineno,
+                    "end_line": getattr(node, "end_lineno", node.lineno),
+                    "parameters": [arg.arg for arg in node.args.args],
+                    "body": body,
+                }
+            )
+        self._collect_flat_facts(body, previous.class_name, node.name)
 
         if node.name == "forward" and previous.class_name:
             calls: list[dict[str, Any]] = []
@@ -563,6 +760,7 @@ class ArchitectureVisitor(ast.NodeVisitor):
                     continue
                 calls.append(
                     {
+                        "fact_id": make_fact_id(previous.class_name, node.name, getattr(candidate, "lineno", None), "call", target),
                         "target": target,
                         "line": getattr(candidate, "lineno", None),
                         "source": safe_unparse(candidate),
@@ -584,19 +782,21 @@ class ArchitectureVisitor(ast.NodeVisitor):
                     "class": previous.class_name,
                     "method": node.name,
                     "line": node.lineno,
-                    "body": serialize_statements(node.body),
+                    "body": body,
                 }
             )
 
         if node.name == "load_weights":
             self._collect_weight_loading_hints(node)
             self._collect_normalized_weight_mappings(node)
+            self._collect_weight_loading_flow(node, body, previous.class_name)
 
         self.generic_visit(node)
         self.context = previous
 
     def visit_Assign(self, node: ast.Assign) -> Any:
         if len(node.targets) == 1:
+            self._record_generic_assignment(node.targets, node.value, node)
             self._record_assignment(node.targets[0], node.value, node)
             factory = extract_make_layers(node.targets[0], node.value, node)
             if factory:
@@ -607,6 +807,7 @@ class ArchitectureVisitor(ast.NodeVisitor):
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> Any:
         if node.value is not None:
+            self._record_generic_assignment([node.target], node.value, node)
             self._record_assignment(node.target, node.value, node)
         self.generic_visit(node)
 
@@ -621,11 +822,212 @@ class ArchitectureVisitor(ast.NodeVisitor):
         )
         if not record:
             return
+        record["fact_id"] = make_fact_id(self.context.class_name, self.context.method_name, getattr(statement, "lineno", None), "assignment", ",".join(record.get("targets", [])))
         record["owner_class"] = self.context.class_name
         record["method"] = self.context.method_name
         self.module_assignments.append(record)
 
+    def _record_generic_assignment(
+        self,
+        targets: list[ast.AST],
+        value: ast.AST,
+        statement: ast.stmt,
+    ) -> None:
+        names: list[str] = []
+        for target in targets:
+            names.extend(target_names(target))
+        line = getattr(statement, "lineno", None)
+        call_fact_id = None
+        if isinstance(value, ast.Call):
+            call_fact_id = make_fact_id(
+                self.context.class_name,
+                self.context.method_name,
+                line,
+                "call",
+                dotted_name(value.func) or safe_unparse(value.func),
+            )
+        record = {
+            "fact_id": make_fact_id(self.context.class_name, self.context.method_name, line, "assignment", ",".join(names)),
+            "owner_class": self.context.class_name,
+            "method": self.context.method_name,
+            "targets": names,
+            "value_kind": assignment_value_kind(value),
+            "expression": safe_unparse(value),
+            "references": collect_references(value),
+            "call_fact_id": call_fact_id,
+            "line": line,
+            "source": safe_unparse(statement),
+        }
+        self.assignments.append(record)
+        self.config_accesses.extend(
+            config_accesses_from_expression(
+                value,
+                names,
+                owner_class=self.context.class_name,
+                method=self.context.method_name,
+                line=line,
+            )
+        )
+
+    def _collect_flat_facts(
+        self,
+        body: list[dict[str, Any]],
+        owner_class: str | None,
+        method: str | None,
+    ) -> None:
+        for item in body:
+            if not isinstance(item, dict):
+                continue
+            item_type = item.get("type")
+            if item_type == "return":
+                self.returns.append(
+                    {
+                        "fact_id": item.get("fact_id"),
+                        "owner_class": owner_class,
+                        "method": method,
+                        "line": item.get("line"),
+                        "value": item.get("value"),
+                    }
+                )
+            if item_type == "if":
+                then_ids = [fact.get("fact_id") for fact in item.get("then", []) if isinstance(fact, dict) and fact.get("fact_id")]
+                else_ids = [fact.get("fact_id") for fact in item.get("else", []) if isinstance(fact, dict) and fact.get("fact_id")]
+                self.branches.append(
+                    {
+                        "fact_id": item.get("fact_id"),
+                        "owner_class": owner_class,
+                        "method": method,
+                        "condition": item.get("condition"),
+                        "condition_references": item.get("condition_references", []),
+                        "line": item.get("line"),
+                        "then_fact_ids": then_ids,
+                        "else_fact_ids": else_ids,
+                    }
+                )
+                self._collect_flat_facts(item.get("then", []), owner_class, method)
+                self._collect_flat_facts(item.get("else", []), owner_class, method)
+            elif item_type == "for":
+                self._collect_flat_facts(item.get("body", []), owner_class, method)
+                self._collect_flat_facts(item.get("else", []), owner_class, method)
+            elif item_type == "assignment":
+                value = item.get("value")
+                if isinstance(value, dict) and value.get("type") == "call":
+                    self.calls.append(value)
+            elif item_type == "call":
+                self.calls.append(item)
+            elif item_type == "statement":
+                for call in item.get("calls", []):
+                    if isinstance(call, dict):
+                        self.calls.append(call)
+
+    def _add_parallelism_fact(
+        self,
+        category: str,
+        symbol: str,
+        line: int | None,
+        fact_ids: list[str],
+        summary: str,
+    ) -> None:
+        key = (category, symbol, line)
+        if key in self._seen_parallelism_facts:
+            return
+        self._seen_parallelism_facts.add(key)
+        self.parallelism_facts.append(
+            {
+                "fact_id": make_fact_id(self.context.class_name, self.context.method_name, line, "parallelism", f"{category}:{symbol}"),
+                "category": category,
+                "symbol": symbol,
+                "owner_class": self.context.class_name,
+                "method": self.context.method_name,
+                "line": line,
+                "evidence_fact_ids": fact_ids,
+                "summary": summary,
+            }
+        )
+
+    def _collect_weight_loading_flow(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        body: list[dict[str, Any]],
+        owner_class: str | None,
+    ) -> None:
+        stages: list[dict[str, Any]] = []
+        flat = list(self._iter_control(body))
+        for item in flat:
+            if not isinstance(item, dict):
+                continue
+            source = str(item.get("source") or item.get("condition") or item.get("target") or item.get("type"))
+            line = item.get("line")
+            fact_id = item.get("fact_id")
+            if not isinstance(fact_id, str):
+                continue
+            stage_kind = self._weight_stage_kind(source)
+            if stage_kind is None:
+                continue
+            stages.append(
+                {
+                    "fact_id": f"stage:{fact_id}",
+                    "stage_kind": stage_kind,
+                    "line": line,
+                    "condition": item.get("condition") if item.get("type") == "if" else None,
+                    "input_references": item.get("condition_references", []),
+                    "output_references": item.get("targets", []),
+                    "call_fact_id": item.get("value", {}).get("fact_id") if isinstance(item.get("value"), dict) else None,
+                    "evidence_fact_ids": [fact_id],
+                    "summary": source,
+                }
+            )
+        self.weight_loading_flows.append(
+            {
+                "entrypoint": f"{owner_class}.{node.name}" if owner_class else node.name,
+                "owner_class": owner_class,
+                "method": node.name,
+                "line": node.lineno,
+                "stages": stages,
+            }
+        )
+
+    def _iter_control(self, body: list[dict[str, Any]]) -> Iterable[dict[str, Any]]:
+        for item in body:
+            yield item
+            if item.get("type") == "if":
+                yield from self._iter_control(item.get("then", []))
+                yield from self._iter_control(item.get("else", []))
+            elif item.get("type") == "for":
+                yield from self._iter_control(item.get("body", []))
+                yield from self._iter_control(item.get("else", []))
+
+    def _weight_stage_kind(self, source: str) -> str | None:
+        if "weight_loader" in source or "AutoWeightsLoader" in source or "default_weight_loader" in source:
+            return "loader"
+        if "_filter_weights" in source or "spec_layer" in source or "tie_word_embeddings" in source:
+            return "filter"
+        if "maybe_remap_kv_scale_name" in source or "replace(" in source:
+            return "rename"
+        if "stacked_params_mapping" in source or "expert_params_mapping" in source or "mapping" in source:
+            return "mapping"
+        if "params_dict" in source or "named_parameters" in source:
+            return "lookup"
+        if "loaded_params.add" in source:
+            return "collect"
+        if "return" in source or "loader.load_weights" in source:
+            return "return"
+        if "continue" in source or "skip" in source.lower() or "is_pp_missing_parameter" in source:
+            return "skip"
+        return None
+
     def visit_If(self, node: ast.If) -> Any:
+        branch_record = {
+            "fact_id": make_fact_id(self.context.class_name, self.context.method_name, node.lineno, "branch", safe_unparse(node.test)),
+            "owner_class": self.context.class_name,
+            "method": self.context.method_name,
+            "condition": safe_unparse(node.test),
+            "condition_references": collect_references(node.test),
+            "line": node.lineno,
+            "then_fact_ids": [],
+            "else_fact_ids": [],
+        }
+        self.branches.append(branch_record)
         true_assignments = iter_self_call_assignments(
             node.body, self.local_module_classes
         )
@@ -635,6 +1037,7 @@ class ArchitectureVisitor(ast.NodeVisitor):
         if true_assignments or false_assignments:
             self.conditions.append(
                 {
+                    "fact_id": branch_record["fact_id"],
                     "owner_class": self.context.class_name,
                     "method": self.context.method_name,
                     "condition": safe_unparse(node.test),
@@ -643,6 +1046,16 @@ class ArchitectureVisitor(ast.NodeVisitor):
                     "false_assignments": false_assignments,
                 }
             )
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> Any:
+        self.calls.append(
+            serialize_call(
+                node,
+                owner_class=self.context.class_name,
+                method=self.context.method_name,
+            )
+        )
         self.generic_visit(node)
 
     def visit_Name(self, node: ast.Name) -> Any:
@@ -662,6 +1075,7 @@ class ArchitectureVisitor(ast.NodeVisitor):
         self._seen_parallelism.add(key)
         self.parallelism_hints.append(
             {
+                "fact_id": make_fact_id(self.context.class_name, self.context.method_name, getattr(node, "lineno", None), "parallelism_hint", symbol),
                 "symbol": symbol,
                 "line": getattr(node, "lineno", None),
                 "context": self.context.label(),
@@ -669,6 +1083,13 @@ class ArchitectureVisitor(ast.NodeVisitor):
                 or safe_unparse(node),
             }
         )
+        category = "tensor_parallel"
+        if symbol in {"get_pp_group", "make_layers", "PPMissingLayer"}:
+            category = "pipeline_parallel"
+        elif symbol in {"get_ep_group", "FusedMoE"}:
+            category = "expert_parallel"
+        fact_id = make_fact_id(self.context.class_name, self.context.method_name, getattr(node, "lineno", None), "parallelism_hint", symbol)
+        self._add_parallelism_fact(category, symbol, getattr(node, "lineno", None), [fact_id], f"{category}: {symbol}")
 
     def _collect_weight_loading_hints(
         self, node: ast.FunctionDef | ast.AsyncFunctionDef
@@ -689,6 +1110,7 @@ class ArchitectureVisitor(ast.NodeVisitor):
                 ):
                     self.weight_loading_hints.append(
                         {
+                            "fact_id": make_fact_id(self.context.class_name, self.context.method_name, getattr(candidate, "lineno", None), "weight_hint", text),
                             "kind": "string",
                             "value": text,
                             "line": getattr(candidate, "lineno", None),
@@ -701,6 +1123,7 @@ class ArchitectureVisitor(ast.NodeVisitor):
                 if any(token in rendered for token in ("proj", "expert", "weight")):
                     self.weight_loading_hints.append(
                         {
+                            "fact_id": make_fact_id(self.context.class_name, self.context.method_name, getattr(candidate, "lineno", None), "weight_hint", rendered),
                             "kind": candidate.__class__.__name__.lower(),
                             "value": value,
                             "line": getattr(candidate, "lineno", None),
@@ -761,6 +1184,13 @@ class ArchitectureVisitor(ast.NodeVisitor):
         self._seen_weight_mappings.add(key)
         self.weight_mappings.append(
             {
+                "fact_id": make_fact_id(
+                    self.context.class_name,
+                    self.context.method_name,
+                    line,
+                    "weight_mapping",
+                    f"{mapping_kind}:{source}->{target}",
+                ),
                 "source": source,
                 "target": target,
                 "shard": shard,
@@ -789,6 +1219,7 @@ def extract_architecture(source_path: Path) -> dict[str, Any]:
     visitor = ArchitectureVisitor(source_text, collect_local_module_classes(tree))
     visitor.visit(tree)
     visitor.warnings.extend(warnings)
+    semantic_facts = build_semantic_facts(visitor)
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -803,6 +1234,16 @@ def extract_architecture(source_path: Path) -> dict[str, Any]:
         "layer_factories": visitor.layer_factories,
         "forward_flows": visitor.forward_flows,
         "forward_control_flows": visitor.forward_control_flows,
+        "methods": sorted(visitor.methods, key=lambda item: (item.get("line") or 0, item.get("qualified_name") or "")),
+        "method_control_flows": sorted(visitor.method_control_flows, key=lambda item: (item.get("line") or 0, item.get("qualified_name") or "")),
+        "calls": sorted(visitor.calls, key=lambda item: (item.get("line") or 0, item.get("target") or "")),
+        "assignments": sorted(visitor.assignments, key=lambda item: (item.get("line") or 0, ",".join(item.get("targets", [])))),
+        "branches": sorted(visitor.branches, key=lambda item: (item.get("line") or 0, item.get("condition") or "")),
+        "returns": sorted(visitor.returns, key=lambda item: (item.get("line") or 0, item.get("method") or "")),
+        "config_accesses": sorted(visitor.config_accesses, key=lambda item: (item.get("line") or 0, item.get("source") or "")),
+        "parallelism_facts": sorted(visitor.parallelism_facts, key=lambda item: (item.get("line") or 0, item.get("category") or "", item.get("symbol") or "")),
+        "weight_loading_flows": visitor.weight_loading_flows,
+        "semantic_facts": semantic_facts,
         "conditions": visitor.conditions,
         "parallelism_hints": sorted(
             visitor.parallelism_hints,
@@ -822,6 +1263,71 @@ def extract_architecture(source_path: Path) -> dict[str, Any]:
         ),
         "warnings": visitor.warnings,
     }
+
+
+def _source_location(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "owner_class": record.get("owner_class"),
+        "method": record.get("method"),
+        "line": record.get("line"),
+    }
+
+
+def build_semantic_facts(visitor: ArchitectureVisitor) -> list[dict[str, Any]]:
+    """Build a conservative source fact inventory for semantic coverage."""
+    facts: dict[str, dict[str, Any]] = {}
+
+    def add(record: dict[str, Any], category: str, summary: str, relevance: str = "required") -> None:
+        fact_id = record.get("fact_id")
+        if not isinstance(fact_id, str):
+            return
+        facts[fact_id] = {
+            "fact_id": fact_id,
+            "category": category,
+            "relevance": relevance,
+            "source_location": _source_location(record),
+            "summary": summary,
+        }
+
+    for item in visitor.module_assignments:
+        kind = "construction" if item.get("method") == "__init__" else "model_structure"
+        add(item, kind, str(item.get("source") or item.get("constructor")))
+    for item in visitor.assignments:
+        text = str(item.get("source") or item.get("expression"))
+        category = "configuration" if any(ref.startswith(("config", "vllm_config", "parallel_config")) for ref in item.get("references", [])) else "runtime_flow"
+        if item.get("method") == "load_weights":
+            category = "checkpoint_loading"
+        add(item, category, text)
+    for item in visitor.calls:
+        target = str(item.get("target") or "")
+        category = "runtime_flow"
+        if item.get("method") == "__init__":
+            category = "construction"
+        if item.get("method") == "load_weights":
+            category = "checkpoint_loading"
+        if target in {"AutoWeightsLoader", "Attention", "FusedMoE"} or target.endswith(("Attention", "FusedMoE")):
+            category = "external_boundary" if item.get("method") != "__init__" else "construction"
+        add(item, category, str(item.get("source") or target))
+    for item in visitor.branches:
+        category = "checkpoint_loading" if item.get("method") == "load_weights" else "runtime_flow"
+        add(item, category, str(item.get("condition")))
+    for item in visitor.config_accesses:
+        add(item, "configuration", f"{item.get('root')}.{item.get('path')} -> {item.get('target')}")
+    for item in visitor.parallelism_facts:
+        add(item, str(item.get("category")), str(item.get("summary")))
+    for flow in visitor.weight_loading_flows:
+        for stage in flow.get("stages", []):
+            add(
+                {
+                    "fact_id": stage.get("fact_id"),
+                    "owner_class": flow.get("owner_class"),
+                    "method": flow.get("method"),
+                    "line": stage.get("line"),
+                },
+                "checkpoint_loading",
+                str(stage.get("summary")),
+            )
+    return sorted(facts.values(), key=lambda item: (item["source_location"].get("line") or 0, item["fact_id"]))
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

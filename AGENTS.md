@@ -29,7 +29,9 @@ not change source semantics.
 - Do not treat checkpoint loading as runtime tensor flow.
 - Do not let Agents hand-write complete Draw.io XML; use `render_drawio.py`.
 - Do not add or remove semantic nodes or edges through Draw.io MCP.
-- Build and validate Diagram View before rendering v0.8 diagrams.
+- Build semantic inventory and validate semantic coverage before rendering
+  v0.8.1 diagrams.
+- Build and validate Diagram View before rendering v0.8.1 diagrams.
 - Use `layout_diagram.py` for deterministic coordinates and routed waypoints.
 - Put cross-Agent core behavior in the Skill directory.
 - Put Codex-, Claude Code- or other Agent-specific packaging under
@@ -51,8 +53,10 @@ After changing IR, renderer, or Draw.io validation code:
 ```text
 pytest
 python src/skills/vllm-model-architecture-diagram/scripts/extract_architecture.py samples/hy_v3.py --output outputs/hy-v3-source-analysis.json
+python src/skills/vllm-model-architecture-diagram/scripts/build_semantic_inventory.py outputs/hy-v3-source-analysis.json --output outputs/hy-v3-semantic-inventory.json
 python src/skills/vllm-model-architecture-diagram/scripts/build_architecture_ir.py outputs/hy-v3-source-analysis.json --output outputs/hy-v3-architecture-ir.json
 python src/skills/vllm-model-architecture-diagram/scripts/validate_architecture_ir.py outputs/hy-v3-architecture-ir.json
+python src/skills/vllm-model-architecture-diagram/scripts/validate_semantic_coverage.py outputs/hy-v3-source-analysis.json outputs/hy-v3-semantic-inventory.json outputs/hy-v3-architecture-ir.json --output outputs/hy-v3-semantic-coverage.json
 python src/skills/vllm-model-architecture-diagram/scripts/build_diagram_view.py outputs/hy-v3-architecture-ir.json --output outputs/hy-v3-diagram-view.json
 python src/skills/vllm-model-architecture-diagram/scripts/validate_diagram_view.py outputs/hy-v3-architecture-ir.json outputs/hy-v3-diagram-view.json
 python src/skills/vllm-model-architecture-diagram/scripts/layout_diagram.py outputs/hy-v3-diagram-view.json --output outputs/hy-v3-layout-plan.json

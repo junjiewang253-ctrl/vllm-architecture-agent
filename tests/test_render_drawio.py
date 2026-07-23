@@ -75,7 +75,7 @@ def semantic_edge_ids(ir: dict[str, Any]) -> set[str]:
     return {edge["id"] for page in ir["pages"] for edge in page["edges"]}
 
 
-def test_renderer_generates_legal_xml_and_six_pages():
+def test_renderer_generates_legal_xml_and_seven_pages():
     _ir, _view, _layout, xml = artifacts()
     assert [(diagram.get("id"), diagram.get("name")) for diagram in diagrams(xml)] == [
         ("overview", "Model Overview"),
@@ -83,7 +83,8 @@ def test_renderer_generates_legal_xml_and_six_pages():
         ("attention_detail", "HYV3Attention Detail"),
         ("moe_detail", "HYV3MoEFused Detail"),
         ("adapter_integration", "vLLM Adapter Integration"),
-        ("parallelism_weight_loading", "Parallelism & Weight Loading"),
+        ("parallelism", "Parallelism"),
+        ("weight_loading", "Weight Loading"),
     ]
 
 

@@ -24,10 +24,18 @@ def port(port_id: str, direction: str, data_kind: str = "tensor") -> dict[str, s
 
 
 def valid_ir():
+    source_fact_ids = [
+        "fact:Example.forward:1:call:input",
+        "fact:Example.forward:2:call:decoder",
+        "fact:Example.forward:3:assignment:add",
+        "fact:Example.compute_logits:4:call:logits",
+    ]
     return {
-        "schema_version": "0.5",
+        "schema_version": "0.6",
         "model_name": "Example",
         "detail_level": "overview",
+        "source_fact_ids": source_fact_ids,
+        "weight_loading_entrypoints": ["HYV3ForCausalLM.load_weights", "HYV3Model.load_weights"],
         "pages": [
             {
                 "id": "overview",
@@ -43,7 +51,7 @@ def valid_ir():
                         "parent_id": None,
                         "badges": [],
                         "ports": [port("hidden_out", "output")],
-                        "evidence": [{"type": "direct", "line": 1}],
+                        "evidence": [{"type": "direct", "fact_ids": ["fact:Example.forward:1:call:input"], "line": 1}],
                     },
                     {
                         "id": "decoder",
@@ -63,7 +71,7 @@ def valid_ir():
                             {"condition": "layer_idx < config.first_k_dense_replace", "component": "ExampleFeedForward", "phase": "construction"},
                             {"condition": "layer_idx >= config.first_k_dense_replace", "component": "ExampleMoE", "phase": "construction"},
                         ],
-                        "evidence": [{"type": "direct", "line": 2}],
+                        "evidence": [{"type": "direct", "fact_ids": ["fact:Example.forward:2:call:decoder"], "line": 2}],
                     },
                     {
                         "id": "add",
@@ -78,7 +86,7 @@ def valid_ir():
                             port("residual_in", "input"),
                             port("hidden_out", "output"),
                         ],
-                        "evidence": [{"type": "derived", "line": 3}],
+                        "evidence": [{"type": "derived", "fact_ids": ["fact:Example.forward:2:call:decoder", "fact:Example.forward:3:assignment:add"], "line": 3}],
                     },
                     {
                         "id": "logits",
@@ -89,7 +97,7 @@ def valid_ir():
                         "parent_id": None,
                         "badges": [],
                         "ports": [port("hidden_states", "input"), port("logits", "output")],
-                        "evidence": [{"type": "direct", "line": 4}],
+                        "evidence": [{"type": "direct", "fact_ids": ["fact:Example.compute_logits:4:call:logits"], "line": 4}],
                     },
                 ],
                 "edges": [
@@ -102,7 +110,7 @@ def valid_ir():
                         "scope": "ExampleModel.forward",
                         "source_port": "hidden_out",
                         "target_port": "hidden_in",
-                        "evidence": [{"type": "direct", "line": 2}],
+                        "evidence": [{"type": "direct", "fact_ids": ["fact:Example.forward:1:call:input", "fact:Example.forward:2:call:decoder"], "line": 2}],
                     },
                     {
                         "id": "e2",
@@ -113,7 +121,7 @@ def valid_ir():
                         "scope": "ExampleModel.forward",
                         "source_port": "hidden_out",
                         "target_port": "hidden_in",
-                        "evidence": [{"type": "direct", "line": 3}],
+                        "evidence": [{"type": "direct", "fact_ids": ["fact:Example.forward:2:call:decoder", "fact:Example.forward:3:assignment:add"], "line": 3}],
                     },
                     {
                         "id": "e3",
@@ -124,7 +132,7 @@ def valid_ir():
                         "scope": "ExampleModel.forward",
                         "source_port": "residual_out",
                         "target_port": "residual_in",
-                        "evidence": [{"type": "direct", "line": 3}],
+                        "evidence": [{"type": "direct", "fact_ids": ["fact:Example.forward:3:assignment:add"], "line": 3}],
                     },
                     {
                         "id": "e4",
@@ -135,7 +143,7 @@ def valid_ir():
                         "scope": "ExampleForCausalLM.compute_logits",
                         "source_port": "hidden_out",
                         "target_port": "hidden_states",
-                        "evidence": [{"type": "derived", "lines": [3, 4]}],
+                        "evidence": [{"type": "derived", "fact_ids": ["fact:Example.forward:3:assignment:add", "fact:Example.compute_logits:4:call:logits"], "lines": [3, 4]}],
                     },
                 ],
             }

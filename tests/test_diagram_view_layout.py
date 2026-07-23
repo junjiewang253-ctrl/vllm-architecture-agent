@@ -49,7 +49,8 @@ def test_diagram_view_generates_required_pages_and_validates():
         "attention_detail",
         "moe_detail",
         "adapter_integration",
-        "parallelism_weight_loading",
+        "parallelism",
+        "weight_loading",
     ]
     assert "vllm_adaptation_map" not in {item["id"] for item in view["pages"]}
     assert validator.validate_diagram_view(ir, view) == []
@@ -81,12 +82,15 @@ def test_moe_view_contains_gate_fused_moe_and_shared_experts():
 def test_adapter_and_weight_pages_are_split_by_concern():
     _ir, view, _layout = artifacts()
     adapter_nodes = {node["semantic_id"] for node in page(view, "adapter_integration")["visible_nodes"]}
-    weight_nodes = {node["semantic_id"] for node in page(view, "parallelism_weight_loading")["visible_nodes"]}
-    assert "qkv_proj_mapping" not in adapter_nodes
-    assert "qkv_proj_mapping" in weight_nodes
-    assert {region["id"] for region in page(view, "parallelism_weight_loading")["regions"]} == {
-        "parallelism_region",
-        "weight_loading_region",
+    weight_nodes = {node["semantic_id"] for node in page(view, "weight_loading")["visible_nodes"]}
+    parallel_nodes = {node["semantic_id"] for node in page(view, "parallelism")["visible_nodes"]}
+    assert "qkv_stacked_target" not in adapter_nodes
+    assert "qkv_stacked_target" in weight_nodes
+    assert {"tp_lane", "pp_lane", "ep_lane"} <= parallel_nodes
+    assert {region["id"] for region in page(view, "weight_loading")["regions"]} == {
+        "wrapper_weight_flow",
+        "model_weight_flow",
+        "mapping_dispatch_region",
     }
 
 
