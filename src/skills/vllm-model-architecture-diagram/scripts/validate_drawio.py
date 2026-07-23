@@ -169,6 +169,52 @@ def validate_drawio(ir: dict[str, Any], drawio_path: Path) -> list[str]:
     return errors
 
 
+def validate_drawio_with_view(
+    ir: dict[str, Any],
+    drawio_path: Path,
+    view: dict[str, Any] | None = None,
+    layout_plan: dict[str, Any] | None = None,
+) -> list[str]:
+    errors = validate_drawio(ir, drawio_path)
+    if view is None:
+        return errors
+    draw_pages, parse_errors = _drawio_pages(drawio_path)
+    errors.extend(parse_errors)
+    if parse_errors:
+        return errors
+    layout_pages = {
+        page.get("id"): page
+        for page in (layout_plan or {}).get("pages", [])
+        if isinstance(page, dict)
+    }
+    for page in view.get("pages", []):
+        if not isinstance(page, dict) or not isinstance(page.get("id"), str):
+            continue
+        page_id = page["id"]
+        draw_page = draw_pages.get(page_id)
+        if draw_page is None:
+            continue
+        layout_page = layout_pages.get(page_id, {})
+        layout_edges = layout_page.get("edges", {}) if isinstance(layout_page, dict) else {}
+        for edge in page.get("visible_edges", []):
+            if not isinstance(edge, dict) or not isinstance(edge.get("semantic_id"), str):
+                continue
+            edge_id = edge["semantic_id"]
+            cell = draw_page.cells.get(edge_id)
+            if cell is None:
+                continue
+            if cell.get("sourcePort") != edge.get("source_port"):
+                errors.append(f"page {page_id}: edge {edge_id} sourcePort mismatch")
+            if cell.get("targetPort") != edge.get("target_port"):
+                errors.append(f"page {page_id}: edge {edge_id} targetPort mismatch")
+            plan_edge = layout_edges.get(edge_id) if isinstance(layout_edges, dict) else None
+            visible = not (isinstance(plan_edge, dict) and plan_edge.get("visible") is False)
+            geometry = cell.find("mxGeometry")
+            if visible and (geometry is None or geometry.find("Array/mxPoint") is None):
+                errors.append(f"page {page_id}: visible edge {edge_id} must include routed waypoints")
+    return errors
+
+
 def _validate_page(
     ir_page: dict[str, Any],
     draw_page: DiagramPage,
@@ -272,6 +318,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate Draw.io XML against Architecture IR.")
     parser.add_argument("ir", type=Path, help="Architecture IR JSON file")
     parser.add_argument("drawio", type=Path, help="Draw.io XML file")
+    parser.add_argument("--view", type=Path, help="Diagram View JSON file for v0.8 port validation")
+    parser.add_argument("--layout-plan", type=Path, help="Layout Plan JSON file for v0.8 route validation")
     return parser.parse_args(argv)
 
 
@@ -285,7 +333,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         ir = _load_json(args.ir)
-        errors = validate_drawio(ir, args.drawio)
+        view = _load_json(args.view) if args.view else None
+        layout_plan = _load_json(args.layout_plan) if args.layout_plan else None
+        errors = validate_drawio_with_view(ir, args.drawio, view, layout_plan)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

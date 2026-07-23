@@ -19,6 +19,14 @@ REGION_IDS = {
     "region_execution_components",
     "region_weight_parallel",
 }
+EDGE_CROSSING_THRESHOLDS = {
+    "overview": 1,
+    "decoder_detail": 1,
+    "attention_detail": 2,
+    "moe_detail": 2,
+    "adapter_integration": 4,
+    "parallelism_weight_loading": 4,
+}
 
 
 @dataclass(frozen=True)
@@ -139,6 +147,61 @@ def _has_route_points(cell: ET.Element) -> bool:
     return geometry is not None and geometry.find("Array/mxPoint") is not None
 
 
+def _edge_points(cell: ET.Element) -> list[tuple[float, float]]:
+    geometry = cell.find("mxGeometry")
+    if geometry is None:
+        return []
+    return [
+        (_parse_float(point.get("x")), _parse_float(point.get("y")))
+        for point in geometry.findall("Array/mxPoint")
+    ]
+
+
+def _segments(points: list[tuple[float, float]]) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+    return list(zip(points, points[1:]))
+
+
+def _segment_intersects_box(segment: tuple[tuple[float, float], tuple[float, float]], box: Box) -> bool:
+    (x1, y1), (x2, y2) = segment
+    if abs(y1 - y2) < 0.001:
+        y = y1
+        if y <= box.y or y >= box.bottom:
+            return False
+        return max(min(x1, x2), box.x) < min(max(x1, x2), box.right)
+    if abs(x1 - x2) < 0.001:
+        x = x1
+        if x <= box.x or x >= box.right:
+            return False
+        return max(min(y1, y2), box.y) < min(max(y1, y2), box.bottom)
+    return False
+
+
+def _segments_cross(a: tuple[tuple[float, float], tuple[float, float]], b: tuple[tuple[float, float], tuple[float, float]]) -> bool:
+    (ax1, ay1), (ax2, ay2) = a
+    (bx1, by1), (bx2, by2) = b
+    a_horizontal = abs(ay1 - ay2) < 0.001
+    b_horizontal = abs(by1 - by2) < 0.001
+    if a_horizontal == b_horizontal:
+        return False
+    if a_horizontal:
+        hx1, hx2, hy = sorted([ax1, ax2])[0], sorted([ax1, ax2])[1], ay1
+        vx, vy1, vy2 = bx1, sorted([by1, by2])[0], sorted([by1, by2])[1]
+    else:
+        hx1, hx2, hy = sorted([bx1, bx2])[0], sorted([bx1, bx2])[1], by1
+        vx, vy1, vy2 = ax1, sorted([ay1, ay2])[0], sorted([ay1, ay2])[1]
+    return hx1 < vx < hx2 and vy1 < hy < vy2
+
+
+def _estimated_text_fits(value: str, box: Box) -> bool:
+    if not value:
+        return True
+    lines = value.split("\n")
+    max_chars = max(len(line) for line in lines)
+    needed_width = max_chars * 6.1 + 24
+    needed_height = len(lines) * 17 + 18
+    return needed_width <= box.width + 0.001 and needed_height <= box.height + 0.001
+
+
 def _edge_visible(edge: dict[str, Any]) -> bool:
     display = edge.get("display")
     return not (isinstance(display, dict) and display.get("visible") is False)
@@ -149,13 +212,14 @@ def _edge_show_label(edge: dict[str, Any]) -> bool:
     return isinstance(display, dict) and display.get("show_label") is True
 
 
-def validate_visual_layout(ir: dict[str, Any], drawio_path: Path) -> list[str]:
+def build_layout_metrics(ir: dict[str, Any], drawio_path: Path) -> tuple[list[dict[str, Any]], list[str]]:
     pages, errors = _pages(drawio_path)
     if errors:
-        return errors
+        return [], errors
     ir_pages = ir.get("pages")
     if not isinstance(ir_pages, list):
-        return ["IR pages must be a list"]
+        return [], ["IR pages must be a list"]
+    metrics: list[dict[str, Any]] = []
     for page in ir_pages:
         if not isinstance(page, dict):
             continue
@@ -163,8 +227,118 @@ def validate_visual_layout(ir: dict[str, Any], drawio_path: Path) -> list[str]:
         if not isinstance(page_id, str) or page_id not in pages:
             errors.append(f"missing Draw.io page for visual validation: {page_id!r}")
             continue
-        _validate_page(page, pages[page_id], errors)
+        metrics.append(_page_metrics(page, pages[page_id], errors))
+    return metrics, errors
+
+
+def validate_visual_layout(ir: dict[str, Any], drawio_path: Path) -> list[str]:
+    metrics, errors = build_layout_metrics(ir, drawio_path)
+    for item in metrics:
+        page_id = str(item["page_id"])
+        page_type = str(item["page_type"])
+        if item["node_overlap_count"] != 0:
+            errors.append(f"page {page_id}: node_overlap_count must be 0")
+        if item["edge_node_intersection_count"] != 0:
+            errors.append(f"page {page_id}: edge_node_intersection_count must be 0")
+        if item["text_overflow_count"] != 0:
+            errors.append(f"page {page_id}: text_overflow_count must be 0")
+        if item["content_fill_ratio"] < 0.25 or item["content_fill_ratio"] > 0.80:
+            errors.append(f"page {page_id}: content_fill_ratio out of range")
+        threshold = EDGE_CROSSING_THRESHOLDS.get(page_type, 4)
+        if item["edge_crossing_count"] > threshold:
+            errors.append(f"page {page_id}: edge_crossing_count exceeds threshold {threshold}")
+        if item["page_aspect_ratio"] < 1.65 or item["page_aspect_ratio"] > 1.95:
+            errors.append(f"page {page_id}: page aspect ratio outside 1.65-1.95")
     return errors
+
+
+def _page_metrics(ir_page: dict[str, Any], page: Page, errors: list[str]) -> dict[str, Any]:
+    base_error_count = len(errors)
+    _validate_page(ir_page, page, errors)
+    nodes = [node for node in ir_page.get("nodes", []) if isinstance(node, dict) and isinstance(node.get("id"), str)]
+    node_by_id = {node["id"]: node for node in nodes}
+    boxes = {
+        node["id"]: box
+        for node in nodes
+        for box in [_absolute_box(node["id"], page, node_by_id)]
+        if box is not None
+    }
+    leaf_nodes = [node for node in nodes if node.get("kind") not in CONTAINER_KINDS]
+    node_overlap_count = 0
+    for index, left in enumerate(leaf_nodes):
+        for right in leaf_nodes[index + 1 :]:
+            if left["id"] in boxes and right["id"] in boxes and _overlaps(boxes[left["id"]], boxes[right["id"]]):
+                node_overlap_count += 1
+    edge_node_intersection_count = 0
+    visible_edge_segments: list[tuple[str, tuple[tuple[float, float], tuple[float, float]]]] = []
+    text_overflow_count = 0
+    for node in nodes:
+        node_id = node["id"]
+        cell = page.cells.get(node_id)
+        box = boxes.get(node_id)
+        if cell is not None and box is not None and node.get("kind") not in CONTAINER_KINDS:
+            if not _estimated_text_fits(cell.get("value") or "", box):
+                text_overflow_count += 1
+    all_edge_points: list[tuple[float, float]] = []
+    for edge in ir_page.get("edges", []):
+        if not isinstance(edge, dict) or not isinstance(edge.get("id"), str):
+            continue
+        cell = page.cells.get(edge["id"])
+        if cell is None:
+            continue
+        display = edge.get("display")
+        if isinstance(display, dict) and display.get("visible") is False:
+            continue
+        points = _edge_points(cell)
+        if len(points) < 2:
+            continue
+        all_edge_points.extend(points)
+        for segment in _segments(points):
+            visible_edge_segments.append((edge["id"], segment))
+            for node_id, box in boxes.items():
+                if node_by_id.get(node_id, {}).get("kind") in CONTAINER_KINDS:
+                    continue
+                if node_id in {edge.get("source"), edge.get("target")}:
+                    continue
+                if _segment_intersects_box(segment, box):
+                    edge_node_intersection_count += 1
+    edge_crossing_count = 0
+    for index, (left_id, left_segment) in enumerate(visible_edge_segments):
+        for right_id, right_segment in visible_edge_segments[index + 1 :]:
+            if left_id == right_id:
+                continue
+            if _segments_cross(left_segment, right_segment):
+                edge_crossing_count += 1
+    if boxes:
+        xs = [box.x for box in boxes.values()] + [point[0] for point in all_edge_points]
+        ys = [box.y for box in boxes.values()] + [point[1] for point in all_edge_points]
+        rights = [box.right for box in boxes.values()] + [point[0] for point in all_edge_points]
+        bottoms = [box.bottom for box in boxes.values()] + [point[1] for point in all_edge_points]
+        min_x = min(xs)
+        min_y = min(ys)
+        max_x = max(rights)
+        max_y = max(bottoms)
+        content_fill_ratio = ((max_x - min_x) * (max_y - min_y)) / (page.width * page.height)
+    else:
+        content_fill_ratio = 0.0
+    return {
+        "page_id": ir_page.get("id"),
+        "page_type": ir_page.get("page_type"),
+        "node_count": len(nodes),
+        "visible_edge_count": sum(
+            1
+            for edge in ir_page.get("edges", [])
+            if isinstance(edge, dict) and not (isinstance(edge.get("display"), dict) and edge["display"].get("visible") is False)
+        ),
+        "node_overlap_count": node_overlap_count,
+        "edge_node_intersection_count": edge_node_intersection_count,
+        "edge_crossing_count": edge_crossing_count,
+        "text_overflow_count": text_overflow_count,
+        "page_aspect_ratio": round(page.width / page.height, 4) if page.height else 0,
+        "content_fill_ratio": round(content_fill_ratio, 4),
+        "cross_region_edge_count": 0,
+        "new_error_count": len(errors) - base_error_count,
+    }
 
 
 def _validate_page(ir_page: dict[str, Any], page: Page, errors: list[str]) -> None:
@@ -230,6 +404,8 @@ def _validate_decorations(
     for cell_id, cell in page.cells.items():
         if not cell_id.startswith(DECORATIVE_PREFIX) or cell.get("vertex") != "1":
             continue
+        if cell_id.startswith("decorative_region_"):
+            continue
         box = _absolute_box(cell_id, page, {}) or _geometry(cell)
         if box is None:
             continue
@@ -273,16 +449,17 @@ def _validate_attention_branches(ir_page: dict[str, Any], errors: list[str]) -> 
         if isinstance(edge, dict)
     }
     required = {
-        ("split_qkv", "hpc_rope_norm"),
-        ("hpc_rope_norm", "attention_core"),
-        ("split_qkv", "fallback_qk_norm"),
-        ("fallback_qk_norm", "rotary_embedding"),
+        ("qkv_split", "hpc_fused_processing"),
+        ("hpc_fused_processing", "attention_core"),
+        ("qkv_split", "q_stream"),
+        ("q_stream", "fallback_q_norm"),
+        ("fallback_q_norm", "rotary_embedding"),
         ("rotary_embedding", "attention_core"),
     }
     missing = sorted(required - edges)
     if missing:
         errors.append(f"page {ir_page.get('id')}: attention detail missing branch edges: {missing}")
-    if ("hpc_rope_norm", "fallback_qk_norm") in edges or ("fallback_qk_norm", "hpc_rope_norm") in edges:
+    if ("hpc_fused_processing", "fallback_q_norm") in edges or ("fallback_q_norm", "hpc_fused_processing") in edges:
         errors.append(f"page {ir_page.get('id')}: HPC and fallback paths must not be serially connected")
 
 
@@ -290,6 +467,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate visual Draw.io layout constraints.")
     parser.add_argument("ir", type=Path, help="Architecture IR JSON file")
     parser.add_argument("drawio", type=Path, help="Draw.io XML file")
+    parser.add_argument("--metrics-output", type=Path, help="Write layout metrics JSON")
     return parser.parse_args(argv)
 
 
@@ -303,7 +481,12 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         ir = _load_json(args.ir)
+        metrics, metric_errors = build_layout_metrics(ir, args.drawio)
+        if args.metrics_output is not None:
+            args.metrics_output.parent.mkdir(parents=True, exist_ok=True)
+            args.metrics_output.write_text(json.dumps({"schema_version": "0.1", "pages": metrics}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         errors = validate_visual_layout(ir, args.drawio)
+        errors = metric_errors + [error for error in errors if error not in metric_errors]
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

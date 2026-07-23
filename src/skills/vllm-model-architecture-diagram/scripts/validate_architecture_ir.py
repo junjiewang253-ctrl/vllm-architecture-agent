@@ -42,8 +42,28 @@ EDGE_KINDS = {
 PHASES = {"construction", "runtime", "checkpoint_loading", "parallel_partition"}
 NON_MAJOR_NODE_KINDS = {"note", "container"}
 PARALLEL_BADGE_LABELS = {"TP", "PP", "EP"}
-PAGE_TYPES = {"overview", "decoder_detail", "attention_detail", "adaptation_map"}
-EDGE_DISPLAY_ROUTES = {"direct", "top_lane", "bottom_lane"}
+PAGE_TYPES = {
+    "overview",
+    "decoder_detail",
+    "attention_detail",
+    "moe_detail",
+    "adapter_integration",
+    "parallelism_weight_loading",
+}
+PORT_DIRECTIONS = {"input", "output", "bidirectional"}
+PORT_DATA_KINDS = {"tensor", "config", "weights", "cache", "capability", "control"}
+EDGE_DISPLAY_ROUTES = {
+    "direct",
+    "top_lane",
+    "bottom_lane",
+    "horizontal_lane",
+    "vertical_branch",
+    "local_branch",
+    "cache_write",
+    "cache_read",
+    "weight_mapping",
+    "hidden_semantic",
+}
 
 
 def _is_non_empty_evidence(value: Any) -> bool:
@@ -89,11 +109,63 @@ def _validate_edge_display(value: Any, prefix: str, errors: list[str]) -> None:
         errors.append(f"{prefix}.display.route is invalid: {value.get('route')!r}")
 
 
+def _ports_by_id(node: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    ports = node.get("ports")
+    if not isinstance(ports, list):
+        return {}
+    return {
+        port["id"]: port
+        for port in ports
+        if isinstance(port, dict) and isinstance(port.get("id"), str)
+    }
+
+
+def _validate_ports(value: Any, prefix: str, errors: list[str]) -> None:
+    if value is None:
+        return
+    if not isinstance(value, list):
+        errors.append(f"{prefix}.ports must be a list")
+        return
+    seen: set[str] = set()
+    for index, port in enumerate(value):
+        port_prefix = f"{prefix}.ports[{index}]"
+        if not isinstance(port, dict):
+            errors.append(f"{port_prefix} must be an object")
+            continue
+        port_id = port.get("id")
+        if not isinstance(port_id, str) or not port_id:
+            errors.append(f"{port_prefix}.id must be a non-empty string")
+        elif port_id in seen:
+            errors.append(f"{prefix}.ports contains duplicate port id: {port_id}")
+        else:
+            seen.add(port_id)
+        if not isinstance(port.get("label"), str) or not port["label"].strip():
+            errors.append(f"{port_prefix}.label must be a non-empty string")
+        if port.get("direction") not in PORT_DIRECTIONS:
+            errors.append(f"{port_prefix}.direction is invalid: {port.get('direction')!r}")
+        if port.get("data_kind") not in PORT_DATA_KINDS:
+            errors.append(f"{port_prefix}.data_kind is invalid: {port.get('data_kind')!r}")
+
+
+def _edge_port_data_compatible(kind: str, source_kind: str | None, target_kind: str | None) -> bool:
+    if kind in {"runtime", "residual", "conditional_true", "conditional_false", "summary"}:
+        return source_kind in {"tensor", "cache"} and target_kind in {"tensor", "cache"}
+    if kind == "weight_mapping":
+        return source_kind == "weights" and target_kind == "weights"
+    if kind in {"dependency", "adaptation"}:
+        allowed = {"config", "capability", "control", "weights"}
+        return source_kind in allowed and target_kind in allowed
+    if kind == "parallel_partition":
+        allowed = {"capability", "control"}
+        return source_kind in allowed and target_kind in allowed
+    return True
+
+
 def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
     errors: list[str] = []
 
-    if data.get("schema_version") != "0.4":
-        errors.append("schema_version must be '0.4'")
+    if data.get("schema_version") != "0.5":
+        errors.append("schema_version must be '0.5'")
     if not isinstance(data.get("model_name"), str) or not data["model_name"].strip():
         errors.append("model_name must be a non-empty string")
     if data.get("detail_level") not in {"overview", "full"}:
@@ -160,6 +232,7 @@ def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
             elif label.strip().upper() in PARALLEL_BADGE_LABELS and kind != "note":
                 errors.append(f"{node_prefix}: TP/PP/EP must be badges or notes, not compute nodes")
             _validate_node_display(node.get("display"), node_prefix, errors)
+            _validate_ports(node.get("ports"), node_prefix, errors)
 
             badges = node.get("badges")
             if not isinstance(badges, list):
@@ -253,14 +326,41 @@ def validate_architecture_ir(data: dict[str, Any]) -> list[str]:
                 errors.append(f"{edge_prefix} must include source evidence")
             if isinstance(source, str):
                 outgoing.setdefault(source, []).append(edge)
-            if kind == "residual" and target in node_by_id and node_by_id[target].get("kind") not in {"add", "merge"}:
-                errors.append(f"{edge_prefix}: residual edge must target an add or merge node")
+            if kind == "residual" and target in node_by_id and node_by_id[target].get("kind") not in {"add", "merge", "normalization", "output"}:
+                errors.append(f"{edge_prefix}: residual edge must target an add, merge, normalization, or output node")
             if kind == "weight_mapping" and phase != "checkpoint_loading":
                 errors.append(f"{edge_prefix}: weight_mapping edge must use checkpoint_loading phase")
 
             if source in node_by_id and target in node_by_id:
                 source_node = node_by_id[source]
                 target_node = node_by_id[target]
+                source_port_id = edge.get("source_port")
+                target_port_id = edge.get("target_port")
+                source_port = None
+                target_port = None
+                if not isinstance(source_port_id, str) or not source_port_id:
+                    errors.append(f"{edge_prefix}.source_port must be a non-empty string")
+                else:
+                    source_port = _ports_by_id(source_node).get(source_port_id)
+                    if source_port is None:
+                        errors.append(f"{edge_prefix}.source_port references unknown port {source_port_id!r} on {source!r}")
+                if not isinstance(target_port_id, str) or not target_port_id:
+                    errors.append(f"{edge_prefix}.target_port must be a non-empty string")
+                else:
+                    target_port = _ports_by_id(target_node).get(target_port_id)
+                    if target_port is None:
+                        errors.append(f"{edge_prefix}.target_port references unknown port {target_port_id!r} on {target!r}")
+                if source_port is not None:
+                    if source_port.get("direction") == "input":
+                        errors.append(f"{edge_prefix}: source_port cannot be input-only")
+                if target_port is not None:
+                    if target_port.get("direction") == "output":
+                        errors.append(f"{edge_prefix}: target_port cannot be output-only")
+                if source_port is not None and target_port is not None:
+                    source_kind = source_port.get("data_kind")
+                    target_kind = target_port.get("data_kind")
+                    if not _edge_port_data_compatible(str(kind), source_kind, target_kind):
+                        errors.append(f"{edge_prefix}: incompatible port data_kind for {kind}: {source_kind!r} -> {target_kind!r}")
                 source_scope = source_node.get("scope")
                 target_scope = target_node.get("scope")
                 if kind == "runtime" and isinstance(source_scope, str) and isinstance(target_scope, str) and source_scope and target_scope and source_scope != target_scope:

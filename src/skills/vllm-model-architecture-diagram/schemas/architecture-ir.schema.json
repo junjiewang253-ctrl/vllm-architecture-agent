@@ -5,7 +5,7 @@
   "type": "object",
   "required": ["schema_version", "model_name", "detail_level", "pages", "unresolved"],
   "properties": {
-    "schema_version": {"const": "0.4"},
+    "schema_version": {"const": "0.5"},
     "model_name": {"type": "string", "minLength": 1},
     "detail_level": {"enum": ["overview", "full"]},
     "pages": {
@@ -18,7 +18,14 @@
           "id": {"type": "string", "minLength": 1},
           "title": {"type": "string", "minLength": 1},
           "page_type": {
-            "enum": ["overview", "decoder_detail", "attention_detail", "adaptation_map"]
+            "enum": [
+              "overview",
+              "decoder_detail",
+              "attention_detail",
+              "moe_detail",
+              "adapter_integration",
+              "parallelism_weight_loading"
+            ]
           },
           "nodes": {
             "type": "array",
@@ -69,6 +76,22 @@
                 "scope": {"type": ["string", "null"]},
                 "parent_id": {"type": ["string", "null"]},
                 "badges": {"type": "array", "items": {"type": "string"}},
+                "ports": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["id", "label", "direction", "data_kind"],
+                    "properties": {
+                      "id": {"type": "string", "minLength": 1},
+                      "label": {"type": "string", "minLength": 1},
+                      "direction": {"enum": ["input", "output", "bidirectional"]},
+                      "data_kind": {
+                        "enum": ["tensor", "config", "weights", "cache", "capability", "control"]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
                 "repetition": {
                   "type": ["object", "null"],
                   "properties": {
@@ -146,7 +169,20 @@
                   "properties": {
                     "visible": {"type": "boolean"},
                     "show_label": {"type": "boolean"},
-                    "route": {"enum": ["direct", "top_lane", "bottom_lane"]},
+                    "route": {
+                      "enum": [
+                        "direct",
+                        "top_lane",
+                        "bottom_lane",
+                        "horizontal_lane",
+                        "vertical_branch",
+                        "local_branch",
+                        "cache_write",
+                        "cache_read",
+                        "weight_mapping",
+                        "hidden_semantic"
+                      ]
+                    },
                     "label": {"type": ["string", "null"]}
                   },
                   "additionalProperties": false

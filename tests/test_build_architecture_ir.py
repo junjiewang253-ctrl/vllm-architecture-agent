@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,7 @@ def load_module(path: Path, name: str):
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -27,211 +29,139 @@ def build_hy_v3_ir() -> dict[str, Any]:
     return builder.build_architecture_ir(analysis)
 
 
-def overview(ir: dict[str, Any]) -> dict[str, Any]:
-    return next(page for page in ir["pages"] if page["id"] == "overview")
+def page(ir: dict[str, Any], page_id: str) -> dict[str, Any]:
+    return next(item for item in ir["pages"] if item["id"] == page_id)
 
 
-def decoder_detail(ir: dict[str, Any]) -> dict[str, Any]:
-    return next(page for page in ir["pages"] if page["id"] == "decoder_layer_detail")
+def nodes(ir: dict[str, Any], page_id: str) -> dict[str, dict[str, Any]]:
+    return {node["id"]: node for node in page(ir, page_id)["nodes"]}
 
 
-def attention_detail(ir: dict[str, Any]) -> dict[str, Any]:
-    return next(page for page in ir["pages"] if page["id"] == "attention_detail")
+def edges(ir: dict[str, Any], page_id: str) -> dict[str, dict[str, Any]]:
+    return {edge["id"]: edge for edge in page(ir, page_id)["edges"]}
 
 
-def adaptation_map(ir: dict[str, Any]) -> dict[str, Any]:
-    return next(page for page in ir["pages"] if page["id"] == "vllm_adaptation_map")
+def port_ids(node: dict[str, Any]) -> set[str]:
+    return {port["id"] for port in node.get("ports", [])}
 
 
-def nodes_by_id(ir: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {node["id"]: node for node in overview(ir)["nodes"]}
-
-
-def detail_nodes_by_id(ir: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {node["id"]: node for node in decoder_detail(ir)["nodes"]}
-
-
-def test_builds_overview_ir_for_hy_v3():
+def test_schema_version_and_six_pages():
     ir = build_hy_v3_ir()
-    assert ir["schema_version"] == "0.4"
-    assert ir["detail_level"] == "overview"
-    assert overview(ir)["id"] == "overview"
-    assert overview(ir)["page_type"] == "overview"
-
-
-def test_builder_generates_four_pages():
-    ir = build_hy_v3_ir()
-    assert [page["id"] for page in ir["pages"]] == [
+    assert ir["schema_version"] == "0.5"
+    assert [item["id"] for item in ir["pages"]] == [
         "overview",
         "decoder_layer_detail",
         "attention_detail",
-        "vllm_adaptation_map",
+        "moe_detail",
+        "adapter_integration",
+        "parallelism_weight_loading",
     ]
 
 
-def test_identifies_top_level_model():
-    nodes = nodes_by_id(build_hy_v3_ir())
-    assert nodes["hyv3_for_causal_lm"]["label"] == "HYV3ForCausalLM"
+def test_overview_keeps_top_level_flow_small_and_ported():
+    ir = build_hy_v3_ir()
+    overview_nodes = nodes(ir, "overview")
+    assert len(overview_nodes) == 11
+    assert "hidden_states_output" in overview_nodes
+    assert "logits_output" in overview_nodes
+    assert "hyv3_attention" not in overview_nodes
+    assert overview_nodes["logits_processor"]["display"]["label"] == "Logits Processor"
+    assert {"hidden_states", "lm_head", "logits"} <= port_ids(overview_nodes["logits_processor"])
+    assert edges(ir, "overview")["top_invokes_model"]["display"]["visible"] is False
+    assert edges(ir, "overview")["input_to_embedding"]["display"]["show_label"] is False
 
 
-def test_identifies_hyv3_model():
-    nodes = nodes_by_id(build_hy_v3_ir())
-    assert nodes["hyv3_model"]["label"] == "HYV3Model"
-    assert nodes["hyv3_model"]["parent_id"] == "hyv3_for_causal_lm"
-
-
-def test_identifies_vocab_parallel_embedding():
-    nodes = nodes_by_id(build_hy_v3_ir())
-    assert nodes["vocab_parallel_embedding"]["label"] == "VocabParallelEmbedding"
-    assert "TP" in nodes["vocab_parallel_embedding"]["badges"]
-
-
-def test_identifies_repeated_decoder_layer_with_repetition():
-    nodes = nodes_by_id(build_hy_v3_ir())
-    decoder = nodes["hyv3_decoder_layer"]
-    assert decoder["label"] == "HYV3DecoderLayer"
+def test_repeated_decoder_variants_remain_construction_semantics():
+    decoder = nodes(build_hy_v3_ir(), "overview")["hyv3_decoder_layer"]
     assert decoder["kind"] == "repeated_block"
     assert decoder["repetition"]["count_expression"] == "config.num_hidden_layers"
     assert decoder["repetition"]["local_start"] == "self.start_layer"
     assert decoder["repetition"]["local_end"] == "self.end_layer"
-
-
-def test_dense_moe_variants_are_construction_phase():
-    nodes = nodes_by_id(build_hy_v3_ir())
-    variants = nodes["hyv3_decoder_layer"]["variants"]
-    assert {
-        (variant["component"], variant["phase"]) for variant in variants
-    } == {
+    assert {(item["component"], item["phase"]) for item in decoder["variants"]} == {
         ("HYV3FeedForward", "construction"),
         ("HYV3MoEFused", "construction"),
     }
-    assert variants[0]["condition"] == "layer_idx < config.first_k_dense_replace"
+    assert decoder["badges"] == ["TP", "PP", "EP"]
 
 
-def test_overview_no_longer_contains_independent_attention_node():
-    nodes = nodes_by_id(build_hy_v3_ir())
-    assert "hyv3_attention" not in nodes
-    assert "self_attention" not in nodes
+def test_decoder_detail_uses_hidden_and_residual_ports_without_handoff_nodes():
+    ir = build_hy_v3_ir()
+    decoder_nodes = nodes(ir, "decoder_layer_detail")
+    assert "attention_residual" not in decoder_nodes
+    assert "ffn_residual" not in decoder_nodes
+    assert {"hidden_states", "residual"} <= port_ids(decoder_nodes["decoder_input"])
+    assert {"hidden_states", "residual", "normalized_hidden", "updated_residual"} <= port_ids(decoder_nodes["input_rmsnorm"])
+    assert {"attention_output", "residual", "normalized_hidden", "updated_residual"} <= port_ids(decoder_nodes["post_attention_rmsnorm"])
+    assert decoder_nodes["dense_ffn"]["phase"] == "construction"
+    assert decoder_nodes["moe_ffn"]["phase"] == "construction"
+    assert {edge["kind"] for edge in page(ir, "decoder_layer_detail")["edges"]}.isdisjoint({"conditional_true", "conditional_false"})
 
 
-def test_decoder_detail_contains_self_attention_marked_tp():
-    nodes = detail_nodes_by_id(build_hy_v3_ir())
-    attention = nodes["self_attention"]
-    assert attention["label"] == "HYV3Attention"
-    assert "TP" in attention["badges"]
+def test_attention_detail_has_qkv_ports_and_cache_ports():
+    attention_nodes = nodes(build_hy_v3_ir(), "attention_detail")
+    assert attention_nodes["qkv_projection"]["display"]["label"] == "QKV Projection"
+    assert {"q", "k", "v"} <= port_ids(attention_nodes["qkv_split"])
+    assert {"q", "k", "v", "kv_cache", "output"} <= port_ids(attention_nodes["attention_core"])
+    assert {"write", "read"} <= port_ids(attention_nodes["kv_cache"])
+    assert "TP" in attention_nodes["output_projection"]["badges"]
 
 
-def test_decoder_detail_contains_required_stages():
-    nodes = detail_nodes_by_id(build_hy_v3_ir())
-    assert nodes["input_layernorm"]["display"]["label"] == "Input RMSNorm"
-    assert nodes["post_attention_layernorm"]["display"]["label"] == "Post-Attention RMSNorm"
-    assert nodes["ffn_stage"]["display"]["label"] == "Feed-Forward Stage"
-    assert nodes["attention_residual"]["kind"] == "add"
-    assert nodes["ffn_residual"]["kind"] == "add"
+def test_attention_hpc_and_fallback_are_independent_and_v_bypasses_qk_norm():
+    attention_edges = {(edge["source"], edge["target"]) for edge in page(build_hy_v3_ir(), "attention_detail")["edges"]}
+    assert ("qkv_split", "hpc_fused_processing") in attention_edges
+    assert ("hpc_fused_processing", "attention_core") in attention_edges
+    assert ("qkv_split", "q_stream") in attention_edges
+    assert ("qkv_split", "k_stream") in attention_edges
+    assert ("qkv_split", "v_stream") in attention_edges
+    assert ("v_stream", "fallback_q_norm") not in attention_edges
+    assert ("v_stream", "fallback_k_norm") not in attention_edges
+    assert ("v_stream", "attention_core") in attention_edges
+    assert ("hpc_fused_processing", "fallback_q_norm") not in attention_edges
 
 
-def test_moe_and_decoder_parallel_badges_are_conservative():
-    nodes = nodes_by_id(build_hy_v3_ir())
-    decoder = nodes["hyv3_decoder_layer"]
-    assert "PP" in decoder["badges"]
-    assert "EP" in decoder["badges"]
+def test_moe_detail_contains_router_experts_shared_experts_and_ep():
+    moe_nodes = nodes(build_hy_v3_ir(), "moe_detail")
+    for node_id in ["gate_linear", "router_logits", "fused_moe", "routed_experts", "shared_experts", "eplb_metadata"]:
+        assert node_id in moe_nodes
+    assert "EP" in moe_nodes["fused_moe"]["badges"]
+    assert moe_nodes["fused_moe"]["display"]["label"] == "FusedMoE"
 
 
-def test_decoder_detail_dense_moe_are_construction_phase():
-    nodes = detail_nodes_by_id(build_hy_v3_ir())
-    assert nodes["dense_ffn"]["phase"] == "construction"
-    assert nodes["moe_ffn"]["phase"] == "construction"
-    edges = {edge["kind"] for edge in decoder_detail(build_hy_v3_ir())["edges"]}
-    assert "conditional_true" not in edges
-    assert "conditional_false" not in edges
+def test_adapter_integration_scope_excludes_weight_loading_and_vllm_engine():
+    adapter_nodes = nodes(build_hy_v3_ir(), "adapter_integration")
+    for node_id in ["supports_pp", "supports_lora", "mixture_of_experts", "support_torch_compile"]:
+        assert node_id in adapter_nodes
+    forbidden = {"Scheduler", "Worker", "EngineCore", "Request Batching"}
+    assert forbidden.isdisjoint({node["label"] for node in adapter_nodes.values()})
+    assert not any("mapping" in node_id or "checkpoint" in node_id for node_id in adapter_nodes)
+
+
+def test_parallelism_and_weight_loading_contains_expected_mapping_ports():
+    ir = build_hy_v3_ir()
+    parallel_nodes = nodes(ir, "parallelism_weight_loading")
+    for node_id in ["tensor_parallel_lane", "pipeline_parallel_lane", "expert_parallel_lane"]:
+        assert node_id in parallel_nodes
+    for node_id in ["qkv_checkpoint_weights", "qkv_proj_mapping", "gate_up_checkpoint_weights", "gate_up_proj_mapping", "fused_moe_parameter_mapping"]:
+        assert "weights_in" in port_ids(parallel_nodes[node_id])
+        assert "weights_out" in port_ids(parallel_nodes[node_id])
+    weight_edges = [edge for edge in page(ir, "parallelism_weight_loading")["edges"] if edge["kind"] == "weight_mapping"]
+    assert weight_edges
+    assert all(edge["source_port"] == "weights_out" and edge["target_port"] == "weights_in" for edge in weight_edges)
 
 
 def test_external_parameters_enter_unresolved():
-    ir = build_hy_v3_ir()
-    unresolved = ir["unresolved"]
+    unresolved = build_hy_v3_ir()["unresolved"]
     config_item = next(item for item in unresolved if item["item"] == "external_config_values")
     assert "config.num_hidden_layers" in config_item["expressions"]
     assert "config.first_k_dense_replace" in config_item["expressions"]
 
 
-def test_all_major_nodes_have_evidence():
+def test_all_major_nodes_and_edges_have_evidence():
     ir = build_hy_v3_ir()
-    for page in ir["pages"]:
-        for node in page["nodes"]:
+    for ir_page in ir["pages"]:
+        for node in ir_page["nodes"]:
             if node["kind"] in {"container", "note"}:
                 continue
             assert node["evidence"], node["id"]
-
-
-def test_display_label_and_hidden_overview_edge_are_generated():
-    ir = build_hy_v3_ir()
-    nodes = nodes_by_id(ir)
-    assert nodes["vocab_parallel_embedding"]["display"]["label"] == "Token Embedding"
-    edges = {edge["id"]: edge for edge in overview(ir)["edges"]}
-    assert edges["top_invokes_model"]["display"]["visible"] is False
-    assert edges["input_to_embedding"]["display"]["show_label"] is False
-
-
-def test_decoder_residual_edges_have_routes():
-    edges = {edge["id"]: edge for edge in decoder_detail(build_hy_v3_ir())["edges"]}
-    assert edges["decoder_input_residual_to_attention_residual"]["display"]["route"] == "top_lane"
-    assert edges["attention_residual_to_ffn_residual"]["display"]["route"] == "bottom_lane"
-
-
-def test_logits_processor_edges_use_ports():
-    edges = {edge["id"]: edge for edge in overview(build_hy_v3_ir())["edges"]}
-    assert edges["model_hidden_states_to_logits_processor"]["target_port"] == "hidden_states"
-    assert edges["lm_head_to_logits_processor"]["target_port"] == "lm_head"
-
-
-def test_attention_detail_contains_qkv_projection_and_tp_output():
-    nodes = {node["id"]: node for node in attention_detail(build_hy_v3_ir())["nodes"]}
-    assert nodes["qkv_projection"]["display"]["label"] == "QKV Projection"
-    assert nodes["output_projection"]["display"]["subtitle"] == "RowParallelLinear"
-    assert "TP" in nodes["output_projection"]["badges"]
-
-
-def test_attention_detail_has_independent_hpc_and_fallback_branches():
-    page = attention_detail(build_hy_v3_ir())
-    edges = {(edge["source"], edge["target"], edge["kind"]) for edge in page["edges"]}
-    assert ("split_qkv", "hpc_rope_norm", "conditional_true") in edges
-    assert ("split_qkv", "fallback_qk_norm", "conditional_false") in edges
-    assert ("hpc_rope_norm", "attention_core", "runtime") in edges
-    assert ("rotary_embedding", "attention_core", "runtime") in edges
-    assert ("hpc_rope_norm", "fallback_qk_norm", "runtime") not in edges
-
-
-def test_adaptation_map_contains_regions_and_interfaces():
-    nodes = {node["id"]: node for node in adaptation_map(build_hy_v3_ir())["nodes"]}
-    for node_id in [
-        "region_hf_inputs",
-        "region_vllm_config",
-        "region_adapter_interfaces",
-        "region_execution_components",
-        "region_weight_parallel",
-        "supports_pp",
-        "supports_lora",
-        "mixture_of_experts",
-        "support_torch_compile",
-    ]:
-        assert node_id in nodes
-
-
-def test_adaptation_map_contains_parallel_and_weight_mapping_nodes():
-    nodes = {node["id"]: node for node in adaptation_map(build_hy_v3_ir())["nodes"]}
-    for node_id in [
-        "tensor_parallel",
-        "pipeline_parallel",
-        "expert_parallel",
-        "packed_modules_mapping",
-        "stacked_params_mapping",
-        "expert_parameter_mapping",
-    ]:
-        assert node_id in nodes
-
-
-def test_adaptation_map_does_not_include_unseen_vllm_system_components():
-    labels = {node["label"] for node in adaptation_map(build_hy_v3_ir())["nodes"]}
-    assert "Scheduler" not in labels
-    assert "Worker" not in labels
-    assert "EngineCore" not in labels
+        for edge in ir_page["edges"]:
+            assert edge["evidence"], edge["id"]

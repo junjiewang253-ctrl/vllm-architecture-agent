@@ -1,32 +1,31 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from copy import deepcopy
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VALIDATOR_PATH = (
-    ROOT
-    / "src"
-    / "skills"
-    / "vllm-model-architecture-diagram"
-    / "scripts"
-    / "validate_architecture_ir.py"
-)
+VALIDATOR_PATH = ROOT / "src" / "skills" / "vllm-model-architecture-diagram" / "scripts" / "validate_architecture_ir.py"
 
 
 def load_validator_module():
     spec = importlib.util.spec_from_file_location("validate_architecture_ir", VALIDATOR_PATH)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    sys.modules["validate_architecture_ir"] = module
     spec.loader.exec_module(module)
     return module
 
 
+def port(port_id: str, direction: str, data_kind: str = "tensor") -> dict[str, str]:
+    return {"id": port_id, "label": port_id, "direction": direction, "data_kind": data_kind}
+
+
 def valid_ir():
     return {
-        "schema_version": "0.4",
+        "schema_version": "0.5",
         "model_name": "Example",
         "detail_level": "overview",
         "pages": [
@@ -43,6 +42,7 @@ def valid_ir():
                         "scope": "ExampleModel.forward",
                         "parent_id": None,
                         "badges": [],
+                        "ports": [port("hidden_out", "output")],
                         "evidence": [{"type": "direct", "line": 1}],
                     },
                     {
@@ -53,18 +53,15 @@ def valid_ir():
                         "scope": "ExampleModel.forward",
                         "parent_id": None,
                         "badges": ["PP"],
+                        "ports": [
+                            port("hidden_in", "input"),
+                            port("hidden_out", "output"),
+                            port("residual_out", "output"),
+                        ],
                         "repetition": {"count_expression": "config.num_hidden_layers"},
                         "variants": [
-                            {
-                                "condition": "layer_idx < config.first_k_dense_replace",
-                                "component": "ExampleFeedForward",
-                                "phase": "construction",
-                            },
-                            {
-                                "condition": "layer_idx >= config.first_k_dense_replace",
-                                "component": "ExampleMoE",
-                                "phase": "construction",
-                            },
+                            {"condition": "layer_idx < config.first_k_dense_replace", "component": "ExampleFeedForward", "phase": "construction"},
+                            {"condition": "layer_idx >= config.first_k_dense_replace", "component": "ExampleMoE", "phase": "construction"},
                         ],
                         "evidence": [{"type": "direct", "line": 2}],
                     },
@@ -76,7 +73,12 @@ def valid_ir():
                         "scope": "ExampleModel.forward",
                         "parent_id": None,
                         "badges": [],
-                        "evidence": [{"type": "direct", "line": 3}],
+                        "ports": [
+                            port("hidden_in", "input"),
+                            port("residual_in", "input"),
+                            port("hidden_out", "output"),
+                        ],
+                        "evidence": [{"type": "derived", "line": 3}],
                     },
                     {
                         "id": "logits",
@@ -86,6 +88,7 @@ def valid_ir():
                         "scope": "ExampleForCausalLM.compute_logits",
                         "parent_id": None,
                         "badges": [],
+                        "ports": [port("hidden_states", "input"), port("logits", "output")],
                         "evidence": [{"type": "direct", "line": 4}],
                     },
                 ],
@@ -97,6 +100,8 @@ def valid_ir():
                         "kind": "runtime",
                         "phase": "runtime",
                         "scope": "ExampleModel.forward",
+                        "source_port": "hidden_out",
+                        "target_port": "hidden_in",
                         "evidence": [{"type": "direct", "line": 2}],
                     },
                     {
@@ -106,6 +111,8 @@ def valid_ir():
                         "kind": "runtime",
                         "phase": "runtime",
                         "scope": "ExampleModel.forward",
+                        "source_port": "hidden_out",
+                        "target_port": "hidden_in",
                         "evidence": [{"type": "direct", "line": 3}],
                     },
                     {
@@ -115,6 +122,8 @@ def valid_ir():
                         "kind": "residual",
                         "phase": "runtime",
                         "scope": "ExampleModel.forward",
+                        "source_port": "residual_out",
+                        "target_port": "residual_in",
                         "evidence": [{"type": "direct", "line": 3}],
                     },
                     {
@@ -124,6 +133,7 @@ def valid_ir():
                         "kind": "summary",
                         "phase": "runtime",
                         "scope": "ExampleForCausalLM.compute_logits",
+                        "source_port": "hidden_out",
                         "target_port": "hidden_states",
                         "evidence": [{"type": "derived", "lines": [3, 4]}],
                     },
@@ -168,8 +178,7 @@ def test_invocation_edge_cross_scope_passes():
     module = load_validator_module()
     data = valid_ir()
     data["pages"][0]["edges"][3]["kind"] = "invocation"
-    errors = module.validate_architecture_ir(data)
-    assert errors == []
+    assert module.validate_architecture_ir(data) == []
 
 
 def test_construction_node_with_runtime_edge_fails():
@@ -221,10 +230,11 @@ def test_edge_display_show_label_must_be_boolean():
     assert any("display.show_label must be boolean" in error for error in errors)
 
 
-def test_residual_must_target_add_or_merge():
+def test_residual_must_target_add_normalization_or_output():
     module = load_validator_module()
     data = valid_ir()
     data["pages"][0]["edges"][2]["target"] = "decoder"
+    data["pages"][0]["edges"][2]["target_port"] = "hidden_in"
     errors = module.validate_architecture_ir(data)
     assert any("residual edge must target" in error for error in errors)
 
@@ -240,3 +250,35 @@ def test_overview_has_at_most_twelve_major_nodes():
         data["pages"][0]["nodes"].append(node)
     errors = module.validate_architecture_ir(data)
     assert any("maximum is 12" in error for error in errors)
+
+
+def test_missing_source_port_fails():
+    module = load_validator_module()
+    data = valid_ir()
+    data["pages"][0]["edges"][0]["source_port"] = "missing"
+    errors = module.validate_architecture_ir(data)
+    assert any("source_port references unknown port 'missing'" in error for error in errors)
+
+
+def test_input_only_source_port_fails():
+    module = load_validator_module()
+    data = valid_ir()
+    data["pages"][0]["edges"][1]["source_port"] = "hidden_in"
+    errors = module.validate_architecture_ir(data)
+    assert any("source_port cannot be input-only" in error for error in errors)
+
+
+def test_output_only_target_port_fails():
+    module = load_validator_module()
+    data = valid_ir()
+    data["pages"][0]["edges"][0]["target_port"] = "hidden_out"
+    errors = module.validate_architecture_ir(data)
+    assert any("target_port cannot be output-only" in error for error in errors)
+
+
+def test_runtime_edge_requires_tensor_or_cache_ports():
+    module = load_validator_module()
+    data = valid_ir()
+    data["pages"][0]["nodes"][0]["ports"][0]["data_kind"] = "config"
+    errors = module.validate_architecture_ir(data)
+    assert any("incompatible port data_kind for runtime" in error for error in errors)

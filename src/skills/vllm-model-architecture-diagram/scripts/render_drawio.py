@@ -710,7 +710,154 @@ def _add_badges(root: ET.Element, node: dict[str, Any], box: LayoutBox) -> list[
     return decorations
 
 
-def render_drawio(ir: dict[str, Any]) -> str:
+def _view_node_by_id(page: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        str(node["semantic_id"]): node
+        for node in page.get("visible_nodes", [])
+        if isinstance(node, dict) and isinstance(node.get("semantic_id"), str)
+    }
+
+
+def _view_edge_by_id(page: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        str(edge["semantic_id"]): edge
+        for edge in page.get("visible_edges", [])
+        if isinstance(edge, dict) and isinstance(edge.get("semantic_id"), str)
+    }
+
+
+def _layout_page_by_id(layout_plan: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        str(page["id"]): page
+        for page in layout_plan.get("pages", [])
+        if isinstance(page, dict) and isinstance(page.get("id"), str)
+    }
+
+
+def _label_from_view(node: dict[str, Any]) -> str:
+    label = str(node.get("display_label") or "")
+    subtitle = node.get("display_subtitle")
+    if isinstance(subtitle, str) and subtitle.strip():
+        return f"{label}\n{subtitle}"
+    return label
+
+
+def _box_from_plan(value: dict[str, Any]) -> LayoutBox:
+    return LayoutBox(float(value["x"]), float(value["y"]), float(value["width"]), float(value["height"]))
+
+
+def _relative_box(box: LayoutBox, parent_id: str | None, plan_nodes: dict[str, Any]) -> LayoutBox:
+    if parent_id and parent_id in plan_nodes:
+        parent = _box_from_plan(plan_nodes[parent_id])
+        return LayoutBox(box.x - parent.x, box.y - parent.y, box.width, box.height)
+    return box
+
+
+def _add_points_geometry(cell: ET.Element, points: list[Any]) -> None:
+    geometry = ET.SubElement(cell, "mxGeometry", {"relative": "1", "as": "geometry"})
+    points_element = ET.SubElement(geometry, "Array", {"as": "points"})
+    for point in points:
+        if isinstance(point, list) and len(point) == 2:
+            ET.SubElement(points_element, "mxPoint", {"x": _fmt(float(point[0])), "y": _fmt(float(point[1]))})
+
+
+def _render_from_view_plan(view: dict[str, Any], layout_plan: dict[str, Any]) -> str:
+    pages = view.get("pages")
+    if not isinstance(pages, list) or not pages:
+        raise ValueError("Diagram View must contain at least one page")
+    layout_pages = _layout_page_by_id(layout_plan)
+    mxfile = ET.Element(
+        "mxfile",
+        {
+            "host": "app.diagrams.net",
+            "modified": "2026-07-23T00:00:00.000Z",
+            "agent": "vllm-architecture-agent",
+            "version": "v0.8",
+            "type": "device",
+        },
+    )
+    for page in pages:
+        page_id = str(page["id"])
+        layout_page = layout_pages.get(page_id)
+        if layout_page is None:
+            raise ValueError(f"layout plan missing page {page_id!r}")
+        diagram = ET.SubElement(mxfile, "diagram", {"id": page_id, "name": str(page["title"])})
+        model = ET.SubElement(
+            diagram,
+            "mxGraphModel",
+            {
+                "dx": "1200",
+                "dy": "700",
+                "grid": "1",
+                "gridSize": "10",
+                "guides": "1",
+                "tooltips": "1",
+                "connect": "1",
+                "arrows": "1",
+                "fold": "1",
+                "page": "1",
+                "pageScale": "1",
+                "pageWidth": str(layout_page["width"]),
+                "pageHeight": str(layout_page["height"]),
+                "math": "0",
+                "shadow": "0",
+            },
+        )
+        root = ET.SubElement(model, "root")
+        ET.SubElement(root, "mxCell", {"id": "0"})
+        ET.SubElement(root, "mxCell", {"id": ROOT_PARENT_ID, "parent": "0"})
+        title = _make_cell(root, {"id": f"decorative_title_{page_id}", "value": str(page["title"]), "style": "text;html=0;strokeColor=none;fillColor=none;fontFamily=Inter;fontSize=22;fontStyle=1;align=left;verticalAlign=middle;", "vertex": "1", "parent": ROOT_PARENT_ID})
+        _add_geometry(title, LayoutBox(40, 12, 460, 28))
+
+        for region in layout_page.get("regions", []):
+            if not isinstance(region, dict):
+                continue
+            cell = _make_cell(root, {"id": f"decorative_region_{page_id}_{region['id']}", "value": str(region["label"]), "style": "rounded=1;whiteSpace=wrap;html=0;fontFamily=Inter;fontSize=12;fontStyle=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;fillColor=#F8FAFC;strokeColor=#CBD5E1;dashed=1;", "vertex": "1", "parent": ROOT_PARENT_ID})
+            _add_geometry(cell, LayoutBox(float(region["x"]), float(region["y"]), float(region["width"]), float(region["height"])))
+
+        view_nodes = _view_node_by_id(page)
+        plan_nodes = layout_page.get("nodes", {})
+        for node_id, view_node in view_nodes.items():
+            plan_node = plan_nodes.get(node_id)
+            if not isinstance(plan_node, dict):
+                continue
+            box = _box_from_plan(plan_node)
+            parent_id = plan_node.get("parent_id")
+            parent = str(parent_id) if isinstance(parent_id, str) and parent_id else ROOT_PARENT_ID
+            rel_box = _relative_box(box, parent_id if isinstance(parent_id, str) else None, plan_nodes)
+            kind = str(view_node.get("kind") or "note")
+            value = "" if kind in {"container", "repeated_block"} else _label_from_view(view_node)
+            cell = _make_cell(root, {"id": node_id, "value": value, "style": NODE_STYLES.get(kind, NODE_STYLES["note"]), "vertex": "1", "parent": parent})
+            _add_geometry(cell, rel_box)
+            if kind in {"container", "repeated_block"}:
+                header = _make_cell(root, {"id": f"decorative_header_{node_id}", "value": _label_from_view(view_node), "style": "rounded=0;whiteSpace=wrap;html=0;fontFamily=Inter;fontSize=13;fontStyle=1;align=left;verticalAlign=middle;spacingLeft=10;fillColor=#E2E8F0;strokeColor=none;", "vertex": "1", "parent": node_id})
+                _add_geometry(header, LayoutBox(0, 0, rel_box.width, 40))
+            for index, badge in enumerate(view_node.get("badges", [])):
+                if not isinstance(badge, str):
+                    continue
+                badge_y = 44.0 if kind in {"container", "repeated_block"} else 8.0
+                badge_cell = _make_cell(root, {"id": f"decorative_badge_{node_id}_{badge}", "value": badge, "style": "rounded=1;whiteSpace=wrap;html=0;fontFamily=Inter;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;fillColor=#EEF2FF;strokeColor=#64748B;arcSize=20;", "vertex": "1", "parent": node_id})
+                _add_geometry(badge_cell, LayoutBox(rel_box.width - 34 - index * 34, badge_y, 28, 18))
+
+        view_edges = _view_edge_by_id(page)
+        for edge_id, view_edge in view_edges.items():
+            plan_edge = layout_page.get("edges", {}).get(edge_id)
+            if not isinstance(plan_edge, dict):
+                continue
+            style_kind = str(view_edge.get("style_kind") or "runtime")
+            style = EDGE_STYLES.get(style_kind, EDGE_STYLES["runtime"])
+            if plan_edge.get("visible") is False:
+                style += "opacity=0;"
+            value = str(plan_edge.get("label") or "") if plan_edge.get("label_visible") is True else ""
+            attrs = {"id": edge_id, "value": value, "style": style, "edge": "1", "parent": ROOT_PARENT_ID, "source": str(view_edge["source"]), "target": str(view_edge["target"]), "sourcePort": str(view_edge.get("source_port") or ""), "targetPort": str(view_edge.get("target_port") or "")}
+            cell = _make_cell(root, attrs)
+            _add_points_geometry(cell, plan_edge.get("points", []))
+    return ET.tostring(mxfile, encoding="unicode", short_empty_elements=True) + "\n"
+
+
+def render_drawio(ir: dict[str, Any], layout_plan: dict[str, Any] | None = None) -> str:
+    if layout_plan is not None:
+        return _render_from_view_plan(ir, layout_plan)
     pages = ir.get("pages")
     if not isinstance(pages, list) or not pages:
         raise ValueError("IR must contain at least one page")
@@ -862,8 +1009,9 @@ def render_drawio(ir: dict[str, Any]) -> str:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Render Architecture IR to Draw.io XML.")
-    parser.add_argument("input", type=Path, help="Architecture IR JSON file")
+    parser = argparse.ArgumentParser(description="Render Diagram View/Layout Plan to Draw.io XML.")
+    parser.add_argument("input", type=Path, help="Diagram View JSON file, or Architecture IR for legacy rendering")
+    parser.add_argument("--layout-plan", type=Path, help="Layout Plan JSON file")
     parser.add_argument("--output", "-o", type=Path, required=True, help="Output .drawio path")
     return parser.parse_args(argv)
 
@@ -876,13 +1024,22 @@ def main(argv: list[str] | None = None) -> int:
     try:
         data = json.loads(args.input.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        print(f"error: unable to read Architecture IR: {exc}", file=sys.stderr)
+        print(f"error: unable to read input JSON: {exc}", file=sys.stderr)
         return 2
     if not isinstance(data, dict):
         print("error: Architecture IR root must be an object", file=sys.stderr)
         return 2
     try:
-        xml = render_drawio(data)
+        layout_plan = None
+        if args.layout_plan is not None:
+            if not args.layout_plan.exists() or not args.layout_plan.is_file():
+                print(f"error: layout plan does not exist: {args.layout_plan}", file=sys.stderr)
+                return 2
+            layout_plan = json.loads(args.layout_plan.read_text(encoding="utf-8"))
+            if not isinstance(layout_plan, dict):
+                print("error: layout plan root must be an object", file=sys.stderr)
+                return 2
+        xml = render_drawio(data, layout_plan)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(xml, encoding="utf-8")
     except (OSError, ValueError) as exc:
