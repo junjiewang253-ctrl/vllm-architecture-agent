@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/vllm/review/visual_review.schema.json",
+  "title": "Codex visual review payload",
+  "type": "object",
+  "required": ["model_name", "findings"],
+  "properties": {
+    "model_name": {"type": "string", "minLength": 1},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "page_id", "type", "severity", "affected_ids", "description", "recommended_action", "semantic_change"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "page_id": {"type": "string", "minLength": 1},
+          "type": {"type": "string", "minLength": 1},
+          "severity": {"enum": ["critical", "major", "minor", "informational"]},
+          "affected_ids": {"type": "array", "items": {"type": "string"}},
+          "description": {"type": "string"},
+          "recommended_action": {"type": "string"},
+          "semantic_change": {"type": "boolean"}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

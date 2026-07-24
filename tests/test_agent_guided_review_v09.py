@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_ROOT = ROOT / "src" / "skills" / "vllm-model-architecture-diagram"
 SCRIPTS = SKILL_ROOT / "scripts"
+CLI_PATH = ROOT / "src" / "vllm_architecture_agent" / "cli.py"
 HY_V3_PATH = ROOT / "samples" / "hy_v3.py"
 
 
@@ -123,6 +125,62 @@ def pipeline_artifacts(tmp_path: Path) -> dict[str, Any]:
             "baseline_view": baseline_view_path,
             "view_patch": view_patch_path,
         },
+    }
+
+
+def _codex_semantic_mock(review: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "semantic_review": {
+            "model_name": review["model_name"],
+            "findings": [
+                {
+                    "id": finding["finding_id"],
+                    "type": finding["type"],
+                    "severity": finding["severity"],
+                    "description": finding["description"],
+                    "evidence_fact_ids": finding["evidence_fact_ids"],
+                    "confidence": finding["confidence"],
+                    "patch_op_ids": finding.get("patch_op_ids", []),
+                }
+                for finding in review["architecture_findings"]
+            ],
+            "fact_dispositions": [
+                {
+                    "fact_id": item["fact_id"],
+                    "status": item["disposition"],
+                    "reason": item["reason"],
+                    "target_ids": item["target_ids"],
+                    "supporting_fact_ids": item["supporting_fact_ids"],
+                    "confidence": item["confidence"],
+                    "external_symbol": item.get("external_symbol"),
+                }
+                for item in review["fact_dispositions"]
+            ],
+        },
+        "architecture_ir_patch": patch,
+    }
+
+
+def _codex_visual_mock(review: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "visual_review": {
+            "model_name": review["model_name"],
+            "findings": [
+                {
+                    "id": finding["finding_id"],
+                    "page_id": finding["page_id"],
+                    "type": finding["type"],
+                    "severity": finding["severity"],
+                    "affected_ids": finding["affected_ids"],
+                    "description": finding["description"],
+                    "recommended_action": finding["recommended_action"],
+                    "semantic_change": finding["semantic_change"],
+                    "patch_op_ids": finding.get("patch_op_ids", []),
+                }
+                for finding in review["findings"]
+            ],
+        },
+        "diagram_view_patch": patch,
     }
 
 
@@ -301,3 +359,174 @@ def test_review_lock_detects_stale_source(tmp_path: Path):
     mutated_source = tmp_path / "hy_v3.py"
     mutated_source.write_text(HY_V3_PATH.read_text(encoding="utf-8") + "\n# mutation\n", encoding="utf-8")
     assert lock["source_sha256"] != lock_builder._sha256(mutated_source)
+
+
+def test_semantic_review_runner_uses_mock_codex_and_saves_patch(tmp_path: Path):
+    artifacts = pipeline_artifacts(tmp_path)
+    runner = load_module("run_semantic_review.py", "run_semantic_review_v091_tests")
+    (tmp_path / "source-analysis.json").write_text(json.dumps(artifacts["analysis"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (tmp_path / "inventory.json").write_text(json.dumps(artifacts["inventory"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (tmp_path / "baseline-coverage.json").write_text(json.dumps(artifacts["baseline_coverage"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    mock = tmp_path / "mock-semantic.md"
+    mock.write_text(
+        "Codex review result\n```json\n"
+        + json.dumps(_codex_semantic_mock(artifacts["review"], artifacts["patch"]))
+        + "\n```\n",
+        encoding="utf-8",
+    )
+    review_out = tmp_path / "runner-semantic-review.json"
+    patch_out = tmp_path / "runner-ir.patch.json"
+    rc = runner.main(
+        [
+            str(tmp_path / "source-analysis.json"),
+            str(tmp_path / "inventory.json"),
+            str(artifacts["paths"]["baseline_ir"]),
+            str(tmp_path / "baseline-coverage.json"),
+            "--source-file",
+            str(HY_V3_PATH),
+            "--review-output",
+            str(review_out),
+            "--patch-output",
+            str(patch_out),
+            "--mock-response",
+            str(mock),
+        ]
+    )
+    assert rc == 0
+    saved_review = json.loads(review_out.read_text(encoding="utf-8"))
+    saved_patch = json.loads(patch_out.read_text(encoding="utf-8"))
+    assert saved_review["summary"]["codex_review"] is True
+    assert saved_patch["base_ir_sha256"] == artifacts["patch"]["base_ir_sha256"]
+
+
+def test_semantic_review_runner_invalid_json_writes_failure(tmp_path: Path):
+    artifacts = pipeline_artifacts(tmp_path)
+    runner = load_module("run_semantic_review.py", "run_semantic_review_failure_v091_tests")
+    (tmp_path / "source-analysis.json").write_text(json.dumps(artifacts["analysis"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (tmp_path / "inventory.json").write_text(json.dumps(artifacts["inventory"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (tmp_path / "baseline-coverage.json").write_text(json.dumps(artifacts["baseline_coverage"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    mock = tmp_path / "bad-response.txt"
+    mock.write_text("not json", encoding="utf-8")
+    failure = tmp_path / "review_failed.json"
+    rc = runner.main(
+        [
+            str(tmp_path / "source-analysis.json"),
+            str(tmp_path / "inventory.json"),
+            str(artifacts["paths"]["baseline_ir"]),
+            str(tmp_path / "baseline-coverage.json"),
+            "--source-file",
+            str(HY_V3_PATH),
+            "--review-output",
+            str(tmp_path / "unused-review.json"),
+            "--patch-output",
+            str(tmp_path / "unused.patch.json"),
+            "--mock-response",
+            str(mock),
+            "--review-failed-output",
+            str(failure),
+        ]
+    )
+    assert rc == 1
+    assert json.loads(failure.read_text(encoding="utf-8"))["status"] == "failed"
+    assert not (tmp_path / "unused.patch.json").exists()
+
+
+def test_visual_review_runner_uses_mock_codex_and_saves_view_patch(tmp_path: Path):
+    artifacts = pipeline_artifacts(tmp_path)
+    runner = load_module("run_visual_review.py", "run_visual_review_v091_tests")
+    (tmp_path / "reviewed-ir.json").write_text(json.dumps(artifacts["reviewed_ir"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    metrics = tmp_path / "metrics.json"
+    metrics.write_text(json.dumps({"pages": [{"id": "overview"}]}), encoding="utf-8")
+    mock = tmp_path / "mock-visual.md"
+    mock.write_text(
+        "```json\n" + json.dumps(_codex_visual_mock(artifacts["visual_review"], artifacts["view_patch"])) + "\n```\n",
+        encoding="utf-8",
+    )
+    review_out = tmp_path / "runner-visual-review.json"
+    patch_out = tmp_path / "runner-view.patch.json"
+    rc = runner.main(
+        [
+            str(tmp_path / "reviewed-ir.json"),
+            str(artifacts["paths"]["baseline_view"]),
+            str(metrics),
+            "--review-output",
+            str(review_out),
+            "--patch-output",
+            str(patch_out),
+            "--mock-response",
+            str(mock),
+        ]
+    )
+    assert rc == 0
+    saved_review = json.loads(review_out.read_text(encoding="utf-8"))
+    saved_patch = json.loads(patch_out.read_text(encoding="utf-8"))
+    assert saved_review["summary"]["codex_review"] is True
+    assert saved_patch["base_view_sha256"] == artifacts["view_patch"]["base_view_sha256"]
+
+
+def test_vllm_arch_reviewed_mode_uses_existing_semantic_artifacts(tmp_path: Path):
+    artifacts = pipeline_artifacts(tmp_path)
+    semantic_review = tmp_path / "semantic-review.lock.json"
+    ir_patch = tmp_path / "architecture-ir.patch.lock.json"
+    visual_mock = tmp_path / "visual-mock.json"
+    semantic_review.write_text(json.dumps(artifacts["review"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    ir_patch.write_text(json.dumps(artifacts["patch"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    visual_mock.write_text(json.dumps(_codex_visual_mock(artifacts["visual_review"], artifacts["view_patch"])), encoding="utf-8")
+    outputs = tmp_path / "cli-outputs"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(CLI_PATH),
+            "run",
+            "--input",
+            str(HY_V3_PATH),
+            "--outputs-dir",
+            str(outputs),
+            "--model-name",
+            "hy-v3-v091-cli",
+            "--mode",
+            "reviewed",
+            "--semantic-review",
+            str(semantic_review),
+            "--ir-patch",
+            str(ir_patch),
+            "--mock-visual-review",
+            str(visual_mock),
+        ],
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr + completed.stdout
+    assert (outputs / "hy-v3-v091-cli-architecture.drawio").exists()
+    coverage = json.loads((outputs / "hy-v3-v091-cli-semantic-coverage.json").read_text(encoding="utf-8"))
+    assert coverage["summary"]["required"]["unresolved"] == 0
+    assert coverage["summary"]["required"]["orphaned"] == 0
+    assert (outputs / "hy-v3-v091-cli-review-lock.json").exists()
+
+
+def test_vllm_arch_reviewed_mode_requires_review_artifacts(tmp_path: Path):
+    outputs = tmp_path / "cli-missing-review"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(CLI_PATH),
+            "run",
+            "--input",
+            str(HY_V3_PATH),
+            "--outputs-dir",
+            str(outputs),
+            "--model-name",
+            "hy-v3-v091-missing",
+            "--mode",
+            "reviewed",
+        ],
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert completed.returncode == 1
+    assert "requires VSCode Codex to write" in completed.stderr
+    assert not (outputs / "hy-v3-v091-missing-architecture.drawio").exists()

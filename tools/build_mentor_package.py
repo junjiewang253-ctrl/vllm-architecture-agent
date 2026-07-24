@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a mentor submission package from reviewed v0.9 artifacts."""
+"""Build a mentor submission package from reviewed artifacts."""
 
 from __future__ import annotations
 
@@ -55,6 +55,7 @@ def build_package(model_name: str, outputs_dir: Path, destination: Path) -> None
         shutil.rmtree(destination)
     (destination / "diagrams").mkdir(parents=True)
     (destination / "analysis").mkdir(parents=True)
+    (destination / "review-logs").mkdir(parents=True)
     (destination / "source").mkdir(parents=True)
     (destination / "reproduction").mkdir(parents=True)
 
@@ -69,6 +70,11 @@ def build_package(model_name: str, outputs_dir: Path, destination: Path) -> None
     for name in ("executive-summary.md", "architecture-walkthrough.md", "validation-and-limitations.md", "reproduction-guide.md"):
         _copy_required(Path("docs/mentor") / name, destination / name)
     _copy_required(Path("docs/mentor/reproduction-guide.md"), destination / "reproduction" / "README.md")
+    _copy_optional(outputs_dir / f"{model_name}-semantic-review-prompt.md", destination / "review-logs" / "semantic-review-prompt.md")
+    _copy_optional(outputs_dir / f"{model_name}-visual-review-prompt.md", destination / "review-logs" / "visual-review-prompt.md")
+    _copy_optional(outputs_dir / f"{model_name}-semantic-review-failed.json", destination / "review-logs" / "semantic-review-failed.json")
+    _copy_optional(outputs_dir / f"{model_name}-visual-review-failed.json", destination / "review-logs" / "visual-review-failed.json")
+    _copy_optional(outputs_dir / f"{model_name}-semantic-review-codex-response.json", destination / "review-logs" / "semantic-review-codex-response.json")
 
     commands_ps1 = destination / "reproduction" / "commands.ps1"
     commands_sh = destination / "reproduction" / "commands.sh"
@@ -77,19 +83,17 @@ def build_package(model_name: str, outputs_dir: Path, destination: Path) -> None
             [
                 "$ErrorActionPreference = 'Stop'",
                 "pytest",
-                "python src/skills/vllm-model-architecture-diagram/scripts/extract_architecture.py samples/hy_v3.py --output outputs/hy-v3-v0.9-source-analysis.json",
-                "python src/skills/vllm-model-architecture-diagram/scripts/build_semantic_inventory.py outputs/hy-v3-v0.9-source-analysis.json --output outputs/hy-v3-v0.9-semantic-inventory.json",
-                "python src/skills/vllm-model-architecture-diagram/scripts/build_architecture_ir.py outputs/hy-v3-v0.9-source-analysis.json --output outputs/hy-v3-v0.9-baseline-architecture-ir.json",
-                "python src/skills/vllm-model-architecture-diagram/scripts/validate_semantic_coverage.py outputs/hy-v3-v0.9-source-analysis.json outputs/hy-v3-v0.9-semantic-inventory.json outputs/hy-v3-v0.9-reviewed-architecture-ir.json --semantic-review outputs/hy-v3-v0.9-semantic-review.json --output outputs/hy-v3-v0.9-semantic-coverage.json",
+                f"vllm-arch run --mode reviewed --input samples/hy_v3.py --model-name {model_name} --outputs-dir outputs",
+                f"python tools/build_mentor_package.py --model-name {model_name} --outputs-dir outputs --destination dist/mentor-package",
             ]
         )
         + "\n",
         encoding="utf-8",
     )
     commands_sh.write_text(commands_ps1.read_text(encoding="utf-8").replace("$ErrorActionPreference = 'Stop'\n", "set -euo pipefail\n"), encoding="utf-8")
-    (destination / "reproduction" / "config.toml.example").write_text('mode = "reviewed"\nmodel_name = "hy-v3-v0.9"\n', encoding="utf-8")
+    (destination / "reproduction" / "config.toml.example").write_text(f'mode = "reviewed"\nmodel_name = "{model_name}"\n', encoding="utf-8")
     (destination / "README.md").write_text(
-        "# vLLM Architecture Agent v0.9 Mentor Package\n\n"
+        "# vLLM Architecture Agent Mentor Package\n\n"
         "This package contains reviewed HY V3 semantic analysis artifacts, deterministic Draw.io diagrams, validation outputs, and reproduction commands.\n",
         encoding="utf-8",
     )

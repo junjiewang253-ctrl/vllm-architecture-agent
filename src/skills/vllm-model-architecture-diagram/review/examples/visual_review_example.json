@@ -1,0 +1,23 @@
+{
+  "visual_review": {
+    "model_name": "hy-v3",
+    "findings": [
+      {
+        "id": "visual:example-boundary-note",
+        "page_id": "attention_detail",
+        "type": "missing_boundary_note",
+        "severity": "major",
+        "affected_ids": ["kv_cache_to_attention_core"],
+        "description": "The external KV-cache read boundary needs a visible note.",
+        "recommended_action": "Add a compact boundary note.",
+        "semantic_change": false
+      }
+    ]
+  },
+  "diagram_view_patch": {
+    "schema_version": "0.1",
+    "base_view_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "operations": [],
+    "deferred_operations": []
+  }
+}

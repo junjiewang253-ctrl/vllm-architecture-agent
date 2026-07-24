@@ -2,31 +2,57 @@
 
 Run from the repository root in Windows PowerShell.
 
+## Setup
+
 ```powershell
 python -m pip install -e ".[dev]"
 pytest
-python src\skills\vllm-model-architecture-diagram\scripts\extract_architecture.py samples\hy_v3.py --output outputs\hy-v3-v0.9-source-analysis.json
-python src\skills\vllm-model-architecture-diagram\scripts\build_semantic_inventory.py outputs\hy-v3-v0.9-source-analysis.json --output outputs\hy-v3-v0.9-semantic-inventory.json
-python src\skills\vllm-model-architecture-diagram\scripts\build_architecture_ir.py outputs\hy-v3-v0.9-source-analysis.json --output outputs\hy-v3-v0.9-baseline-architecture-ir.json
-python src\skills\vllm-model-architecture-diagram\scripts\validate_architecture_ir.py outputs\hy-v3-v0.9-baseline-architecture-ir.json
-python src\skills\vllm-model-architecture-diagram\scripts\validate_semantic_coverage.py outputs\hy-v3-v0.9-source-analysis.json outputs\hy-v3-v0.9-semantic-inventory.json outputs\hy-v3-v0.9-baseline-architecture-ir.json --output outputs\hy-v3-v0.9-baseline-semantic-coverage.json
-python src\skills\vllm-model-architecture-diagram\scripts\build_semantic_review.py outputs\hy-v3-v0.9-source-analysis.json outputs\hy-v3-v0.9-semantic-inventory.json outputs\hy-v3-v0.9-baseline-architecture-ir.json outputs\hy-v3-v0.9-baseline-semantic-coverage.json --source-file samples\hy_v3.py --review-output outputs\hy-v3-v0.9-semantic-review.json --patch-output outputs\hy-v3-v0.9-architecture-ir.patch.json
-python src\skills\vllm-model-architecture-diagram\scripts\validate_semantic_review.py outputs\hy-v3-v0.9-source-analysis.json outputs\hy-v3-v0.9-semantic-inventory.json outputs\hy-v3-v0.9-baseline-architecture-ir.json outputs\hy-v3-v0.9-semantic-review.json outputs\hy-v3-v0.9-architecture-ir.patch.json
-python src\skills\vllm-model-architecture-diagram\scripts\apply_ir_patch.py outputs\hy-v3-v0.9-baseline-architecture-ir.json outputs\hy-v3-v0.9-architecture-ir.patch.json --output outputs\hy-v3-v0.9-reviewed-architecture-ir.json
-python src\skills\vllm-model-architecture-diagram\scripts\validate_architecture_ir.py outputs\hy-v3-v0.9-reviewed-architecture-ir.json
-python src\skills\vllm-model-architecture-diagram\scripts\validate_semantic_coverage.py outputs\hy-v3-v0.9-source-analysis.json outputs\hy-v3-v0.9-semantic-inventory.json outputs\hy-v3-v0.9-reviewed-architecture-ir.json --semantic-review outputs\hy-v3-v0.9-semantic-review.json --output outputs\hy-v3-v0.9-semantic-coverage.json
-python src\skills\vllm-model-architecture-diagram\scripts\build_diagram_view.py outputs\hy-v3-v0.9-reviewed-architecture-ir.json --output outputs\hy-v3-v0.9-baseline-diagram-view.json
-python src\skills\vllm-model-architecture-diagram\scripts\layout_diagram.py outputs\hy-v3-v0.9-baseline-diagram-view.json --output outputs\hy-v3-v0.9-baseline-layout-plan.json
-python src\skills\vllm-model-architecture-diagram\scripts\render_drawio.py outputs\hy-v3-v0.9-baseline-diagram-view.json --layout-plan outputs\hy-v3-v0.9-baseline-layout-plan.json --output outputs\hy-v3-v0.9-baseline-architecture.drawio
-python src\skills\vllm-model-architecture-diagram\scripts\validate_visual_layout.py outputs\hy-v3-v0.9-reviewed-architecture-ir.json outputs\hy-v3-v0.9-baseline-architecture.drawio --metrics-output outputs\hy-v3-v0.9-baseline-layout-metrics.json
-python src\skills\vllm-model-architecture-diagram\scripts\build_visual_review.py outputs\hy-v3-v0.9-reviewed-architecture-ir.json outputs\hy-v3-v0.9-baseline-diagram-view.json outputs\hy-v3-v0.9-baseline-layout-plan.json outputs\hy-v3-v0.9-baseline-layout-metrics.json outputs\hy-v3-v0.9-baseline-architecture.drawio --review-output outputs\hy-v3-v0.9-visual-review.json --patch-output outputs\hy-v3-v0.9-diagram-view.patch.json
-python src\skills\vllm-model-architecture-diagram\scripts\validate_visual_review.py outputs\hy-v3-v0.9-reviewed-architecture-ir.json outputs\hy-v3-v0.9-baseline-diagram-view.json outputs\hy-v3-v0.9-visual-review.json outputs\hy-v3-v0.9-diagram-view.patch.json
-python src\skills\vllm-model-architecture-diagram\scripts\apply_view_patch.py outputs\hy-v3-v0.9-baseline-diagram-view.json outputs\hy-v3-v0.9-diagram-view.patch.json --output outputs\hy-v3-v0.9-reviewed-diagram-view.json
-python src\skills\vllm-model-architecture-diagram\scripts\layout_diagram.py outputs\hy-v3-v0.9-reviewed-diagram-view.json --output outputs\hy-v3-v0.9-layout-plan.json
-python src\skills\vllm-model-architecture-diagram\scripts\render_drawio.py outputs\hy-v3-v0.9-reviewed-diagram-view.json --layout-plan outputs\hy-v3-v0.9-layout-plan.json --output outputs\hy-v3-v0.9-architecture.drawio
-python src\skills\vllm-model-architecture-diagram\scripts\validate_drawio.py outputs\hy-v3-v0.9-reviewed-architecture-ir.json outputs\hy-v3-v0.9-architecture.drawio --view outputs\hy-v3-v0.9-reviewed-diagram-view.json --layout-plan outputs\hy-v3-v0.9-layout-plan.json
-python src\skills\vllm-model-architecture-diagram\scripts\validate_visual_layout.py outputs\hy-v3-v0.9-reviewed-architecture-ir.json outputs\hy-v3-v0.9-architecture.drawio --metrics-output outputs\hy-v3-v0.9-layout-metrics.json
 ```
 
-Then use Draw.io MCP to open `outputs/hy-v3-v0.9-architecture.drawio` and
-export the seven pages to PNG/SVG. Build the mentor package after exports exist.
+## Reviewed Mode
+
+In the default VSCode Codex workflow, the active Codex session writes the
+Semantic Review, IR Patch, Visual Review and Diagram View Patch JSON files.
+Scripts then validate and apply those artifacts. No nested Codex CLI process is
+required.
+
+When the reviewed artifacts already exist, reproduce the checked build with:
+
+```powershell
+vllm-arch run `
+  --mode reviewed `
+  --input samples\hy_v3.py `
+  --model-name hy-v3-v0.9.1 `
+  --outputs-dir outputs `
+  --semantic-review outputs\hy-v3-v0.9.1-semantic-review.json `
+  --ir-patch outputs\hy-v3-v0.9.1-architecture-ir.patch.json `
+  --visual-review outputs\hy-v3-v0.9.1-visual-review.json `
+  --view-patch outputs\hy-v3-v0.9.1-diagram-view.patch.json
+```
+
+If those review artifacts are missing, run the Skill interactively so VSCode
+Codex can produce them, then rerun the validators and patch application steps.
+
+## Deterministic Mode
+
+Deterministic mode does not use Agent-authored review. It uses deterministic
+baseline review templates and is intended for CI/regression checks.
+
+```powershell
+vllm-arch run `
+  --mode deterministic `
+  --input samples\hy_v3.py `
+  --model-name hy-v3-v0.9.1-deterministic `
+  --outputs-dir outputs
+```
+
+## Package
+
+After validators pass and PNG exports exist:
+
+```powershell
+python tools\build_mentor_package.py `
+  --model-name hy-v3-v0.9.1 `
+  --outputs-dir outputs `
+  --destination dist\mentor-package
+```

@@ -134,7 +134,7 @@ def validate_visual_review(
             errors.append("visual finding must be an object")
             continue
         if finding.get("semantic_change") is not False:
-            errors.append(f"visual finding proposes a semantic change: {finding.get('finding_id')}")
+            errors.append(f"visual finding proposes a semantic change: {finding.get('finding_id') or finding.get('id')}")
 
     for operation in view_patch.get("operations", []):
         if not isinstance(operation, dict):
@@ -186,7 +186,7 @@ def validate_visual_review(
         if not isinstance(finding, dict):
             continue
         if finding.get("severity") in {"critical", "major"}:
-            finding_id = finding.get("finding_id")
+            finding_id = finding.get("finding_id") or finding.get("id")
             if isinstance(finding_id, str) and finding_id not in patched_findings:
                 errors.append(f"major visual finding is not patched: {finding_id}")
     if external_ids:

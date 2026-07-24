@@ -9,17 +9,22 @@ compatibility: Requires Python 3, access to the input source file, and a connect
 Analyze a vLLM model adapter Python file and create a source-grounded,
 deterministic Draw.io architecture diagram.
 
-v0.9 default mode is `reviewed`: deterministic scripts build the baseline, an
-Agent produces constrained review and patch artifacts, and deterministic scripts
-validate and apply those patches. Agents must not directly hand-write final
-Draw.io XML or use MCP to add, delete, or reinterpret semantic nodes and edges.
+v0.9.1 default mode is `reviewed`: deterministic scripts build the baseline,
+the current VSCode Codex session performs constrained Semantic Review and Visual
+Review, writes structured Review/Patch JSON artifacts, and deterministic scripts
+validate and apply the resulting patches. Agents must not directly hand-write
+final Draw.io XML or use MCP to add, delete, or reinterpret semantic nodes and
+edges.
 
 # Modes
 
 - `deterministic`: run extraction, inventory, baseline IR, Diagram View, layout,
-  renderer and validators only. Use for CI and regression checks.
+  renderer and validators only. It may use `build_baseline_review_template.py`
+  for deterministic Review/Patch templates.
 - `reviewed`: default. Add Semantic Review, IR Patch, Visual Review, View Patch,
-  coverage 0.2 and review lock before export.
+  coverage 0.2 and review lock before export. In the default interactive Skill
+  flow, the active Codex session writes the Review/Patch JSON directly instead
+  of calling an external Codex CLI.
 - `exploratory`: may propose extra local files or experimental patches, but this
   version only documents the interface; do not auto-apply exploratory patches.
 
@@ -78,19 +83,22 @@ python <skill-directory>/scripts/validate_semantic_coverage.py outputs/<model-na
 6. Semantic Review Round 1:
 
 The Agent reads the input source, source-analysis, semantic inventory, baseline
-IR, baseline coverage and review references. It outputs:
+IR, baseline coverage and review references. The active VSCode Codex session
+outputs these files directly:
 
 - `outputs/<model-name>-semantic-review.json`
 - `outputs/<model-name>-architecture-ir.patch.json`
 
-Use `build_semantic_review.py` for the constrained default review artifact, then
-validate and apply:
+Then validate and apply:
 
 ```text
-python <skill-directory>/scripts/build_semantic_review.py outputs/<model-name>-source-analysis.json outputs/<model-name>-semantic-inventory.json outputs/<model-name>-baseline-architecture-ir.json outputs/<model-name>-baseline-semantic-coverage.json --source-file <input.py> --review-output outputs/<model-name>-semantic-review.json --patch-output outputs/<model-name>-architecture-ir.patch.json
 python <skill-directory>/scripts/validate_semantic_review.py outputs/<model-name>-source-analysis.json outputs/<model-name>-semantic-inventory.json outputs/<model-name>-baseline-architecture-ir.json outputs/<model-name>-semantic-review.json outputs/<model-name>-architecture-ir.patch.json
 python <skill-directory>/scripts/apply_ir_patch.py outputs/<model-name>-baseline-architecture-ir.json outputs/<model-name>-architecture-ir.patch.json --output outputs/<model-name>-reviewed-architecture-ir.json
 ```
+
+`run_semantic_review.py` is an optional automation helper for mock tests or
+future non-interactive integrations; do not make it the default VSCode Skill
+path.
 
 7. Validate reviewed semantics:
 
@@ -117,13 +125,18 @@ python <skill-directory>/scripts/validate_visual_layout.py outputs/<model-name>-
 
 The Agent may adjust labels, edge visibility, route classes, bundles, regions,
 legends and boundary notes. It must not change semantic IDs, endpoints, phase,
-ports or evidence.
+ports or evidence. The active VSCode Codex session outputs:
+
+- `outputs/<model-name>-visual-review.json`
+- `outputs/<model-name>-diagram-view.patch.json`
 
 ```text
-python <skill-directory>/scripts/build_visual_review.py outputs/<model-name>-reviewed-architecture-ir.json outputs/<model-name>-baseline-diagram-view.json outputs/<model-name>-baseline-layout-plan.json outputs/<model-name>-baseline-layout-metrics.json outputs/<model-name>-baseline-architecture.drawio --review-output outputs/<model-name>-visual-review.json --patch-output outputs/<model-name>-diagram-view.patch.json
 python <skill-directory>/scripts/validate_visual_review.py outputs/<model-name>-reviewed-architecture-ir.json outputs/<model-name>-baseline-diagram-view.json outputs/<model-name>-visual-review.json outputs/<model-name>-diagram-view.patch.json
 python <skill-directory>/scripts/apply_view_patch.py outputs/<model-name>-baseline-diagram-view.json outputs/<model-name>-diagram-view.patch.json --output outputs/<model-name>-reviewed-diagram-view.json
 ```
+
+`run_visual_review.py` is likewise optional automation, not the default
+interactive workflow.
 
 10. Final layout, render and validation:
 
@@ -147,7 +160,7 @@ ports and endpoints. Rerun Draw.io and visual validators after any MCP edit.
 13. Build mentor package after exports exist:
 
 ```text
-python tools/build_mentor_package.py --model-name <model-name> --outputs-dir outputs --destination dist/mentor-package-v0.9
+python tools/build_mentor_package.py --model-name <model-name> --outputs-dir outputs --destination dist/mentor-package
 ```
 
 # Review Rules

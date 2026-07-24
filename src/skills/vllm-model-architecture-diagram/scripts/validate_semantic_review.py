@@ -182,7 +182,7 @@ def validate_semantic_review(
         seen_dispositions.add(fact_id)
         if fact_id not in required_ids:
             errors.append(f"disposition references non-required or unknown fact: {fact_id}")
-        kind = disposition.get("disposition")
+        kind = disposition.get("disposition") or disposition.get("status")
         if kind not in DISPOSITIONS:
             errors.append(f"invalid disposition for {fact_id}: {kind}")
         confidence = disposition.get("confidence")
@@ -256,10 +256,13 @@ def validate_semantic_review(
     if baseline_node_count and removed_node_count / baseline_node_count > 0.35:
         errors.append("patch deletes more than 35% of baseline semantic nodes")
 
-    for finding in review.get("architecture_findings", []):
+    review_findings = review.get("architecture_findings")
+    if not isinstance(review_findings, list):
+        review_findings = review.get("findings", [])
+    for finding in review_findings:
         if not isinstance(finding, dict):
             continue
-        finding_id = finding.get("finding_id")
+        finding_id = finding.get("finding_id") or finding.get("id")
         severity = finding.get("severity")
         if severity in {"critical", "major"} and isinstance(finding_id, str):
             if finding_id not in patched_findings and not _finding_deferred(finding_id, review, patch):

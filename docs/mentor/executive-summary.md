@@ -1,13 +1,13 @@
 # Executive Summary
 
-vLLM Architecture Agent v0.9 turns a vLLM model adapter file into a reviewed,
+vLLM Architecture Agent v0.9.1 turns a vLLM model adapter file into a reviewed,
 source-grounded Draw.io architecture package.
 
 The project separates deterministic work from Agent judgment. Scripts extract
 facts, build baseline IR, validate evidence, build Diagram View, plan layout and
-render Draw.io. Agent-guided review is constrained to two structured artifacts:
-Semantic Review plus Architecture IR Patch, and Visual Review plus Diagram View
-Patch. Patches are validated and applied by scripts.
+render Draw.io. Codex review is constrained to structured artifacts: Semantic
+Review plus Architecture IR Patch, and Visual Review plus Diagram View Patch.
+Patches are validated and applied by scripts.
 
 The HY V3 submission candidate contains seven pages:
 

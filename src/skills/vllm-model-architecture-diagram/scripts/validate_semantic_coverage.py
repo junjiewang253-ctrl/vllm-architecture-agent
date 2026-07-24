@@ -118,7 +118,7 @@ def _matrix() -> dict[str, int]:
 
 
 def _entry_from_review(fact: dict[str, Any], disposition: dict[str, Any]) -> dict[str, Any]:
-    status = str(disposition.get("disposition"))
+    status = str(disposition.get("disposition") or disposition.get("status"))
     entry = {
         "fact_id": fact["fact_id"],
         "status": status,

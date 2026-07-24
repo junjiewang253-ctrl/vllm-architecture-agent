@@ -7,7 +7,7 @@ prefers `fact_ids` over bare line numbers. Direct evidence must cite behavior
 facts such as calls, assignments, branches, returns or weight-loading stages.
 Import facts cannot alone prove behavior.
 
-Semantic Review assigns one disposition to every required fact. The final
+Codex Semantic Review assigns one disposition to every required fact. The final
 coverage matrix distinguishes:
 
 - `rendered_direct`
@@ -24,6 +24,10 @@ Architecture IR Patch and Diagram View Patch carry base hashes. Apply scripts
 refuse stale inputs and add audit metadata. Review Lock records the artifact
 hashes needed to reproduce reviewed IR, reviewed View, layout and Draw.io from
 the saved patches.
+
+v0.9.1 review artifacts and optional review logs preserve the prompts or review
+context used by Codex, so the review decision can be audited alongside the JSON
+artifacts.
 
 ## Boundaries
 

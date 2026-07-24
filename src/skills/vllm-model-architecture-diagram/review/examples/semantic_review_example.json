@@ -1,0 +1,31 @@
+{
+  "semantic_review": {
+    "model_name": "hy-v3",
+    "findings": [
+      {
+        "id": "finding:example-external-attention-boundary",
+        "type": "external_boundary",
+        "severity": "major",
+        "description": "vLLM Attention internal KV-cache read is outside the input file.",
+        "evidence_fact_ids": ["fact:HYV3Attention.forward:343:call:self.attn"],
+        "confidence": 0.9
+      }
+    ],
+    "fact_dispositions": [
+      {
+        "fact_id": "fact:HYV3Attention.forward:343:call:self.hpc_rope_norm",
+        "status": "rendered_direct",
+        "reason": "The local file directly calls HpcRopeNorm with qkv.",
+        "target_ids": ["qkv_projection_to_hpc_fused"],
+        "supporting_fact_ids": ["fact:HYV3Attention.forward:343:call:self.hpc_rope_norm"]
+      }
+    ]
+  },
+  "architecture_ir_patch": {
+    "schema_version": "0.1",
+    "base_ir_version": "0.6",
+    "base_ir_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "operations": [],
+    "deferred_operations": []
+  }
+}

@@ -32,13 +32,13 @@ not change source semantics.
 - Do not let Agents hand-write complete Draw.io XML; use `render_drawio.py`.
 - Do not add or remove semantic nodes or edges through Draw.io MCP.
 - Build semantic inventory and validate reviewed semantic coverage before
-  rendering v0.9 diagrams.
+  rendering v0.9.1 diagrams.
 - Agents may produce `semantic-review.json`, `architecture-ir.patch.json`,
   `visual-review.json`, and `diagram-view.patch.json`; deterministic scripts
   must validate and apply those files.
 - Do not let Agent review patches promote external imported behavior to direct
   evidence.
-- Build and validate Diagram View before rendering v0.9 diagrams.
+- Build and validate Diagram View before rendering v0.9.1 diagrams.
 - Use `layout_diagram.py` for deterministic coordinates and routed waypoints.
 - Build `review-lock.json` for reviewed-mode outputs and do not silently reuse a
   stale review when source or baseline hashes change.

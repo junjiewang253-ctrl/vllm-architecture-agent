@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/vllm/review/semantic_review.schema.json",
+  "title": "Codex semantic review payload",
+  "type": "object",
+  "required": ["model_name", "findings", "fact_dispositions"],
+  "properties": {
+    "model_name": {"type": "string", "minLength": 1},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "severity", "description", "evidence_fact_ids", "confidence"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "type": {"type": "string", "minLength": 1},
+          "severity": {"enum": ["critical", "major", "minor", "informational"]},
+          "description": {"type": "string"},
+          "evidence_fact_ids": {"type": "array", "items": {"type": "string"}},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+        },
+        "additionalProperties": true
+      }
+    },
+    "fact_dispositions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["fact_id", "status", "reason", "target_ids", "supporting_fact_ids"],
+        "properties": {
+          "fact_id": {"type": "string", "minLength": 1},
+          "status": {
+            "enum": [
+              "rendered_direct",
+              "rendered_derived",
+              "aggregated",
+              "documented_external",
+              "excluded"
+            ]
+          },
+          "reason": {"type": "string"},
+          "target_ids": {"type": "array", "items": {"type": "string"}},
+          "supporting_fact_ids": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}
