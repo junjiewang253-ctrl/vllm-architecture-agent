@@ -1,31 +1,72 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Architecture View",
+  "title": "Architecture View Graph",
   "type": "object",
-  "required": ["schema_version", "source_design_version", "model_name", "pages"],
+  "required": ["schema_version", "model_name", "pages", "boundaries", "legend"],
   "properties": {
-    "schema_version": { "const": "1.0" },
-    "source_design_version": { "const": "1.0" },
+    "schema_version": { "const": "0.1" },
+    "view_graph_type": { "const": "architecture_view_graph" },
     "model_name": { "type": "string" },
-    "style_profile": { "type": "string" },
     "pages": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "title", "page_type", "purpose", "visible_nodes", "visible_edges"],
+        "required": ["id", "title", "purpose", "nodes", "edges", "groups", "lanes"],
         "properties": {
           "id": { "type": "string" },
           "title": { "type": "string" },
-          "page_type": { "type": "string" },
           "purpose": { "type": "string" },
-          "concepts": { "type": "array", "items": { "type": "string" } },
-          "visible_nodes": { "type": "array" },
-          "visible_edges": { "type": "array" }
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "type", "label", "concept_refs", "fact_refs", "ports", "visual_role"],
+              "properties": {
+                "id": { "type": "string" },
+                "type": {
+                  "enum": ["component", "data", "process", "storage", "boundary", "annotation", "capability", "group"]
+                },
+                "label": { "type": "string" },
+                "subtitle": { "type": "string" },
+                "concept_refs": { "type": "array", "items": { "type": "string" } },
+                "fact_refs": { "type": "array", "items": { "type": "string" } },
+                "ports": { "type": "array" },
+                "visual_role": { "type": "string" },
+                "layout": { "type": "object" }
+              },
+              "additionalProperties": true
+            }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "type", "source", "target", "concept_refs", "fact_refs"],
+              "properties": {
+                "id": { "type": "string" },
+                "type": {
+                  "enum": ["data_flow", "dependency", "control_flow", "mapping", "parallel", "boundary", "annotation"]
+                },
+                "source": { "type": "string" },
+                "target": { "type": "string" },
+                "source_port": { "type": "string" },
+                "target_port": { "type": "string" },
+                "label": { "type": "string" },
+                "show_label": { "type": "boolean" },
+                "concept_refs": { "type": "array", "items": { "type": "string" } },
+                "fact_refs": { "type": "array", "items": { "type": "string" } }
+              },
+              "additionalProperties": true
+            }
+          },
+          "groups": { "type": "array" },
+          "lanes": { "type": "array" }
         },
         "additionalProperties": true
       }
     },
-    "unresolved": { "type": "array" }
+    "boundaries": { "type": "array" },
+    "legend": { "type": "array" }
   },
   "additionalProperties": true
 }

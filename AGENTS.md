@@ -21,8 +21,9 @@ Keep these concerns separate:
 
 Use source-analysis JSON between source parsing and downstream semantic layers.
 For v0.9.1 reviewed mode, Architecture IR remains the semantic source for
-Diagram View. For v1.0 Architect Mode, Architecture Concept Graph is the
-semantic architecture layer and Architecture View is the renderer input.
+Diagram View. For v1.0+ Architect Mode, Architecture Concept Graph is the
+semantic architecture layer, but it must not be rendered directly. Architecture
+View Graph is the renderer input.
 Diagram View / Architecture View may decide presentation, ports, lanes and route
 hints, but must not change source facts or concept evidence.
 
@@ -44,8 +45,9 @@ hints, but must not change source facts or concept evidence.
 - Build and validate Diagram View before rendering v0.9.1 diagrams.
 - Use `layout_diagram.py` for deterministic coordinates and routed waypoints.
 - Use `build_source_fact_graph.py`, `run_architect_review.py`,
-  `view_planner.py`, `build_boundary_report.py`, and
-  `validate_architecture_quality.py` for v1.0 Architect Mode outputs.
+  `run_view_architect.py`, `validate_architecture_view.py`,
+  `apply_view_layout.py`, `build_boundary_report.py`, and
+  `validate_architecture_quality.py` for v1.0.1 Architect Mode outputs.
 - Build `review-lock.json` for reviewed-mode outputs and do not silently reuse a
   stale review when source or baseline hashes change.
 - Put cross-Agent core behavior in the Skill directory.

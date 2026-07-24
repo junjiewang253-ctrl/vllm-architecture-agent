@@ -48,9 +48,11 @@ def _paths(outputs_dir: Path, model: str) -> dict[str, Path]:
         "lock": outputs_dir / f"{model}-review-lock.json",
         "source_fact_graph": outputs_dir / f"{model}-source-fact-graph.json",
         "architecture_design": outputs_dir / f"{model}-architecture-design.json",
+        "architecture_concept": outputs_dir / f"{model}-architecture-concept.json",
         "architecture_view": outputs_dir / f"{model}-architecture-view.json",
         "boundary_report": outputs_dir / f"{model}-boundary-report.json",
         "mentor_report": outputs_dir / f"{model}-mentor-report.md",
+        "architecture_report": outputs_dir / f"{model}-architecture-report.md",
     }
 
 
@@ -118,22 +120,23 @@ def run_pipeline(args: argparse.Namespace) -> None:
             "--semantic-inventory",
             str(paths["inventory"]),
             "--output",
-            str(paths["architecture_design"]),
+            str(paths["architecture_concept"]),
         ])
-        _run([py, str(SCRIPTS / "view_planner.py"), str(paths["architecture_design"]), "--output", str(paths["architecture_view"])])
-        _run([py, str(SCRIPTS / "build_boundary_report.py"), str(paths["architecture_design"]), "--output", str(paths["boundary_report"])])
+        _run([py, str(SCRIPTS / "run_view_architect.py"), str(paths["architecture_concept"]), str(paths["source_fact_graph"]), "--output", str(paths["architecture_view"])])
+        _run([py, str(SCRIPTS / "build_boundary_report.py"), str(paths["architecture_concept"]), "--output", str(paths["boundary_report"])])
         _run([
             py,
             str(SCRIPTS / "validate_architecture_quality.py"),
             str(paths["source_fact_graph"]),
-            str(paths["architecture_design"]),
+            str(paths["architecture_concept"]),
             str(paths["architecture_view"]),
             "--boundary-report",
             str(paths["boundary_report"]),
         ])
-        _run([py, str(SCRIPTS / "layout_diagram.py"), str(paths["architecture_view"]), "--output", str(paths["layout"])])
+        _run([py, str(SCRIPTS / "validate_architecture_view.py"), str(paths["architecture_view"]), "--architecture-concept", str(paths["architecture_concept"]), "--source-fact-graph", str(paths["source_fact_graph"])])
+        _run([py, str(SCRIPTS / "apply_view_layout.py"), str(paths["architecture_view"]), "--output", str(paths["layout"])])
         _run([py, str(SCRIPTS / "render_drawio.py"), str(paths["architecture_view"]), "--layout-plan", str(paths["layout"]), "--output", str(paths["drawio"])])
-        _run([py, str(SCRIPTS / "build_mentor_report.py"), str(paths["architecture_design"]), str(paths["architecture_view"]), str(paths["boundary_report"]), "--output", str(paths["mentor_report"])])
+        _run([py, str(SCRIPTS / "build_mentor_report.py"), str(paths["architecture_concept"]), str(paths["architecture_view"]), str(paths["boundary_report"]), "--output", str(paths["architecture_report"])])
         print(f"vllm-arch architect run completed: {paths['drawio']}")
         return
     _run([py, str(SCRIPTS / "build_architecture_ir.py"), str(paths["source_analysis"]), "--output", str(paths["baseline_ir"])])

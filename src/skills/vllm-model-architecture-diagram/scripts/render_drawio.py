@@ -72,6 +72,38 @@ NODE_STYLES: dict[str, str] = {
         "rounded=1;whiteSpace=wrap;html=0;fontFamily=Inter;fontSize=12;"
         "fillColor=#FFFFEE;strokeColor=#B8AA5A;dashed=1;arcSize=10;"
     ),
+    "component": (
+        "rounded=1;whiteSpace=wrap;html=0;fontFamily=Inter;fontSize=13;"
+        "fillColor=#EAF3FF;strokeColor=#3B82F6;arcSize=12;"
+    ),
+    "data": (
+        "shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=0;"
+        "fontFamily=Inter;fontSize=12;fillColor=#ECFDF5;strokeColor=#059669;"
+    ),
+    "process": (
+        "rounded=1;whiteSpace=wrap;html=0;fontFamily=Inter;fontSize=13;"
+        "fillColor=#FFF7ED;strokeColor=#EA580C;arcSize=12;"
+    ),
+    "storage": (
+        "shape=cylinder3d;whiteSpace=wrap;html=0;boundedLbl=1;backgroundOutline=1;"
+        "fontFamily=Inter;fontSize=12;fillColor=#F0FDFA;strokeColor=#0D9488;"
+    ),
+    "boundary": (
+        "rounded=1;whiteSpace=wrap;html=0;fontFamily=Inter;fontSize=13;dashed=1;"
+        "fillColor=#F8FAFC;strokeColor=#475569;arcSize=12;"
+    ),
+    "capability": (
+        "rounded=1;whiteSpace=wrap;html=0;fontFamily=Inter;fontSize=12;fontStyle=1;"
+        "fillColor=#EEF2FF;strokeColor=#6366F1;arcSize=20;"
+    ),
+    "group": (
+        "rounded=1;whiteSpace=wrap;html=0;fontFamily=Inter;fontSize=14;fontStyle=1;"
+        "fillColor=#F1F5F9;strokeColor=#64748B;arcSize=12;"
+    ),
+    "annotation": (
+        "rounded=1;whiteSpace=wrap;html=0;fontFamily=Inter;fontSize=11;dashed=1;"
+        "fillColor=#FFFFF7;strokeColor=#A3A3A3;arcSize=10;"
+    ),
 }
 
 EDGE_STYLES: dict[str, str] = {
@@ -726,6 +758,82 @@ def _view_edge_by_id(page: dict[str, Any]) -> dict[str, dict[str, Any]]:
     }
 
 
+def _edge_style(edge_type: str) -> str:
+    return {
+        "data_flow": "runtime",
+        "dependency": "dependency",
+        "control_flow": "invocation",
+        "mapping": "weight_mapping",
+        "parallel": "parallel_partition",
+        "boundary": "dependency",
+        "annotation": "dependency",
+    }.get(edge_type, "runtime")
+
+
+def _normalize_architecture_view_graph(view: dict[str, Any]) -> dict[str, Any]:
+    if view.get("view_graph_type") != "architecture_view_graph":
+        return view
+    pages: list[dict[str, Any]] = []
+    for page in view.get("pages", []):
+        if not isinstance(page, dict):
+            continue
+        visible_nodes = [
+            {
+                "semantic_id": node.get("id"),
+                "display_label": node.get("label", node.get("id")),
+                "display_subtitle": node.get("subtitle"),
+                "region_id": None,
+                "lane_id": None,
+                "kind": node.get("type", "component"),
+                "preferred_size": node.get("preferred_size", {"width": 170, "height": 74}),
+                "ports": node.get("ports", []),
+                "badges": node.get("badges", []),
+                "layout": node.get("layout", {}),
+                "visual_role": node.get("visual_role"),
+            }
+            for node in page.get("nodes", [])
+            if isinstance(node, dict) and isinstance(node.get("id"), str)
+        ]
+        visible_edges = [
+            {
+                "semantic_id": edge.get("id"),
+                "source": edge.get("source"),
+                "target": edge.get("target"),
+                "source_port": edge.get("source_port", "out"),
+                "target_port": edge.get("target_port", "in"),
+                "style_kind": _edge_style(str(edge.get("type") or "data_flow")),
+                "label": edge.get("label", ""),
+                "label_visible": edge.get("show_label") is True,
+                "route_class": "horizontal_lane",
+                "bundle_id": None,
+            }
+            for edge in page.get("edges", [])
+            if isinstance(edge, dict) and isinstance(edge.get("id"), str)
+        ]
+        pages.append(
+            {
+                "id": page.get("id"),
+                "title": page.get("title"),
+                "page_type": page.get("id"),
+                "visible_nodes": visible_nodes,
+                "visible_edges": visible_edges,
+                "regions": page.get("groups", []),
+                "lanes": page.get("lanes", []),
+                "annotations": [
+                    {
+                        "id": f"decorative_purpose_{page.get('id')}",
+                        "text": page.get("purpose", ""),
+                        "x": 760,
+                        "y": 16,
+                        "width": 420,
+                        "height": 48,
+                    }
+                ],
+            }
+        )
+    return {"schema_version": "0.1", "model_name": view.get("model_name", "unknown-model"), "pages": pages}
+
+
 def _layout_page_by_id(layout_plan: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {
         str(page["id"]): page
@@ -762,6 +870,7 @@ def _add_points_geometry(cell: ET.Element, points: list[Any]) -> None:
 
 
 def _render_from_view_plan(view: dict[str, Any], layout_plan: dict[str, Any]) -> str:
+    view = _normalize_architecture_view_graph(view)
     pages = view.get("pages")
     if not isinstance(pages, list) or not pages:
         raise ValueError("Diagram View must contain at least one page")

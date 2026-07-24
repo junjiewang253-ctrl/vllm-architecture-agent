@@ -17,7 +17,7 @@ from typing import Any
 
 LAYOUT_PLAN_VERSION = "0.1"
 VIEW_VERSION = "0.1"
-ARCHITECTURE_VIEW_VERSION = "1.0"
+ARCHITECTURE_VIEW_VERSION = "0.1"
 
 
 @dataclass(frozen=True)
@@ -61,8 +61,19 @@ def _dynamic_boxes(page: dict[str, Any]) -> dict[str, LayoutBox]:
     nodes = [node for node in page.get("visible_nodes", []) if isinstance(node, dict)]
     count = max(1, len(nodes))
     width, height = page.get("layout_constraints", {}).get("page_size", [1280, 720])
-    columns = 3 if count > 4 else max(1, count)
-    rows = (count + columns - 1) // columns
+    layout_positions = [
+        node.get("layout")
+        for node in nodes
+        if isinstance(node.get("layout"), dict) and "row" in node.get("layout", {}) and "col" in node.get("layout", {})
+    ]
+    if layout_positions:
+        max_col = max(int(pos.get("col", 0)) for pos in layout_positions)
+        max_row = max(int(pos.get("row", 0)) for pos in layout_positions)
+        columns = max_col + 1
+        rows = max_row + 1
+    else:
+        columns = 3 if count > 4 else max(1, count)
+        rows = (count + columns - 1) // columns
     usable_width = max(600.0, float(width) - 160.0)
     usable_height = max(360.0, float(height) - 160.0)
     cell_w = usable_width / columns
@@ -73,12 +84,113 @@ def _dynamic_boxes(page: dict[str, Any]) -> dict[str, LayoutBox]:
         preferred = node.get("preferred_size") if isinstance(node.get("preferred_size"), dict) else {}
         box_w = float(preferred.get("width", min(260.0, cell_w - 36.0)))
         box_h = float(preferred.get("height", 86.0))
-        col = index % columns
-        row = index // columns
+        position = node.get("layout") if isinstance(node.get("layout"), dict) else {}
+        col = int(position.get("col", index % columns))
+        row = int(position.get("row", index // columns))
         x = 80.0 + col * cell_w + max(0.0, (cell_w - box_w) / 2)
         y = 110.0 + row * cell_h + max(0.0, (cell_h - box_h) / 2)
         boxes[node_id] = _box(round(x, 2), round(y, 2), round(box_w, 2), round(box_h, 2))
     return boxes
+
+
+def _edge_style(edge_type: str) -> str:
+    return {
+        "data_flow": "runtime",
+        "dependency": "dependency",
+        "control_flow": "invocation",
+        "mapping": "weight_mapping",
+        "parallel": "parallel_partition",
+        "boundary": "dependency",
+        "annotation": "dependency",
+    }.get(edge_type, "runtime")
+
+
+def _route_class(edge_type: str) -> str:
+    return {
+        "data_flow": "horizontal_lane",
+        "dependency": "horizontal_lane",
+        "control_flow": "vertical_branch",
+        "mapping": "weight_mapping",
+        "parallel": "horizontal_lane",
+        "boundary": "horizontal_lane",
+        "annotation": "hidden_semantic",
+    }.get(edge_type, "horizontal_lane")
+
+
+def _normalize_architecture_view_graph(view: dict[str, Any]) -> dict[str, Any]:
+    if view.get("view_graph_type") != "architecture_view_graph":
+        return view
+    pages: list[dict[str, Any]] = []
+    for page in view.get("pages", []):
+        if not isinstance(page, dict):
+            continue
+        visible_nodes: list[dict[str, Any]] = []
+        for node in page.get("nodes", []):
+            if not isinstance(node, dict) or not isinstance(node.get("id"), str):
+                continue
+            visible_nodes.append(
+                {
+                    "semantic_id": node["id"],
+                    "display_label": node.get("label", node["id"]),
+                    "display_subtitle": node.get("subtitle"),
+                    "region_id": None,
+                    "lane_id": None,
+                    "kind": node.get("type", "component"),
+                    "preferred_size": node.get("preferred_size", {"width": 170, "height": 74}),
+                    "ports": node.get("ports", []),
+                    "badges": node.get("badges", []),
+                    "layout": node.get("layout", {}),
+                    "visual_role": node.get("visual_role"),
+                }
+            )
+        visible_edges: list[dict[str, Any]] = []
+        for edge in page.get("edges", []):
+            if not isinstance(edge, dict) or not isinstance(edge.get("id"), str):
+                continue
+            edge_type = str(edge.get("type") or "data_flow")
+            visible_edges.append(
+                {
+                    "semantic_id": edge["id"],
+                    "source": edge.get("source"),
+                    "target": edge.get("target"),
+                    "source_port": edge.get("source_port", "out"),
+                    "target_port": edge.get("target_port", "in"),
+                    "style_kind": _edge_style(edge_type),
+                    "label": edge.get("label", ""),
+                    "label_visible": edge.get("show_label") is True,
+                    "route_class": _route_class(edge_type),
+                    "bundle_id": None,
+                }
+            )
+        pages.append(
+            {
+                "id": page.get("id"),
+                "title": page.get("title"),
+                "page_type": page.get("id"),
+                "purpose": page.get("purpose"),
+                "visible_nodes": visible_nodes,
+                "visible_edges": visible_edges,
+                "regions": page.get("groups", []),
+                "lanes": page.get("lanes", []),
+                "annotations": [
+                    {
+                        "id": f"decorative_purpose_{page.get('id')}",
+                        "text": page.get("purpose", ""),
+                        "x": 760,
+                        "y": 16,
+                        "width": 420,
+                        "height": 48,
+                    }
+                ],
+                "layout_constraints": {"page_size": [1400, 780]},
+            }
+        )
+    return {
+        "schema_version": VIEW_VERSION,
+        "source_architecture_view_version": view.get("schema_version"),
+        "model_name": view.get("model_name", "unknown-model"),
+        "pages": pages,
+    }
 
 
 PAGE_SIZES: dict[str, tuple[int, int]] = {
@@ -493,6 +605,7 @@ def _layout_page(page: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_layout_plan(view: dict[str, Any]) -> dict[str, Any]:
+    view = _normalize_architecture_view_graph(view)
     if view.get("schema_version") not in {VIEW_VERSION, ARCHITECTURE_VIEW_VERSION}:
         raise ValueError(f"View schema_version must be {VIEW_VERSION!r} or {ARCHITECTURE_VIEW_VERSION!r}")
     pages = view.get("pages")

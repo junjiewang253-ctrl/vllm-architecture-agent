@@ -53,7 +53,8 @@ def build_mentor_report(design: dict[str, Any], view: dict[str, Any], boundary: 
                 f"### {page.get('title')}",
                 "",
                 f"Question answered: {page.get('purpose')}",
-                f"Visible concepts: {len(page.get('visible_nodes', []))}",
+                f"View nodes: {len(page.get('nodes', page.get('visible_nodes', [])))}",
+                f"View edges: {len(page.get('edges', page.get('visible_edges', [])))}",
                 "",
             ]
         )

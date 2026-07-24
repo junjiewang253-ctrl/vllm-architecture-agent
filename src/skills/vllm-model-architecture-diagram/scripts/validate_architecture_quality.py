@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate v1.0 Architecture Design and Architecture View quality."""
+"""Validate Architecture Concept Graph and v1.0.1 Architecture View quality."""
 
 from __future__ import annotations
 
@@ -20,11 +20,10 @@ CONCEPT_TYPES = {
     "optimization",
 }
 REQUIRED_VIEW_TITLES = {
-    "HY V3 vLLM Adapter Overview",
-    "Transformer Execution Flow",
+    "Model Overview",
     "Attention Implementation",
     "MoE Execution Strategy",
-    "Parallel Execution Strategy",
+    "Parallel Strategy",
     "Checkpoint Adaptation",
     "vLLM Integration Boundary",
 }
@@ -51,8 +50,8 @@ def validate_architecture_quality(
         errors.append("Source Fact Graph schema_version must be '1.0'")
     if design.get("schema_version") != "1.0":
         errors.append("Architecture Design schema_version must be '1.0'")
-    if view.get("schema_version") != "1.0":
-        errors.append("Architecture View schema_version must be '1.0'")
+    if view.get("schema_version") != "0.1" or view.get("view_graph_type") != "architecture_view_graph":
+        errors.append("Architecture View Graph schema_version must be '0.1'")
 
     fact_ids = {fact.get("id") for fact in fact_graph.get("facts", []) if isinstance(fact, dict)}
     concepts = [item for item in design.get("concepts", []) if isinstance(item, dict)]
@@ -99,8 +98,8 @@ def validate_architecture_quality(
     for page in pages:
         if not str(page.get("purpose") or "").strip():
             errors.append(f"page {page.get('id')} must have purpose")
-        if not page.get("visible_nodes"):
-            errors.append(f"page {page.get('id')} must contain visible concepts")
+        if not page.get("nodes"):
+            errors.append(f"page {page.get('id')} must contain view nodes")
 
     report = boundary_report or {}
     external_components = report.get("external_components")
