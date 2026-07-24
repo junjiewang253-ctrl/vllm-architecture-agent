@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/vllm/architecture-ir-patch.schema.json",
+  "title": "vLLM Architecture IR patch",
+  "type": "object",
+  "required": ["schema_version", "base_ir_version", "base_ir_sha256", "operations"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "base_ir_version": {"const": "0.6"},
+    "base_ir_sha256": {"type": "string", "minLength": 64, "maxLength": 64},
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["op_id", "op", "reason", "evidence_fact_ids", "confidence"],
+        "properties": {
+          "op_id": {"type": "string", "minLength": 1},
+          "op": {
+            "enum": [
+              "add_node",
+              "remove_node",
+              "update_node",
+              "add_edge",
+              "remove_edge",
+              "update_edge",
+              "add_evidence",
+              "replace_evidence",
+              "set_evidence_type",
+              "add_port",
+              "update_port",
+              "remove_port",
+              "add_annotation",
+              "update_annotation",
+              "set_unresolved",
+              "resolve_unresolved",
+              "add_page",
+              "remove_page",
+              "rename_page",
+              "move_item_to_page",
+              "merge_nodes",
+              "split_node"
+            ]
+          },
+          "reason": {"type": "string", "minLength": 1},
+          "evidence_fact_ids": {"type": "array", "items": {"type": "string"}},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+        },
+        "additionalProperties": true
+      }
+    },
+    "deferred_operations": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

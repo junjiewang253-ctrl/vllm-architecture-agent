@@ -200,7 +200,18 @@
         "additionalProperties": false
       }
     },
-    "unresolved": {"type": "array", "items": {"type": "object"}}
+    "unresolved": {"type": "array", "items": {"type": "object"}},
+    "review": {
+      "type": "object",
+      "properties": {
+        "mode": {"type": "string"},
+        "base_ir_sha256": {"type": "string"},
+        "patch_sha256": {"type": "string"},
+        "applied_operations": {"type": "array", "items": {"type": "string"}},
+        "deferred_operations": {"type": "array", "items": {"type": "object"}}
+      },
+      "additionalProperties": true
+    }
   },
   "additionalProperties": false
 }

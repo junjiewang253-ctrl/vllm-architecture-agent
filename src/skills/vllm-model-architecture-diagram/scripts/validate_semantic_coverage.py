@@ -9,7 +9,16 @@ import sys
 from pathlib import Path
 from typing import Any
 
-COVERAGE_VERSION = "0.1"
+COVERAGE_VERSION = "0.2"
+STATUSES = (
+    "rendered_direct",
+    "rendered_derived",
+    "aggregated",
+    "documented_external",
+    "excluded",
+    "unresolved",
+    "orphaned",
+)
 
 
 def _load_json(path: Path, label: str) -> dict[str, Any]:
@@ -22,8 +31,8 @@ def _load_json(path: Path, label: str) -> dict[str, Any]:
     return data
 
 
-def _evidence_fact_ids(ir: dict[str, Any]) -> set[str]:
-    result: set[str] = set()
+def _evidence_fact_ids_by_type(ir: dict[str, Any]) -> dict[str, set[str]]:
+    result: dict[str, set[str]] = {}
     for page in ir.get("pages", []):
         if not isinstance(page, dict):
             continue
@@ -34,9 +43,10 @@ def _evidence_fact_ids(ir: dict[str, Any]) -> set[str]:
                 for evidence in item.get("evidence", []):
                     if not isinstance(evidence, dict):
                         continue
+                    evidence_type = str(evidence.get("type") or "derived")
                     for fact_id in evidence.get("fact_ids", []):
                         if isinstance(fact_id, str):
-                            result.add(fact_id)
+                            result.setdefault(fact_id, set()).add(evidence_type)
     return result
 
 
@@ -73,10 +83,15 @@ def _fact_by_id(source_analysis: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return result
 
 
-def _status_for_fact(fact: dict[str, Any], consumed: set[str]) -> tuple[str, str | None]:
+def _status_for_fact(fact: dict[str, Any], consumed: dict[str, set[str]]) -> tuple[str, str | None]:
     fact_id = str(fact["fact_id"])
     if fact_id in consumed:
-        return "consumed", None
+        types = consumed[fact_id]
+        if "direct" in types:
+            return "rendered_direct", None
+        if "external" in types:
+            return "documented_external", "External component boundary is documented by IR evidence."
+        return "rendered_derived", None
     relevance = fact.get("relevance")
     category = fact.get("category")
     if relevance == "excluded":
@@ -88,10 +103,54 @@ def _status_for_fact(fact: dict[str, Any], consumed: set[str]) -> tuple[str, str
     return "unresolved", "Required semantic fact is tracked but not rendered as a standalone IR node or edge."
 
 
+def _review_dispositions(review: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    if not review:
+        return {}
+    result: dict[str, dict[str, Any]] = {}
+    for disposition in review.get("fact_dispositions", []):
+        if isinstance(disposition, dict) and isinstance(disposition.get("fact_id"), str):
+            result[disposition["fact_id"]] = disposition
+    return result
+
+
+def _matrix() -> dict[str, int]:
+    return {status: 0 for status in STATUSES}
+
+
+def _entry_from_review(fact: dict[str, Any], disposition: dict[str, Any]) -> dict[str, Any]:
+    status = str(disposition.get("disposition"))
+    entry = {
+        "fact_id": fact["fact_id"],
+        "status": status,
+        "category": fact.get("category"),
+        "relevance": fact.get("relevance"),
+        "reason": disposition.get("reason"),
+        "target_ids": disposition.get("target_ids", []),
+        "supporting_fact_ids": disposition.get("supporting_fact_ids", []),
+        "confidence": disposition.get("confidence"),
+    }
+    if status == "aggregated":
+        entry["aggregate_target_id"] = (disposition.get("target_ids") or [None])[0]
+    elif status == "documented_external":
+        entry["external_symbol"] = disposition.get("external_symbol")
+        entry["boundary_reason"] = disposition.get("reason")
+        entry["local_evidence_fact_ids"] = disposition.get("supporting_fact_ids", [])
+        entry["allowed_claim"] = "Local file proves the adapter boundary, not the imported component internals."
+    elif status == "excluded":
+        entry["exclusion_reason"] = disposition.get("reason")
+        entry["excluded_from_pages"] = disposition.get("excluded_from_pages", [])
+    elif status == "unresolved":
+        entry["unresolved_reason"] = disposition.get("reason")
+        entry["attempted_evidence_fact_ids"] = disposition.get("supporting_fact_ids", [])
+        entry["suggested_next_source"] = disposition.get("suggested_next_source")
+    return entry
+
+
 def validate_semantic_coverage(
     source_analysis: dict[str, Any],
     inventory: dict[str, Any],
     ir: dict[str, Any],
+    semantic_review: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     errors: list[str] = []
     if source_analysis.get("schema_version") != "0.3":
@@ -100,10 +159,16 @@ def validate_semantic_coverage(
         errors.append("Architecture IR schema_version must be '0.6'")
 
     source_facts = _fact_by_id(source_analysis)
-    consumed_ids = _evidence_fact_ids(ir)
+    consumed_ids = _evidence_fact_ids_by_type(ir)
+    dispositions = _review_dispositions(semantic_review)
     facts = [fact for fact in inventory.get("facts", []) if isinstance(fact, dict)]
     statuses: list[dict[str, Any]] = []
-    required_count = consumed_count = excluded_count = unresolved_count = orphaned_count = 0
+    relevance_matrix: dict[str, dict[str, int]] = {
+        "required": _matrix(),
+        "optional": _matrix(),
+        "informational": _matrix(),
+        "excluded": _matrix(),
+    }
 
     for fact in facts:
         fact_id = fact.get("fact_id")
@@ -111,38 +176,69 @@ def validate_semantic_coverage(
             continue
         if fact_id not in source_facts and not fact_id.startswith("stage:"):
             errors.append(f"inventory fact is not present in source-analysis: {fact_id}")
-        status, reason = _status_for_fact(fact, consumed_ids)
-        if fact.get("relevance") == "required":
-            required_count += 1
-        if status == "consumed":
-            consumed_count += 1
-        elif status == "excluded":
-            excluded_count += 1
-        elif status == "unresolved":
-            unresolved_count += 1
-        if fact.get("relevance") == "required" and status not in {"consumed", "excluded", "unresolved"}:
-            orphaned_count += 1
-        entry = {"fact_id": fact_id, "status": status, "category": fact.get("category"), "relevance": fact.get("relevance")}
-        if reason:
-            if status == "excluded":
-                entry["exclusion_reason"] = reason
+        if semantic_review and fact.get("relevance") == "required":
+            disposition = dispositions.get(fact_id)
+            if disposition is None:
+                status = "orphaned"
+                entry = {
+                    "fact_id": fact_id,
+                    "status": status,
+                    "category": fact.get("category"),
+                    "relevance": fact.get("relevance"),
+                    "orphaned_reason": "Required fact has no semantic review disposition.",
+                }
             else:
-                entry["unresolved_reason"] = reason
+                entry = _entry_from_review(fact, disposition)
+                status = str(entry["status"])
+        else:
+            status, reason = _status_for_fact(fact, consumed_ids)
+            entry = {"fact_id": fact_id, "status": status, "category": fact.get("category"), "relevance": fact.get("relevance")}
+            if reason:
+                if status == "excluded":
+                    entry["exclusion_reason"] = reason
+                elif status == "documented_external":
+                    entry["boundary_reason"] = reason
+                else:
+                    entry["unresolved_reason"] = reason
+        relevance = str(fact.get("relevance") or "informational")
+        relevance_matrix.setdefault(relevance, _matrix())
+        relevance_matrix[relevance][status] = relevance_matrix[relevance].get(status, 0) + 1
         statuses.append(entry)
 
     for fact_id in consumed_ids:
         if fact_id not in source_facts and not fact_id.startswith("stage:"):
             errors.append(f"IR evidence references unknown fact_id: {fact_id}")
 
+    totals = _matrix()
+    for counts in relevance_matrix.values():
+        for status in STATUSES:
+            totals[status] += counts.get(status, 0)
+    required_count = sum(relevance_matrix.get("required", {}).values())
+    consumed_count = totals["rendered_direct"] + totals["rendered_derived"]
+    excluded_count = totals["excluded"]
+    unresolved_count = totals["unresolved"]
+    orphaned_count = totals["orphaned"]
     summary = {
+        "required": relevance_matrix.get("required", _matrix()),
+        "optional": relevance_matrix.get("optional", _matrix()),
+        "informational": relevance_matrix.get("informational", _matrix()),
+        "excluded": relevance_matrix.get("excluded", _matrix()),
+        "totals": totals,
+        "rendered_direct_count": totals["rendered_direct"],
+        "rendered_derived_count": totals["rendered_derived"],
+        "aggregated_count": totals["aggregated"],
+        "documented_external_count": totals["documented_external"],
         "required_fact_count": required_count,
         "consumed_fact_count": consumed_count,
         "excluded_fact_count": excluded_count,
         "unresolved_fact_count": unresolved_count,
         "orphaned_fact_count": orphaned_count,
     }
-    if orphaned_count:
-        errors.append(f"orphaned required facts found: {orphaned_count}")
+    if semantic_review:
+        if relevance_matrix.get("required", {}).get("unresolved", 0):
+            errors.append(f"required unresolved facts found: {relevance_matrix['required']['unresolved']}")
+        if relevance_matrix.get("required", {}).get("orphaned", 0):
+            errors.append(f"orphaned required facts found: {relevance_matrix['required']['orphaned']}")
     return {
         "schema_version": COVERAGE_VERSION,
         "model_name": ir.get("model_name", inventory.get("model_name", "unknown-model")),
@@ -156,6 +252,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("source_analysis", type=Path, help="source-analysis JSON")
     parser.add_argument("semantic_inventory", type=Path, help="semantic inventory JSON")
     parser.add_argument("architecture_ir", type=Path, help="Architecture IR JSON")
+    parser.add_argument("--semantic-review", type=Path, help="Semantic review JSON for coverage 0.2 dispositions")
     parser.add_argument("--output", "-o", type=Path, required=True, help="Output semantic coverage JSON")
     return parser.parse_args(argv)
 
@@ -167,6 +264,7 @@ def main(argv: list[str] | None = None) -> int:
             _load_json(args.source_analysis, "source-analysis"),
             _load_json(args.semantic_inventory, "semantic inventory"),
             _load_json(args.architecture_ir, "Architecture IR"),
+            _load_json(args.semantic_review, "semantic review") if args.semantic_review else None,
         )
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(coverage, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

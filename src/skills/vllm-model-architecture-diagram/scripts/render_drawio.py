@@ -772,7 +772,7 @@ def _render_from_view_plan(view: dict[str, Any], layout_plan: dict[str, Any]) ->
             "host": "app.diagrams.net",
             "modified": "2026-07-23T00:00:00.000Z",
             "agent": "vllm-architecture-agent",
-            "version": "v0.8",
+            "version": "v0.9",
             "type": "device",
         },
     )
@@ -814,6 +814,33 @@ def _render_from_view_plan(view: dict[str, Any], layout_plan: dict[str, Any]) ->
                 continue
             cell = _make_cell(root, {"id": f"decorative_region_{page_id}_{region['id']}", "value": str(region["label"]), "style": "rounded=1;whiteSpace=wrap;html=0;fontFamily=Inter;fontSize=12;fontStyle=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;fillColor=#F8FAFC;strokeColor=#CBD5E1;dashed=1;", "vertex": "1", "parent": ROOT_PARENT_ID})
             _add_geometry(cell, LayoutBox(float(region["x"]), float(region["y"]), float(region["width"]), float(region["height"])))
+
+        for annotation in page.get("annotations", []):
+            if not isinstance(annotation, dict):
+                continue
+            annotation_id = str(annotation.get("id") or "")
+            if not annotation_id.startswith("decorative_"):
+                continue
+            value = str(annotation.get("text") or annotation.get("label") or "")
+            x = float(annotation.get("x", 48))
+            y = float(annotation.get("y", 58))
+            width = float(annotation.get("width", 300))
+            height = float(annotation.get("height", 54))
+            note = _make_cell(
+                root,
+                {
+                    "id": annotation_id,
+                    "value": value,
+                    "style": (
+                        "rounded=1;whiteSpace=wrap;html=0;fontFamily=Inter;fontSize=11;"
+                        "align=left;verticalAlign=middle;spacing=8;fillColor=#F8FAFC;"
+                        "strokeColor=#94A3B8;dashed=1;"
+                    ),
+                    "vertex": "1",
+                    "parent": ROOT_PARENT_ID,
+                },
+            )
+            _add_geometry(note, LayoutBox(x, y, width, height))
 
         view_nodes = _view_node_by_id(page)
         plan_nodes = layout_page.get("nodes", {})

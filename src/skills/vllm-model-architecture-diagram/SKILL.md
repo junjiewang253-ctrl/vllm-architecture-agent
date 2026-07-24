@@ -9,16 +9,23 @@ compatibility: Requires Python 3, access to the input source file, and a connect
 Analyze a vLLM model adapter Python file and create a source-grounded,
 deterministic Draw.io architecture diagram.
 
-Do not invent modules, configuration values, tensor flows, dimensions or
-parallelism features that are not supported by the supplied source code.
+v0.9 default mode is `reviewed`: deterministic scripts build the baseline, an
+Agent produces constrained review and patch artifacts, and deterministic scripts
+validate and apply those patches. Agents must not directly hand-write final
+Draw.io XML or use MCP to add, delete, or reinterpret semantic nodes and edges.
 
-# Inputs
+# Modes
 
-The user supplies one Python source path. The typical input is a file under:
+- `deterministic`: run extraction, inventory, baseline IR, Diagram View, layout,
+  renderer and validators only. Use for CI and regression checks.
+- `reviewed`: default. Add Semantic Review, IR Patch, Visual Review, View Patch,
+  coverage 0.2 and review lock before export.
+- `exploratory`: may propose extra local files or experimental patches, but this
+  version only documents the interface; do not auto-apply exploratory patches.
 
-`vllm/model_executor/models/*.py`
+# Default Output
 
-Default output is a seven-page architecture diagram:
+For `samples/hy_v3.py`, reviewed mode normally produces seven pages:
 
 - Model Overview
 - Decoder Layer Detail
@@ -28,7 +35,10 @@ Default output is a seven-page architecture diagram:
 - Parallelism
 - Weight Loading
 
-# Default Workflow
+The page plan is reviewable. Keep Overview and Adapter Integration by default;
+keep detail pages only when source-analysis and inventory facts support them.
+
+# Reviewed Workflow
 
 The short instruction should work:
 
@@ -36,200 +46,142 @@ The short instruction should work:
 Use $vllm-model-architecture-diagram to analyze samples/hy_v3.py and generate the default architecture diagram.
 ```
 
-Run the pipeline in this order. Stop immediately when any validator fails.
+Run the pipeline in this order. Stop immediately when a semantic, view, Draw.io
+or visual validator fails.
 
-## 1. Validate Input
-
-- Confirm that the path exists.
-- Confirm that it is a `.py` file.
-- Derive a filesystem-safe model name for output files.
-
-## 2. Extract Source Facts
+1. Validate input Python path and derive `<model-name>`.
+2. Extract source facts:
 
 ```text
-python <skill-directory>/scripts/extract_architecture.py \
-  <input-python-file> \
-  --output outputs/<model-name>-source-analysis.json
+python <skill-directory>/scripts/extract_architecture.py <input.py> --output outputs/<model-name>-source-analysis.json
 ```
 
-Do not rewrite or replace the extractor before trying it.
-
-## 3. Build Semantic Inventory
+3. Build semantic inventory:
 
 ```text
-python <skill-directory>/scripts/build_semantic_inventory.py \
-  outputs/<model-name>-source-analysis.json \
-  --output outputs/<model-name>-semantic-inventory.json
+python <skill-directory>/scripts/build_semantic_inventory.py outputs/<model-name>-source-analysis.json --output outputs/<model-name>-semantic-inventory.json
 ```
 
-Every relevant source fact must later be consumed, excluded, or marked
-unresolved by semantic coverage validation.
-
-## 4. Build Architecture IR
+4. Build baseline Architecture IR:
 
 ```text
-python <skill-directory>/scripts/build_architecture_ir.py \
-  outputs/<model-name>-source-analysis.json \
-  --output outputs/<model-name>-architecture-ir.json
+python <skill-directory>/scripts/build_architecture_ir.py outputs/<model-name>-source-analysis.json --output outputs/<model-name>-baseline-architecture-ir.json
 ```
 
-The builder emits Architecture IR 0.6 with semantic ports and fact-id-backed
-evidence. Architecture IR is the only semantic source for rendering.
-
-Read `unresolved`. Only supplement or correct IR when source-analysis evidence
-supports the change.
-
-## 5. Validate Architecture IR
+5. Validate baseline IR and baseline coverage:
 
 ```text
-python <skill-directory>/scripts/validate_architecture_ir.py \
-  outputs/<model-name>-architecture-ir.json
+python <skill-directory>/scripts/validate_architecture_ir.py outputs/<model-name>-baseline-architecture-ir.json
+python <skill-directory>/scripts/validate_semantic_coverage.py outputs/<model-name>-source-analysis.json outputs/<model-name>-semantic-inventory.json outputs/<model-name>-baseline-architecture-ir.json --output outputs/<model-name>-baseline-semantic-coverage.json
 ```
 
-## 6. Validate Semantic Coverage
+6. Semantic Review Round 1:
+
+The Agent reads the input source, source-analysis, semantic inventory, baseline
+IR, baseline coverage and review references. It outputs:
+
+- `outputs/<model-name>-semantic-review.json`
+- `outputs/<model-name>-architecture-ir.patch.json`
+
+Use `build_semantic_review.py` for the constrained default review artifact, then
+validate and apply:
 
 ```text
-python <skill-directory>/scripts/validate_semantic_coverage.py \
-  outputs/<model-name>-source-analysis.json \
-  outputs/<model-name>-semantic-inventory.json \
-  outputs/<model-name>-architecture-ir.json \
-  --output outputs/<model-name>-semantic-coverage.json
+python <skill-directory>/scripts/build_semantic_review.py outputs/<model-name>-source-analysis.json outputs/<model-name>-semantic-inventory.json outputs/<model-name>-baseline-architecture-ir.json outputs/<model-name>-baseline-semantic-coverage.json --source-file <input.py> --review-output outputs/<model-name>-semantic-review.json --patch-output outputs/<model-name>-architecture-ir.patch.json
+python <skill-directory>/scripts/validate_semantic_review.py outputs/<model-name>-source-analysis.json outputs/<model-name>-semantic-inventory.json outputs/<model-name>-baseline-architecture-ir.json outputs/<model-name>-semantic-review.json outputs/<model-name>-architecture-ir.patch.json
+python <skill-directory>/scripts/apply_ir_patch.py outputs/<model-name>-baseline-architecture-ir.json outputs/<model-name>-architecture-ir.patch.json --output outputs/<model-name>-reviewed-architecture-ir.json
 ```
 
-Stop when semantic coverage reports orphaned required facts.
-
-## 7. Build Diagram View
+7. Validate reviewed semantics:
 
 ```text
-python <skill-directory>/scripts/build_diagram_view.py \
-  outputs/<model-name>-architecture-ir.json \
-  --output outputs/<model-name>-diagram-view.json
+python <skill-directory>/scripts/validate_architecture_ir.py outputs/<model-name>-reviewed-architecture-ir.json
+python <skill-directory>/scripts/validate_semantic_coverage.py outputs/<model-name>-source-analysis.json outputs/<model-name>-semantic-inventory.json outputs/<model-name>-reviewed-architecture-ir.json --semantic-review outputs/<model-name>-semantic-review.json --output outputs/<model-name>-semantic-coverage.json
 ```
 
-Diagram View may decide visibility, display labels, regions, lanes, bundles,
-ports and route classes. It must not change model semantics.
+Reviewed mode requires `required.unresolved = 0` and `required.orphaned = 0`.
+This means every required fact has been rendered, aggregated, documented as an
+external boundary, excluded with reason, or otherwise explicitly disposed. It
+does not mean every fact is a separate node.
 
-## 8. Validate Diagram View
+8. Build baseline Diagram View, layout and Draw.io:
 
 ```text
-python <skill-directory>/scripts/validate_diagram_view.py \
-  outputs/<model-name>-architecture-ir.json \
-  outputs/<model-name>-diagram-view.json
+python <skill-directory>/scripts/build_diagram_view.py outputs/<model-name>-reviewed-architecture-ir.json --output outputs/<model-name>-baseline-diagram-view.json
+python <skill-directory>/scripts/layout_diagram.py outputs/<model-name>-baseline-diagram-view.json --output outputs/<model-name>-baseline-layout-plan.json
+python <skill-directory>/scripts/render_drawio.py outputs/<model-name>-baseline-diagram-view.json --layout-plan outputs/<model-name>-baseline-layout-plan.json --output outputs/<model-name>-baseline-architecture.drawio
+python <skill-directory>/scripts/validate_visual_layout.py outputs/<model-name>-reviewed-architecture-ir.json outputs/<model-name>-baseline-architecture.drawio --metrics-output outputs/<model-name>-baseline-layout-metrics.json
 ```
 
-## 9. Build Layout Plan
+9. Visual Review Round 1:
+
+The Agent may adjust labels, edge visibility, route classes, bundles, regions,
+legends and boundary notes. It must not change semantic IDs, endpoints, phase,
+ports or evidence.
 
 ```text
-python <skill-directory>/scripts/layout_diagram.py \
-  outputs/<model-name>-diagram-view.json \
-  --output outputs/<model-name>-layout-plan.json
+python <skill-directory>/scripts/build_visual_review.py outputs/<model-name>-reviewed-architecture-ir.json outputs/<model-name>-baseline-diagram-view.json outputs/<model-name>-baseline-layout-plan.json outputs/<model-name>-baseline-layout-metrics.json outputs/<model-name>-baseline-architecture.drawio --review-output outputs/<model-name>-visual-review.json --patch-output outputs/<model-name>-diagram-view.patch.json
+python <skill-directory>/scripts/validate_visual_review.py outputs/<model-name>-reviewed-architecture-ir.json outputs/<model-name>-baseline-diagram-view.json outputs/<model-name>-visual-review.json outputs/<model-name>-diagram-view.patch.json
+python <skill-directory>/scripts/apply_view_patch.py outputs/<model-name>-baseline-diagram-view.json outputs/<model-name>-diagram-view.patch.json --output outputs/<model-name>-reviewed-diagram-view.json
 ```
 
-The layout plan contains deterministic node boxes, port anchors and routed
-waypoints.
-
-## 10. Render Draw.io
+10. Final layout, render and validation:
 
 ```text
-python <skill-directory>/scripts/render_drawio.py \
-  outputs/<model-name>-diagram-view.json \
-  --layout-plan outputs/<model-name>-layout-plan.json \
-  --output outputs/<model-name>-architecture.drawio
+python <skill-directory>/scripts/layout_diagram.py outputs/<model-name>-reviewed-diagram-view.json --output outputs/<model-name>-layout-plan.json
+python <skill-directory>/scripts/render_drawio.py outputs/<model-name>-reviewed-diagram-view.json --layout-plan outputs/<model-name>-layout-plan.json --output outputs/<model-name>-architecture.drawio
+python <skill-directory>/scripts/validate_drawio.py outputs/<model-name>-reviewed-architecture-ir.json outputs/<model-name>-architecture.drawio --view outputs/<model-name>-reviewed-diagram-view.json --layout-plan outputs/<model-name>-layout-plan.json
+python <skill-directory>/scripts/validate_visual_layout.py outputs/<model-name>-reviewed-architecture-ir.json outputs/<model-name>-architecture.drawio --metrics-output outputs/<model-name>-layout-metrics.json
 ```
 
-Agent must not directly hand-write complete Draw.io XML. The renderer is the
-only component that converts the view and layout into Draw.io cells.
-
-Rendering rules:
-
-- IR node IDs map one-to-one to Draw.io semantic node IDs.
-- IR edge IDs map one-to-one to Draw.io semantic edge IDs.
-- `parent_id` maps to Draw.io `parent`.
-- Edge `source_port` and `target_port` are preserved.
-- Hidden semantic edges remain Draw.io cells with transparent style.
-- Decorative cells use the `decorative_` prefix.
-- Dense/MoE variants are construction notes, not runtime decision nodes.
-- Evidence remains in IR and is not shown in node titles.
-
-## 11. Validate Draw.io and Visual Layout
+11. Build review lock:
 
 ```text
-python <skill-directory>/scripts/validate_drawio.py \
-  outputs/<model-name>-architecture-ir.json \
-  outputs/<model-name>-architecture.drawio \
-  --view outputs/<model-name>-diagram-view.json \
-  --layout-plan outputs/<model-name>-layout-plan.json
+python <skill-directory>/scripts/build_review_lock.py --source <input.py> --source-analysis outputs/<model-name>-source-analysis.json --semantic-inventory outputs/<model-name>-semantic-inventory.json --baseline-ir outputs/<model-name>-baseline-architecture-ir.json --semantic-review outputs/<model-name>-semantic-review.json --ir-patch outputs/<model-name>-architecture-ir.patch.json --reviewed-ir outputs/<model-name>-reviewed-architecture-ir.json --visual-review outputs/<model-name>-visual-review.json --view-patch outputs/<model-name>-diagram-view.patch.json --reviewed-view outputs/<model-name>-reviewed-diagram-view.json --output outputs/<model-name>-review-lock.json
 ```
+
+12. Use Draw.io MCP only after validators pass. Allowed MCP actions are open,
+inspect, export, and pure layout micro-adjustment that preserves semantic IDs,
+ports and endpoints. Rerun Draw.io and visual validators after any MCP edit.
+
+13. Build mentor package after exports exist:
 
 ```text
-python <skill-directory>/scripts/validate_visual_layout.py \
-  outputs/<model-name>-architecture-ir.json \
-  outputs/<model-name>-architecture.drawio \
-  --metrics-output outputs/<model-name>-layout-metrics.json
+python tools/build_mentor_package.py --model-name <model-name> --outputs-dir outputs --destination dist/mentor-package-v0.9
 ```
 
-Validation failure blocks MCP export. Fix layout-only issues in Diagram View,
-layout planning, renderer, or with a non-semantic MCP edit, then rerun Draw.io
-and visual validators.
+# Review Rules
 
-## 12. Use Draw.io MCP
-
-Use the Draw.io MCP only after all validators pass.
-
-Allowed MCP work:
-
-- open the generated diagram;
-- inspect visual layout;
-- fix pure layout issues without changing semantic IDs, ports or endpoints;
-- export.
-
-Forbidden MCP work:
-
-- adding or deleting semantic nodes;
-- adding or deleting semantic edges;
-- changing edge source, target, source port or target port;
-- reinterpreting architecture.
-
-If MCP edits the `.drawio` file, rerun `validate_drawio.py` and
-`validate_visual_layout.py` before export.
-
-Default outputs:
-
-- `outputs/<model-name>-source-analysis.json`;
-- `outputs/<model-name>-semantic-inventory.json`;
-- `outputs/<model-name>-architecture-ir.json`;
-- `outputs/<model-name>-semantic-coverage.json`;
-- `outputs/<model-name>-diagram-view.json`;
-- `outputs/<model-name>-layout-plan.json`;
-- `outputs/<model-name>-layout-metrics.json`;
-- `outputs/<model-name>-architecture.drawio`;
-- page-level `.png` and `.svg` exports for Overview, Decoder Layer, Attention,
-  MoE, Adapter Integration, Parallelism, and Weight Loading.
+- Direct evidence must cite structured source facts; import-only evidence cannot
+  support behavior.
+- Derived evidence must explain aggregation or derivation.
+- External component internals must be `external` or `documented_external`, not
+  `direct`.
+- Semantic Review may aggregate low-level facts into high-level concepts, but
+  must record target IDs and reasons.
+- Visual Review may simplify display labels, hide noisy edge labels, add bundles
+  and boundary notes, but must not change semantics.
+- Semantic Review and Visual Review each have at most two rounds. Round 2 is
+  only for validator errors or remaining critical/major findings.
 
 # Diagram Rules
 
-- Overview answers only the top-level inference flow.
-- Decoder Detail separates hidden states and residual state into distinct lanes.
-- Attention Detail explicitly separates Q, K, V and KV Cache.
-- MoE Detail shows Gate, Router, FusedMoE, Routed Experts, Shared Experts and
-  EPLB/EP hints without inventing All-to-All internals.
-- Adapter Integration does not include checkpoint mapping.
-- Parallelism keeps TP, PP and EP in distinct lanes.
-- Weight Loading keeps wrapper and model load_weights flows separate, and
-  keeps checkpoint mapping out of runtime tensor flow.
+- Overview answers top-level inference flow and separates forward hidden-state
+  production from compute logits.
+- Decoder Detail separates hidden-state and residual lanes; do not reintroduce
+  large Residual Handoff semantic nodes.
+- Attention Detail separates Q, K, V and KV Cache; KV Cache read is an external
+  boundary unless proven by the input file.
+- MoE Detail shows Gate, Router, FusedMoE, routed experts, optional shared
+  experts, restore shape and EP/EPLB hints without inventing All-to-All.
+- Adapter Integration does not contain checkpoint mapping.
+- Parallelism keeps TP, PP and EP independent.
+- Weight Loading keeps wrapper and model `load_weights` flows separate.
 - Do not draw Scheduler, Worker, EngineCore, Request Batching or other vLLM
-  system components unless they are present in the input source.
-- Do not treat checkpoint loading as runtime tensor flow.
+  system components unless they appear in the input source.
 
 # Completion Report
 
-Report:
-
-- detected top-level model class;
-- detected decoder, Attention and MoE classes;
-- detected TP, PP and EP hints;
-- unresolved external configuration or parser warnings;
-- source-analysis, Architecture IR, Diagram View, Layout Plan, metrics and
-- semantic inventory, semantic coverage, Draw.io paths and page exports;
-- validator results;
-- exported Draw.io, SVG and PNG paths.
+Report validator results, coverage matrix, review findings, patch counts,
+deferred operations, review lock status, Draw.io/PNG/SVG paths, mentor package
+path, and any remaining limitations.

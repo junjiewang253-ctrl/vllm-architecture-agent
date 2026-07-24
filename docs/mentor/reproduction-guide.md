@@ -1,84 +1,10 @@
-# vLLM Architecture Agent
+# Reproduction Guide
 
-An Agent Skill that analyzes a vLLM model adapter Python file and generates a
-source-grounded, editable Draw.io architecture diagram.
-
-## Current Status
-
-Version 0.9.0 keeps the deterministic v0.8.1 extraction, IR, Diagram View,
-layout, renderer and validators, and adds an agent-guided reviewed mode:
-
-- Source Analysis 0.3 with stable fact IDs.
-- Semantic Inventory and Semantic Coverage 0.2.
-- Architecture IR 0.6 with fact-id evidence and semantic ports.
-- Semantic Review and audited Architecture IR Patch artifacts.
-- Diagram View, Layout Plan and deterministic Draw.io rendering.
-- Visual Review and audited Diagram View Patch artifacts.
-- Review Lock hashes for reproducible reviewed builds.
-- Mentor package generation for submission candidates.
-
-Agents do not hand-write Draw.io XML. They produce structured review and patch
-files, deterministic scripts validate and apply those patches, and Draw.io MCP is
-used only after validation for opening and exporting.
-
-## Default Pages
-
-The HY V3 reviewed pipeline currently produces seven pages:
-
-- Model Overview
-- Decoder Layer Detail
-- Attention Detail
-- MoE Detail
-- vLLM Adapter Integration
-- Parallelism
-- Weight Loading
-
-The page set is planned from source-backed facts in reviewed mode. Empty pages
-should not be generated for models that do not expose the relevant facts.
-
-## Repository Layout
-
-```text
-src/skills/vllm-model-architecture-diagram/
-  SKILL.md
-  scripts/
-    extract_architecture.py
-    build_semantic_inventory.py
-    build_architecture_ir.py
-    build_semantic_review.py
-    validate_semantic_review.py
-    apply_ir_patch.py
-    validate_semantic_coverage.py
-    build_diagram_view.py
-    build_visual_review.py
-    validate_visual_review.py
-    apply_view_patch.py
-    layout_diagram.py
-    render_drawio.py
-    validate_drawio.py
-    validate_visual_layout.py
-    build_review_lock.py
-    validate_review_lock.py
-  references/
-  schemas/
-
-docs/mentor/                  Mentor-facing submission docs
-tools/build_mentor_package.py Package builder
-samples/                      Manual end-to-end inputs
-tests/                        Regression tests
-outputs/                      Generated analysis and diagrams
-```
-
-## Run Tests
+Run from the repository root in Windows PowerShell.
 
 ```powershell
 python -m pip install -e ".[dev]"
 pytest
-```
-
-## Reviewed HY V3 Pipeline
-
-```powershell
 python src\skills\vllm-model-architecture-diagram\scripts\extract_architecture.py samples\hy_v3.py --output outputs\hy-v3-v0.9-source-analysis.json
 python src\skills\vllm-model-architecture-diagram\scripts\build_semantic_inventory.py outputs\hy-v3-v0.9-source-analysis.json --output outputs\hy-v3-v0.9-semantic-inventory.json
 python src\skills\vllm-model-architecture-diagram\scripts\build_architecture_ir.py outputs\hy-v3-v0.9-source-analysis.json --output outputs\hy-v3-v0.9-baseline-architecture-ir.json
@@ -102,16 +28,5 @@ python src\skills\vllm-model-architecture-diagram\scripts\validate_drawio.py out
 python src\skills\vllm-model-architecture-diagram\scripts\validate_visual_layout.py outputs\hy-v3-v0.9-reviewed-architecture-ir.json outputs\hy-v3-v0.9-architecture.drawio --metrics-output outputs\hy-v3-v0.9-layout-metrics.json
 ```
 
-## Mentor Package
-
-After all validators pass and page PNG/SVG exports are present:
-
-```powershell
-python tools\build_mentor_package.py --model-name hy-v3-v0.9 --outputs-dir outputs --destination dist\mentor-package-v0.9
-```
-
-## Boundaries
-
-v0.9 does not recursively analyze external vLLM components. Imported component
-internals such as `Attention`, `FusedMoE` and `AutoWeightsLoader` are represented
-as boundaries unless the input file itself proves the behavior.
+Then use Draw.io MCP to open `outputs/hy-v3-v0.9-architecture.drawio` and
+export the seven pages to PNG/SVG. Build the mentor package after exports exist.

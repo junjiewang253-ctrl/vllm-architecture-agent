@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/vllm/visual-review.schema.json",
+  "title": "vLLM visual review",
+  "type": "object",
+  "required": ["schema_version", "model_name", "review_mode", "summary", "findings", "patch_file"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "model_name": {"type": "string", "minLength": 1},
+    "review_mode": {"enum": ["deterministic", "reviewed", "exploratory"]},
+    "summary": {"type": "object"},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "page_id", "type", "severity", "affected_ids", "description", "recommended_action", "semantic_change"],
+        "properties": {
+          "finding_id": {"type": "string", "minLength": 1},
+          "page_id": {"type": "string", "minLength": 1},
+          "type": {"type": "string", "minLength": 1},
+          "severity": {"enum": ["critical", "major", "minor", "informational"]},
+          "affected_ids": {"type": "array", "items": {"type": "string"}},
+          "description": {"type": "string"},
+          "recommended_action": {"type": "string"},
+          "semantic_change": {"type": "boolean"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "patch_file": {"type": "string"}
+  },
+  "additionalProperties": true
+}

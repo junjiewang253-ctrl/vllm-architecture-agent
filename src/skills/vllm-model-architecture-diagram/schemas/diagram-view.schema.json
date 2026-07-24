@@ -10,6 +10,17 @@
     "model_name": {"type": "string", "minLength": 1},
     "style_profile": {"type": "string", "minLength": 1},
     "unresolved": {"type": "array", "items": {"type": "object"}},
+    "review": {
+      "type": "object",
+      "properties": {
+        "mode": {"type": "string"},
+        "base_view_sha256": {"type": "string"},
+        "patch_sha256": {"type": "string"},
+        "applied_operations": {"type": "array", "items": {"type": "string"}},
+        "deferred_operations": {"type": "array", "items": {"type": "object"}}
+      },
+      "additionalProperties": true
+    },
     "pages": {
       "type": "array",
       "minItems": 1,

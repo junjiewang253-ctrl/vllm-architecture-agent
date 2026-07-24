@@ -13,8 +13,10 @@ Keep these concerns separate:
 1. Python source fact extraction.
 2. vLLM semantic interpretation.
 3. Architecture/diagram planning.
-4. Diagram View and deterministic layout planning.
-5. Draw.io rendering and MCP interaction.
+4. Agent-guided semantic review and audited IR patching.
+5. Diagram View and deterministic layout planning.
+6. Agent-guided visual review and audited View patching.
+7. Draw.io rendering and MCP interaction.
 
 Use source-analysis JSON between source parsing and Architecture IR building.
 Architecture IR is the only semantic source for Draw.io rendering.
@@ -29,10 +31,17 @@ not change source semantics.
 - Do not treat checkpoint loading as runtime tensor flow.
 - Do not let Agents hand-write complete Draw.io XML; use `render_drawio.py`.
 - Do not add or remove semantic nodes or edges through Draw.io MCP.
-- Build semantic inventory and validate semantic coverage before rendering
-  v0.8.1 diagrams.
-- Build and validate Diagram View before rendering v0.8.1 diagrams.
+- Build semantic inventory and validate reviewed semantic coverage before
+  rendering v0.9 diagrams.
+- Agents may produce `semantic-review.json`, `architecture-ir.patch.json`,
+  `visual-review.json`, and `diagram-view.patch.json`; deterministic scripts
+  must validate and apply those files.
+- Do not let Agent review patches promote external imported behavior to direct
+  evidence.
+- Build and validate Diagram View before rendering v0.9 diagrams.
 - Use `layout_diagram.py` for deterministic coordinates and routed waypoints.
+- Build `review-lock.json` for reviewed-mode outputs and do not silently reuse a
+  stale review when source or baseline hashes change.
 - Put cross-Agent core behavior in the Skill directory.
 - Put Codex-, Claude Code- or other Agent-specific packaging under
   `integrations/`.

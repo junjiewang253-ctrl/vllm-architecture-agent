@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/vllm/semantic-review.schema.json",
+  "title": "vLLM semantic review",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "model_name",
+    "source_file",
+    "review_mode",
+    "summary",
+    "fact_dispositions",
+    "architecture_findings",
+    "page_plan",
+    "patch_file",
+    "remaining_unknowns"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "model_name": {"type": "string", "minLength": 1},
+    "source_file": {"type": "string", "minLength": 1},
+    "review_mode": {"enum": ["deterministic", "reviewed", "exploratory"]},
+    "summary": {"type": "object"},
+    "fact_dispositions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["fact_id", "disposition", "reason", "target_ids", "supporting_fact_ids", "confidence"],
+        "properties": {
+          "fact_id": {"type": "string", "minLength": 1},
+          "disposition": {
+            "enum": [
+              "rendered_direct",
+              "rendered_derived",
+              "aggregated",
+              "documented_external",
+              "excluded",
+              "unresolved"
+            ]
+          },
+          "reason": {"type": "string"},
+          "target_ids": {"type": "array", "items": {"type": "string"}},
+          "supporting_fact_ids": {"type": "array", "items": {"type": "string"}},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "external_symbol": {"type": ["string", "null"]},
+          "suggested_next_source": {"type": ["string", "null"]}
+        },
+        "additionalProperties": true
+      }
+    },
+    "architecture_findings": {"type": "array", "items": {"type": "object"}},
+    "page_plan": {"type": "array", "items": {"type": "object"}},
+    "patch_file": {"type": "string"},
+    "remaining_unknowns": {"type": "array", "items": {"type": "object"}},
+    "deferred_findings": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

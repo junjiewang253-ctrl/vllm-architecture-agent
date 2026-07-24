@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/vllm/diagram-view-patch.schema.json",
+  "title": "vLLM Diagram View patch",
+  "type": "object",
+  "required": ["schema_version", "base_view_sha256", "operations"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "base_view_sha256": {"type": "string", "minLength": 64, "maxLength": 64},
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["op_id", "op", "reason", "confidence"],
+        "properties": {
+          "op_id": {"type": "string", "minLength": 1},
+          "op": {
+            "enum": [
+              "update_display_label",
+              "update_display_subtitle",
+              "set_edge_visible",
+              "set_edge_label_visible",
+              "update_edge_label",
+              "set_route_class",
+              "set_region",
+              "set_lane",
+              "set_preferred_size",
+              "add_bundle",
+              "update_bundle",
+              "add_legend",
+              "add_boundary_note",
+              "add_page_note",
+              "split_visual_region",
+              "merge_visual_region",
+              "update_layout_constraint",
+              "set_badge_visibility"
+            ]
+          },
+          "reason": {"type": "string", "minLength": 1},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+        },
+        "additionalProperties": true
+      }
+    },
+    "deferred_operations": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}
