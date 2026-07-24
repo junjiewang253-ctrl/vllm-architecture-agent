@@ -11,7 +11,7 @@ from typing import Any
 
 VIEW_VERSION = "0.1"
 NODE_TYPES = {"component", "data", "process", "storage", "boundary", "annotation", "capability", "group"}
-EDGE_TYPES = {"data_flow", "dependency", "control_flow", "mapping", "parallel", "boundary", "annotation"}
+EDGE_TYPES = {"runtime_flow", "dependency", "mapping", "parallel", "delegation", "boundary", "annotation"}
 CORE_NODE_TYPES = {"component", "process", "storage", "boundary", "data"}
 
 
@@ -91,16 +91,40 @@ def validate_architecture_view(view: dict[str, Any], architecture_concept: dict[
             if source not in node_ids or target not in node_ids:
                 errors.append(f"page {page_id} edge {edge_id} references unknown node")
             connected.update([source, target])
-            if edge_type == "data_flow":
+            if edge_type == "runtime_flow":
                 source_node = next((node for node in nodes if node.get("id") == source), {})
                 target_node = next((node for node in nodes if node.get("id") == target), {})
                 if source_node.get("type") == "boundary" and target_node.get("type") != "boundary":
-                    errors.append(f"page {page_id} edge {edge_id} cannot be external boundary -> runtime data_flow")
+                    errors.append(f"page {page_id} edge {edge_id} cannot be external boundary -> runtime_flow")
             if edge_type != "annotation" and (not edge.get("fact_refs") or not edge.get("concept_refs")):
                 errors.append(f"page {page_id} edge {edge_id} must have concept_refs and fact_refs")
         for node in nodes:
             if node.get("type") in {"component", "process"} and node.get("id") not in connected:
                 errors.append(f"page {page_id} component/process node {node.get('id')} is isolated")
+        if page_id in {"model_overview", "attention", "moe"}:
+            has_data = any(node.get("type") == "data" for node in nodes)
+            has_component = any(node.get("type") == "component" for node in nodes)
+            has_runtime = any(edge.get("type") == "runtime_flow" for edge in edges)
+            if not (has_data and has_component and has_runtime):
+                errors.append(f"page {page_id} must contain data node, component node, and runtime_flow edge")
+        if page_id == "attention":
+            labels = {str(node.get("label")) for node in nodes}
+            required = {"QKV Projection", "Q/K/V Split", "Q Path", "K Path", "V Path", "HPC Fused Processing", "Optional QK Norm", "KV Cache Boundary", "vLLM Attention Backend"}
+            missing = sorted(required - labels)
+            if missing:
+                errors.append(f"attention page missing required nodes: {', '.join(missing)}")
+        if page_id == "moe":
+            labels = {str(node.get("label")) for node in nodes}
+            required = {"Router", "Top-K Routing", "FusedMoE", "Routed Experts", "Shared Experts", "Expert Parallel"}
+            missing = sorted(required - labels)
+            if missing:
+                errors.append(f"moe page missing required nodes: {', '.join(missing)}")
+        if page_id == "checkpoint":
+            labels = {str(node.get("label")) for node in nodes}
+            required = {"HF Checkpoint", "Weight Name Processing", "Packed Mapping", "qkv_proj", "vLLM Parameters"}
+            missing = sorted(required - labels)
+            if missing:
+                errors.append(f"checkpoint page missing required nodes: {', '.join(missing)}")
     return errors
 
 

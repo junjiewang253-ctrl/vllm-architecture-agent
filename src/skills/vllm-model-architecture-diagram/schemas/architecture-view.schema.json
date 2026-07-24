@@ -45,7 +45,7 @@
               "properties": {
                 "id": { "type": "string" },
                 "type": {
-                  "enum": ["data_flow", "dependency", "control_flow", "mapping", "parallel", "boundary", "annotation"]
+                  "enum": ["runtime_flow", "dependency", "mapping", "parallel", "delegation", "boundary", "annotation"]
                 },
                 "source": { "type": "string" },
                 "target": { "type": "string" },

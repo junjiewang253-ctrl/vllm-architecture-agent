@@ -47,7 +47,7 @@ hints, but must not change source facts or concept evidence.
 - Use `build_source_fact_graph.py`, `run_architect_review.py`,
   `run_view_architect.py`, `validate_architecture_view.py`,
   `apply_view_layout.py`, `build_boundary_report.py`, and
-  `validate_architecture_quality.py` for v1.0.1 Architect Mode outputs.
+  `validate_architecture_quality.py` for v1.0.2 Architect Mode outputs.
 - Build `review-lock.json` for reviewed-mode outputs and do not silently reuse a
   stale review when source or baseline hashes change.
 - Put cross-Agent core behavior in the Skill directory.

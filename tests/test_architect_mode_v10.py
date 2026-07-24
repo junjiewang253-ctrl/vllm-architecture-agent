@@ -66,6 +66,8 @@ def test_attention_view_contains_qkv_kv_cache_and_backend_boundary():
     labels = {node["label"] for node in attention["nodes"]}
     assert "QKV Projection" in labels
     assert "Q/K/V Split" in labels
+    assert "HPC Fused Processing" in labels
+    assert "Optional QK Norm" in labels
     assert "KV Cache Boundary" in labels
     assert "vLLM Attention Backend" in labels
     edges = {edge["id"]: edge for edge in attention["edges"]}
@@ -82,16 +84,19 @@ def test_view_graph_contains_runtime_flows_not_concept_cards():
         assert len(page["nodes"]) >= 3
         assert any(edge["type"] != "annotation" for edge in page["edges"])
         assert not all(str(node.get("visual_role", "")).startswith("concept") for node in page["nodes"])
+    for page_id in {"model_overview", "attention", "moe"}:
+        page = next(item for item in view["pages"] if item["id"] == page_id)
+        assert any(edge["type"] == "runtime_flow" for edge in page["edges"])
 
 
 def test_moe_and_checkpoint_views_have_architecture_nodes():
     view = architect_artifacts()["view"]
     moe = next(page for page in view["pages"] if page["id"] == "moe")
     moe_labels = {node["label"] for node in moe["nodes"]}
-    assert {"Router", "FusedMoE", "Routed Experts", "Shared Experts", "Expert Parallel"}.issubset(moe_labels)
+    assert {"Router", "Top-K Routing", "FusedMoE", "Routed Experts", "Shared Experts", "Expert Parallel"}.issubset(moe_labels)
     checkpoint = next(page for page in view["pages"] if page["id"] == "checkpoint")
     checkpoint_labels = {node["label"] for node in checkpoint["nodes"]}
-    assert {"HF Checkpoint", "q_proj / k_proj / v_proj", "qkv_proj", "Expert Params"}.issubset(checkpoint_labels)
+    assert {"HF Checkpoint", "Weight Name Processing", "Packed Mapping", "q_proj / k_proj / v_proj", "qkv_proj", "Expert Params", "Loader Dispatch", "vLLM Parameters"}.issubset(checkpoint_labels)
 
 
 def test_external_boundary_does_not_claim_direct_internals():

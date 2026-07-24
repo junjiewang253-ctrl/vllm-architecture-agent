@@ -760,11 +760,11 @@ def _view_edge_by_id(page: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 def _edge_style(edge_type: str) -> str:
     return {
-        "data_flow": "runtime",
+        "runtime_flow": "runtime",
         "dependency": "dependency",
-        "control_flow": "invocation",
         "mapping": "weight_mapping",
         "parallel": "parallel_partition",
+        "delegation": "invocation",
         "boundary": "dependency",
         "annotation": "dependency",
     }.get(edge_type, "runtime")
@@ -801,7 +801,7 @@ def _normalize_architecture_view_graph(view: dict[str, Any]) -> dict[str, Any]:
                 "target": edge.get("target"),
                 "source_port": edge.get("source_port", "out"),
                 "target_port": edge.get("target_port", "in"),
-                "style_kind": _edge_style(str(edge.get("type") or "data_flow")),
+                "style_kind": _edge_style(str(edge.get("type") or "runtime_flow")),
                 "label": edge.get("label", ""),
                 "label_visible": edge.get("show_label") is True,
                 "route_class": "horizontal_lane",

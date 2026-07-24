@@ -95,11 +95,11 @@ def _dynamic_boxes(page: dict[str, Any]) -> dict[str, LayoutBox]:
 
 def _edge_style(edge_type: str) -> str:
     return {
-        "data_flow": "runtime",
+        "runtime_flow": "runtime",
         "dependency": "dependency",
-        "control_flow": "invocation",
         "mapping": "weight_mapping",
         "parallel": "parallel_partition",
+        "delegation": "invocation",
         "boundary": "dependency",
         "annotation": "dependency",
     }.get(edge_type, "runtime")
@@ -107,11 +107,11 @@ def _edge_style(edge_type: str) -> str:
 
 def _route_class(edge_type: str) -> str:
     return {
-        "data_flow": "horizontal_lane",
+        "runtime_flow": "horizontal_lane",
         "dependency": "horizontal_lane",
-        "control_flow": "vertical_branch",
         "mapping": "weight_mapping",
         "parallel": "horizontal_lane",
+        "delegation": "horizontal_lane",
         "boundary": "horizontal_lane",
         "annotation": "hidden_semantic",
     }.get(edge_type, "horizontal_lane")
@@ -147,7 +147,7 @@ def _normalize_architecture_view_graph(view: dict[str, Any]) -> dict[str, Any]:
         for edge in page.get("edges", []):
             if not isinstance(edge, dict) or not isinstance(edge.get("id"), str):
                 continue
-            edge_type = str(edge.get("type") or "data_flow")
+            edge_type = str(edge.get("type") or "runtime_flow")
             visible_edges.append(
                 {
                     "semantic_id": edge["id"],

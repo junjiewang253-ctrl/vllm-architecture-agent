@@ -4,9 +4,9 @@ An Agent Skill for source-grounded vLLM model adapter architecture analysis.
 
 ## Current Status
 
-Version 1.0.1 adds **Agent Architect View Generation**. v1.0 introduced
+Version 1.0.2 adds **Agent Architecture View Planner**. v1.0 introduced
 architecture concepts, but drawing concepts directly produced concept cards.
-v1.0.1 adds a separate Architecture View Graph so concepts become readable
+v1.0.2 adds a separate Architecture View Graph so concepts become readable
 architecture expressions: components, runtime data flow, module relationships,
 checkpoint mappings, parallel strategies and external boundaries.
 
@@ -19,17 +19,17 @@ Python source
 -> Draw.io
 ```
 
-## v1.0.1 Artifacts
+## v1.0.2 Artifacts
 
 For `samples/hy_v3.py`, Architect Mode generates:
 
-- `outputs/hy-v3-v1.0.1-source-fact-graph.json`
-- `outputs/hy-v3-v1.0.1-architecture-concept.json`
-- `outputs/hy-v3-v1.0.1-architecture-view.json`
-- `outputs/hy-v3-v1.0.1-boundary-report.json`
-- `outputs/hy-v3-v1.0.1-layout-plan.json`
-- `outputs/hy-v3-v1.0.1-architecture.drawio`
-- `outputs/hy-v3-v1.0.1-architecture-report.md`
+- `outputs/hy-v3-v1.0.2-source-fact-graph.json`
+- `outputs/hy-v3-v1.0.2-architecture-concept.json`
+- `outputs/hy-v3-v1.0.2-architecture-view.json`
+- `outputs/hy-v3-v1.0.2-boundary-report.json`
+- `outputs/hy-v3-v1.0.2-layout-plan.json`
+- `outputs/hy-v3-v1.0.2-architecture.drawio`
+- `outputs/hy-v3-v1.0.2-architecture-report.md`
 
 ## Default Pages
 
@@ -53,7 +53,7 @@ pytest
 vllm-arch run `
   --mode architect `
   --input samples\hy_v3.py `
-  --model-name hy-v3-v1.0.1 `
+  --model-name hy-v3-v1.0.2 `
   --outputs-dir outputs
 ```
 
@@ -75,6 +75,6 @@ src/skills/vllm-model-architecture-diagram/
 
 ## Boundaries
 
-v1.0.1 does not recursively analyze external vLLM components. Imported component
+v1.0.2 does not recursively analyze external vLLM components. Imported component
 internals such as `Attention`, `FusedMoE` and `AutoWeightsLoader` are represented
 as explicit boundaries unless the input file itself proves the behavior.

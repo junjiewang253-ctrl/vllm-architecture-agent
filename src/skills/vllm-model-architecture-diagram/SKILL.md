@@ -9,7 +9,7 @@ compatibility: Requires Python 3, access to the input source file, and a connect
 Analyze a vLLM model adapter Python file and create a human-readable
 architecture diagram.
 
-v1.0.1 uses four layers:
+v1.0.2 uses four layers:
 
 ```text
 Python source
@@ -33,7 +33,7 @@ Concept Graph.
 # Default Command
 
 ```text
-vllm-arch run --mode architect --input samples/hy_v3.py --model-name hy-v3-v1.0.1 --outputs-dir outputs
+vllm-arch run --mode architect --input samples/hy_v3.py --model-name hy-v3-v1.0.2 --outputs-dir outputs
 ```
 
 # Default Workflow
@@ -101,11 +101,13 @@ For HY V3, default View Architect output should include:
 - Every core View node must have `concept_refs` and `fact_refs`.
 - Each page must have a purpose and at least three nodes.
 - Pages must not be only concept cards.
-- Attention page must show QKV Projection, Q/K/V Split, KV Cache Boundary,
-  vLLM Attention Backend and Output Projection.
-- MoE page must show Router, FusedMoE, Routed Experts, Shared Experts and EP.
-- Checkpoint page must show HF weights, packed/stacked mappings and expert
-  mapping.
+- Attention page must show QKV Projection, Q/K/V Split, HPC fused path,
+  fallback Q/K norm + RoPE path, KV Cache Boundary, vLLM Attention Backend and
+  Output Projection.
+- MoE page must show Router, Top-K Routing, FusedMoE, Routed Experts, Shared
+  Experts and EP.
+- Checkpoint page must show HF weights, filter/rename, packed/stacked mappings,
+  expert mapping, loader dispatch and vLLM parameters.
 - Boundary page must distinguish local adapter behavior from imported vLLM
   component behavior.
 
