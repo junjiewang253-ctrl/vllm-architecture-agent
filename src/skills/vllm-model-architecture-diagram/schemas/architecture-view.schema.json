@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Architecture View",
+  "type": "object",
+  "required": ["schema_version", "source_design_version", "model_name", "pages"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "source_design_version": { "const": "1.0" },
+    "model_name": { "type": "string" },
+    "style_profile": { "type": "string" },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "page_type", "purpose", "visible_nodes", "visible_edges"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "page_type": { "type": "string" },
+          "purpose": { "type": "string" },
+          "concepts": { "type": "array", "items": { "type": "string" } },
+          "visible_nodes": { "type": "array" },
+          "visible_edges": { "type": "array" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "unresolved": { "type": "array" }
+  },
+  "additionalProperties": true
+}

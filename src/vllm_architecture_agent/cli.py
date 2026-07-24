@@ -46,6 +46,11 @@ def _paths(outputs_dir: Path, model: str) -> dict[str, Path]:
         "metrics": outputs_dir / f"{model}-layout-metrics.json",
         "drawio": outputs_dir / f"{model}-architecture.drawio",
         "lock": outputs_dir / f"{model}-review-lock.json",
+        "source_fact_graph": outputs_dir / f"{model}-source-fact-graph.json",
+        "architecture_design": outputs_dir / f"{model}-architecture-design.json",
+        "architecture_view": outputs_dir / f"{model}-architecture-view.json",
+        "boundary_report": outputs_dir / f"{model}-boundary-report.json",
+        "mentor_report": outputs_dir / f"{model}-mentor-report.md",
     }
 
 
@@ -102,6 +107,35 @@ def run_pipeline(args: argparse.Namespace) -> None:
 
     _run([py, str(SCRIPTS / "extract_architecture.py"), str(input_path), "--output", str(paths["source_analysis"])])
     _run([py, str(SCRIPTS / "build_semantic_inventory.py"), str(paths["source_analysis"]), "--output", str(paths["inventory"])])
+    if args.mode == "architect":
+        _run([py, str(SCRIPTS / "build_source_fact_graph.py"), str(paths["source_analysis"]), "--output", str(paths["source_fact_graph"])])
+        _run([
+            py,
+            str(SCRIPTS / "run_architect_review.py"),
+            str(paths["source_fact_graph"]),
+            "--source-analysis",
+            str(paths["source_analysis"]),
+            "--semantic-inventory",
+            str(paths["inventory"]),
+            "--output",
+            str(paths["architecture_design"]),
+        ])
+        _run([py, str(SCRIPTS / "view_planner.py"), str(paths["architecture_design"]), "--output", str(paths["architecture_view"])])
+        _run([py, str(SCRIPTS / "build_boundary_report.py"), str(paths["architecture_design"]), "--output", str(paths["boundary_report"])])
+        _run([
+            py,
+            str(SCRIPTS / "validate_architecture_quality.py"),
+            str(paths["source_fact_graph"]),
+            str(paths["architecture_design"]),
+            str(paths["architecture_view"]),
+            "--boundary-report",
+            str(paths["boundary_report"]),
+        ])
+        _run([py, str(SCRIPTS / "layout_diagram.py"), str(paths["architecture_view"]), "--output", str(paths["layout"])])
+        _run([py, str(SCRIPTS / "render_drawio.py"), str(paths["architecture_view"]), "--layout-plan", str(paths["layout"]), "--output", str(paths["drawio"])])
+        _run([py, str(SCRIPTS / "build_mentor_report.py"), str(paths["architecture_design"]), str(paths["architecture_view"]), str(paths["boundary_report"]), "--output", str(paths["mentor_report"])])
+        print(f"vllm-arch architect run completed: {paths['drawio']}")
+        return
     _run([py, str(SCRIPTS / "build_architecture_ir.py"), str(paths["source_analysis"]), "--output", str(paths["baseline_ir"])])
     _run([py, str(SCRIPTS / "validate_architecture_ir.py"), str(paths["baseline_ir"])])
     _run([
@@ -286,7 +320,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     run.add_argument("--input", type=Path, default=Path("samples/hy_v3.py"))
     run.add_argument("--outputs-dir", type=Path, default=Path("outputs"))
     run.add_argument("--model-name")
-    run.add_argument("--mode", choices=["deterministic", "reviewed"], default="reviewed")
+    run.add_argument("--mode", choices=["deterministic", "reviewed", "architect"], default="reviewed")
     run.add_argument("--semantic-review", type=Path)
     run.add_argument("--ir-patch", type=Path)
     run.add_argument("--visual-review", type=Path)

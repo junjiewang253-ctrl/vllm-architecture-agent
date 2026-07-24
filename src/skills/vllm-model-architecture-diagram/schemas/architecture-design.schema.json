@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Architecture Design",
+  "type": "object",
+  "required": ["schema_version", "concepts", "views", "relationships", "boundaries", "assumptions"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "source_fact_graph_version": { "type": "string" },
+    "model_name": { "type": "string" },
+    "concepts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "title", "purpose", "implementation", "evidence", "confidence"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^concept:" },
+          "type": {
+            "enum": ["model_component", "execution_strategy", "parallel_strategy", "checkpoint_strategy", "configuration", "capability", "boundary", "optimization"]
+          },
+          "title": { "type": "string" },
+          "purpose": { "type": "string" },
+          "implementation": { "type": "array", "items": { "type": "string" } },
+          "evidence": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        },
+        "additionalProperties": true
+      }
+    },
+    "views": { "type": "array" },
+    "relationships": { "type": "array" },
+    "boundaries": { "type": "array" },
+    "assumptions": { "type": "array" }
+  },
+  "additionalProperties": true
+}

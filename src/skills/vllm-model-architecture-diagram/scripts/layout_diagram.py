@@ -17,6 +17,7 @@ from typing import Any
 
 LAYOUT_PLAN_VERSION = "0.1"
 VIEW_VERSION = "0.1"
+ARCHITECTURE_VIEW_VERSION = "1.0"
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,32 @@ class RoutedEdge:
 
 def _box(x: float, y: float, width: float, height: float) -> LayoutBox:
     return LayoutBox(x, y, width, height)
+
+
+def _dynamic_boxes(page: dict[str, Any]) -> dict[str, LayoutBox]:
+    """Lay out concept-driven pages without adding new page-specific presets."""
+
+    nodes = [node for node in page.get("visible_nodes", []) if isinstance(node, dict)]
+    count = max(1, len(nodes))
+    width, height = page.get("layout_constraints", {}).get("page_size", [1280, 720])
+    columns = 3 if count > 4 else max(1, count)
+    rows = (count + columns - 1) // columns
+    usable_width = max(600.0, float(width) - 160.0)
+    usable_height = max(360.0, float(height) - 160.0)
+    cell_w = usable_width / columns
+    cell_h = usable_height / max(1, rows)
+    boxes: dict[str, LayoutBox] = {}
+    for index, node in enumerate(nodes):
+        node_id = str(node.get("semantic_id"))
+        preferred = node.get("preferred_size") if isinstance(node.get("preferred_size"), dict) else {}
+        box_w = float(preferred.get("width", min(260.0, cell_w - 36.0)))
+        box_h = float(preferred.get("height", 86.0))
+        col = index % columns
+        row = index // columns
+        x = 80.0 + col * cell_w + max(0.0, (cell_w - box_w) / 2)
+        y = 110.0 + row * cell_h + max(0.0, (cell_h - box_h) / 2)
+        boxes[node_id] = _box(round(x, 2), round(y, 2), round(box_w, 2), round(box_h, 2))
+    return boxes
 
 
 PAGE_SIZES: dict[str, tuple[int, int]] = {
@@ -392,9 +419,14 @@ def _regions(page: dict[str, Any], boxes: dict[str, LayoutBox]) -> list[dict[str
 def _layout_page(page: dict[str, Any]) -> dict[str, Any]:
     page_id = str(page["id"])
     page_type = str(page["page_type"])
+    visible_node_ids = {
+        str(node.get("semantic_id"))
+        for node in page.get("visible_nodes", [])
+        if isinstance(node, dict) and isinstance(node.get("semantic_id"), str)
+    }
     boxes = dict(LAYOUTS.get(page_id, {}))
-    if not boxes:
-        raise ValueError(f"no layout preset for page {page_id!r}")
+    if not boxes or not visible_node_ids.issubset(set(boxes)):
+        boxes = _dynamic_boxes(page)
     anchors = _anchors(page, boxes)
     obstacle_ids = {
         str(node.get("semantic_id"))
@@ -426,7 +458,11 @@ def _layout_page(page: dict[str, Any]) -> dict[str, Any]:
             "route_class": route_class,
             "style_kind": edge.get("style_kind"),
         }
-    width, height = PAGE_SIZES.get(page_id, (1280, 720))
+    page_size = page.get("layout_constraints", {}).get("page_size")
+    if isinstance(page_size, list) and len(page_size) == 2:
+        width, height = int(page_size[0]), int(page_size[1])
+    else:
+        width, height = PAGE_SIZES.get(page_id, (1280, 720))
     return {
         "id": page_id,
         "title": page["title"],
@@ -457,14 +493,14 @@ def _layout_page(page: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_layout_plan(view: dict[str, Any]) -> dict[str, Any]:
-    if view.get("schema_version") != VIEW_VERSION:
-        raise ValueError(f"Diagram View schema_version must be {VIEW_VERSION!r}")
+    if view.get("schema_version") not in {VIEW_VERSION, ARCHITECTURE_VIEW_VERSION}:
+        raise ValueError(f"View schema_version must be {VIEW_VERSION!r} or {ARCHITECTURE_VIEW_VERSION!r}")
     pages = view.get("pages")
     if not isinstance(pages, list) or not pages:
         raise ValueError("Diagram View pages must be a non-empty list")
     return {
         "schema_version": LAYOUT_PLAN_VERSION,
-        "source_view_version": VIEW_VERSION,
+        "source_view_version": view.get("schema_version"),
         "model_name": view.get("model_name", "unknown-model"),
         "pages": [_layout_page(page) for page in pages if isinstance(page, dict)],
     }

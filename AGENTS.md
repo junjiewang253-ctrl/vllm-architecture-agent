@@ -12,16 +12,19 @@ Keep these concerns separate:
 
 1. Python source fact extraction.
 2. vLLM semantic interpretation.
-3. Architecture/diagram planning.
-4. Agent-guided semantic review and audited IR patching.
-5. Diagram View and deterministic layout planning.
-6. Agent-guided visual review and audited View patching.
-7. Draw.io rendering and MCP interaction.
+3. Source Fact Graph normalization.
+4. Agent-guided Architecture Concept design.
+5. Architecture View planning.
+6. Diagram View / layout compatibility and deterministic rendering.
+7. Agent-guided semantic or visual review where applicable.
+8. Draw.io rendering and MCP interaction.
 
-Use source-analysis JSON between source parsing and Architecture IR building.
-Architecture IR is the only semantic source for Draw.io rendering.
-Diagram View may decide presentation, ports, lanes and route hints, but must
-not change source semantics.
+Use source-analysis JSON between source parsing and downstream semantic layers.
+For v0.9.1 reviewed mode, Architecture IR remains the semantic source for
+Diagram View. For v1.0 Architect Mode, Architecture Concept Graph is the
+semantic architecture layer and Architecture View is the renderer input.
+Diagram View / Architecture View may decide presentation, ports, lanes and route
+hints, but must not change source facts or concept evidence.
 
 ## Implementation rules
 
@@ -40,6 +43,9 @@ not change source semantics.
   evidence.
 - Build and validate Diagram View before rendering v0.9.1 diagrams.
 - Use `layout_diagram.py` for deterministic coordinates and routed waypoints.
+- Use `build_source_fact_graph.py`, `run_architect_review.py`,
+  `view_planner.py`, `build_boundary_report.py`, and
+  `validate_architecture_quality.py` for v1.0 Architect Mode outputs.
 - Build `review-lock.json` for reviewed-mode outputs and do not silently reuse a
   stale review when source or baseline hashes change.
 - Put cross-Agent core behavior in the Skill directory.

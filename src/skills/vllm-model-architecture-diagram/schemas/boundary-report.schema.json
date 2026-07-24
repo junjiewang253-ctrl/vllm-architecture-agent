@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Semantic Boundary Report",
+  "type": "object",
+  "required": ["schema_version", "external_components", "local_truth_boundary"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "source_design_version": { "type": "string" },
+    "model_name": { "type": "string" },
+    "local_truth_boundary": { "type": "string" },
+    "external_components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "reason", "allowed_claim", "evidence"],
+        "properties": {
+          "name": { "type": "string" },
+          "concept_id": { "type": "string" },
+          "reason": { "type": "string" },
+          "allowed_claim": { "type": "string" },
+          "evidence": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render Architecture IR to deterministic Draw.io XML."""
+"""Render Diagram View or Architecture View to deterministic Draw.io XML."""
 
 import argparse
 import json
