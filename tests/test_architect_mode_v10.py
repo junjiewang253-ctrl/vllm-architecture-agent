@@ -29,15 +29,25 @@ def architect_artifacts() -> dict[str, Any]:
     inventory_builder = load_module("build_semantic_inventory.py", "inventory_v10_tests")
     graph_builder = load_module("build_source_fact_graph.py", "fact_graph_v10_tests")
     architect = load_module("run_architect_review.py", "architect_review_v10_tests")
-    view_architect = load_module("run_view_architect.py", "view_architect_v101_tests")
+    design_architect = load_module("run_design_architect.py", "design_architect_v11_tests")
+    view_builder = load_module("build_view_from_design.py", "view_from_design_v11_tests")
     boundary_builder = load_module("build_boundary_report.py", "boundary_report_v10_tests")
     analysis = extractor.extract_architecture(HY_V3_PATH)
     inventory = inventory_builder.build_semantic_inventory(analysis)
     graph = graph_builder.build_source_fact_graph(analysis)
     design = architect.build_architecture_design(graph, analysis, inventory)
-    view = view_architect.build_architecture_view_graph(design, graph)
+    architecture_design = design_architect.build_architecture_design_graph(design, graph)
+    view = view_builder.build_view_from_design(architecture_design)
     boundary = boundary_builder.build_boundary_report(design)
-    return {"analysis": analysis, "inventory": inventory, "graph": graph, "design": design, "view": view, "boundary": boundary}
+    return {
+        "analysis": analysis,
+        "inventory": inventory,
+        "graph": graph,
+        "design": design,
+        "architecture_design": architecture_design,
+        "view": view,
+        "boundary": boundary,
+    }
 
 
 def test_source_fact_graph_tracks_qkv_and_tp_relations():
@@ -68,6 +78,7 @@ def test_attention_view_contains_qkv_kv_cache_and_backend_boundary():
     assert "Q/K/V Split" in labels
     assert "HPC Fused Processing" in labels
     assert "Optional QK Norm" in labels
+    assert {"Q", "K", "V"}.issubset(labels)
     assert "KV Cache Boundary" in labels
     assert "vLLM Attention Backend" in labels
     edges = {edge["id"]: edge for edge in attention["edges"]}
@@ -77,6 +88,17 @@ def test_attention_view_contains_qkv_kv_cache_and_backend_boundary():
     assert attention["purpose"]
 
 
+def test_architecture_design_defines_story_branches_and_boundaries():
+    architecture_design = architect_artifacts()["architecture_design"]
+    assert architecture_design["design_graph_type"] == "architecture_design_graph"
+    attention = next(page for page in architecture_design["pages"] if page["id"] == "attention")
+    assert attention["question"].startswith("How does HYV3 attention")
+    assert len(attention["main_flow"]) >= 5
+    branch_names = {branch["name"] for branch in attention["branches"]}
+    assert {"HPC fused path", "fallback path"}.issubset(branch_names)
+    assert "vLLM Attention Backend" in attention["external_boundaries"]
+
+
 def test_view_graph_contains_runtime_flows_not_concept_cards():
     view = architect_artifacts()["view"]
     assert view["schema_version"] == "0.1"
@@ -84,6 +106,7 @@ def test_view_graph_contains_runtime_flows_not_concept_cards():
         assert len(page["nodes"]) >= 3
         assert any(edge["type"] != "annotation" for edge in page["edges"])
         assert not all(str(node.get("visual_role", "")).startswith("concept") for node in page["nodes"])
+        assert sum(1 for node in page["nodes"] if node.get("role") == "primary_flow") >= 3
     for page_id in {"model_overview", "attention", "moe"}:
         page = next(item for item in view["pages"] if item["id"] == page_id)
         assert any(edge["type"] == "runtime_flow" for edge in page["edges"])
@@ -93,10 +116,10 @@ def test_moe_and_checkpoint_views_have_architecture_nodes():
     view = architect_artifacts()["view"]
     moe = next(page for page in view["pages"] if page["id"] == "moe")
     moe_labels = {node["label"] for node in moe["nodes"]}
-    assert {"Router", "Top-K Routing", "FusedMoE", "Routed Experts", "Shared Experts", "Expert Parallel"}.issubset(moe_labels)
+    assert {"Router", "Top-K Selection", "FusedMoE", "Experts", "Shared Experts", "Expert Parallel"}.issubset(moe_labels)
     checkpoint = next(page for page in view["pages"] if page["id"] == "checkpoint")
     checkpoint_labels = {node["label"] for node in checkpoint["nodes"]}
-    assert {"HF Checkpoint", "Weight Name Processing", "Packed Mapping", "q_proj / k_proj / v_proj", "qkv_proj", "Expert Params", "Loader Dispatch", "vLLM Parameters"}.issubset(checkpoint_labels)
+    assert {"HF Checkpoint", "Weight Name Processing", "Mapping", "q_proj / k_proj / v_proj", "qkv_proj", "FusedMoE Parameters", "Loader", "vLLM Parameters"}.issubset(checkpoint_labels)
 
 
 def test_external_boundary_does_not_claim_direct_internals():
@@ -147,6 +170,7 @@ def test_vllm_arch_architect_mode_end_to_end(tmp_path: Path):
     assert completed.returncode == 0, completed.stderr + completed.stdout
     assert (outputs / "hy-v3-v10-source-fact-graph.json").exists()
     assert (outputs / "hy-v3-v10-architecture-concept.json").exists()
+    assert (outputs / "hy-v3-v10-architecture-design.json").exists()
     assert (outputs / "hy-v3-v10-architecture-view.json").exists()
     assert (outputs / "hy-v3-v10-boundary-report.json").exists()
     assert (outputs / "hy-v3-v10-architecture.drawio").exists()

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Architecture Concept Graph and v1.0.1 Architecture View quality."""
+"""Validate Architecture Concept Graph and Architecture View quality."""
 
 from __future__ import annotations
 
@@ -22,10 +22,10 @@ CONCEPT_TYPES = {
 REQUIRED_VIEW_TITLES = {
     "Model Overview",
     "Attention Implementation",
-    "MoE Execution Strategy",
+    "MoE Execution",
     "Parallel Strategy",
-    "Checkpoint Adaptation",
-    "vLLM Integration Boundary",
+    "Weight Adaptation",
+    "vLLM Boundary",
 }
 
 

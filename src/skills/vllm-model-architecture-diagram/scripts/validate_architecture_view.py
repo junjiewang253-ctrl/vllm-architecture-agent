@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Validate v1.0.1 Architecture View Graph."""
+"""Validate Architecture View Graph quality.
+
+The View Graph is generated from an Architecture Design Graph, not directly
+from concepts. These checks guard against regressions where pages become
+concept-card summaries instead of readable architecture views.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +17,7 @@ from typing import Any
 VIEW_VERSION = "0.1"
 NODE_TYPES = {"component", "data", "process", "storage", "boundary", "annotation", "capability", "group"}
 EDGE_TYPES = {"runtime_flow", "dependency", "mapping", "parallel", "delegation", "boundary", "annotation"}
+ROLE_TYPES = {"primary_flow", "secondary_flow", "boundary", "strategy", "annotation", "mapping"}
 CORE_NODE_TYPES = {"component", "process", "storage", "boundary", "data"}
 
 
@@ -56,16 +62,25 @@ def validate_architecture_view(view: dict[str, Any], architecture_concept: dict[
         if len(nodes) < 3:
             errors.append(f"page {page_id} must contain at least 3 nodes")
         node_ids = {node.get("id") for node in nodes}
+        roles = [str(node.get("role") or node.get("visual_role") or "") for node in nodes]
+        if all(role == "annotation" for role in roles):
+            errors.append(f"page {page_id} appears to contain only annotations")
         if all(str(node.get("visual_role", "")).startswith("concept") for node in nodes):
             errors.append(f"page {page_id} appears to contain only concept cards")
+        primary_flow_count = sum(1 for role in roles if role == "primary_flow")
+        if primary_flow_count < 3:
+            errors.append(f"page {page_id} must contain at least 3 primary_flow nodes")
         if edges and all(edge.get("type") == "annotation" for edge in edges):
             errors.append(f"page {page_id} must contain non-annotation architecture edges")
         connected: set[Any] = set()
         for node in nodes:
             node_id = node.get("id")
             node_type = node.get("type")
+            role = node.get("role") or node.get("visual_role")
             if node_type not in NODE_TYPES:
                 errors.append(f"page {page_id} node {node_id} has invalid type {node_type!r}")
+            if role not in ROLE_TYPES:
+                errors.append(f"page {page_id} node {node_id} has invalid role {role!r}")
             concept_refs = node.get("concept_refs")
             fact_refs = node.get("fact_refs")
             if node_type in CORE_NODE_TYPES:
@@ -109,22 +124,28 @@ def validate_architecture_view(view: dict[str, Any], architecture_concept: dict[
                 errors.append(f"page {page_id} must contain data node, component node, and runtime_flow edge")
         if page_id == "attention":
             labels = {str(node.get("label")) for node in nodes}
-            required = {"QKV Projection", "Q/K/V Split", "Q Path", "K Path", "V Path", "HPC Fused Processing", "Optional QK Norm", "KV Cache Boundary", "vLLM Attention Backend"}
+            required = {"QKV Projection", "Q/K/V Split", "Q", "K", "V", "HPC Fused Processing", "Optional QK Norm", "KV Cache Boundary", "vLLM Attention Backend"}
             missing = sorted(required - labels)
             if missing:
                 errors.append(f"attention page missing required nodes: {', '.join(missing)}")
         if page_id == "moe":
             labels = {str(node.get("label")) for node in nodes}
-            required = {"Router", "Top-K Routing", "FusedMoE", "Routed Experts", "Shared Experts", "Expert Parallel"}
+            required = {"Router", "Top-K Selection", "FusedMoE", "Experts", "Shared Experts", "Expert Parallel"}
             missing = sorted(required - labels)
             if missing:
                 errors.append(f"moe page missing required nodes: {', '.join(missing)}")
         if page_id == "checkpoint":
             labels = {str(node.get("label")) for node in nodes}
-            required = {"HF Checkpoint", "Weight Name Processing", "Packed Mapping", "qkv_proj", "vLLM Parameters"}
+            required = {"HF Checkpoint", "Weight Name Processing", "Mapping", "qkv_proj", "FusedMoE Parameters", "Loader", "vLLM Parameters"}
             missing = sorted(required - labels)
             if missing:
                 errors.append(f"checkpoint page missing required nodes: {', '.join(missing)}")
+        if page_id == "vllm_boundary":
+            labels = {str(node.get("label")) for node in nodes}
+            required = {"Local Adapter", "Adapter Boundary", "External vLLM Runtime"}
+            missing = sorted(required - labels)
+            if missing:
+                errors.append(f"vllm_boundary page missing local/external boundary nodes: {', '.join(missing)}")
     return errors
 
 

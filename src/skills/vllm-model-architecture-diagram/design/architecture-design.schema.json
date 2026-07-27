@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Architecture Design Graph",
+  "type": "object",
+  "required": ["schema_version", "model_name", "pages"],
+  "properties": {
+    "schema_version": { "const": "0.1" },
+    "design_graph_type": { "const": "architecture_design_graph" },
+    "source_concept_version": { "type": "string" },
+    "source_fact_graph_version": { "type": "string" },
+    "model_name": { "type": "string" },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "question", "purpose", "main_flow", "nodes", "edges", "external_boundaries"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "question": { "type": "string" },
+          "purpose": { "type": "string" },
+          "main_flow": { "type": "array", "items": { "type": "string" } },
+          "branches": { "type": "array" },
+          "external_boundaries": { "type": "array", "items": { "type": "string" } },
+          "nodes": { "type": "array" },
+          "edges": { "type": "array" },
+          "groups": { "type": "array" },
+          "lanes": { "type": "array" },
+          "annotations": { "type": "array" },
+          "strategies": { "type": "array" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "boundaries": { "type": "array" },
+    "assumptions": { "type": "array" }
+  },
+  "additionalProperties": true
+}

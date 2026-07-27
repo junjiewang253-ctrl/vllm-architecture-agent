@@ -122,7 +122,8 @@ def run_pipeline(args: argparse.Namespace) -> None:
             "--output",
             str(paths["architecture_concept"]),
         ])
-        _run([py, str(SCRIPTS / "run_view_architect.py"), str(paths["architecture_concept"]), str(paths["source_fact_graph"]), "--output", str(paths["architecture_view"])])
+        _run([py, str(SCRIPTS / "run_design_architect.py"), str(paths["architecture_concept"]), str(paths["source_fact_graph"]), "--output", str(paths["architecture_design"])])
+        _run([py, str(SCRIPTS / "build_view_from_design.py"), str(paths["architecture_design"]), "--output", str(paths["architecture_view"])])
         _run([py, str(SCRIPTS / "build_boundary_report.py"), str(paths["architecture_concept"]), "--output", str(paths["boundary_report"])])
         _run([
             py,

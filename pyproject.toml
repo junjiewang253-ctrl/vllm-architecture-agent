@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vllm-architecture-agent"
-version = "1.0.2"
+version = "1.1.0"
 description = "Agent Skill for generating Draw.io diagrams from vLLM model adapter source files."
 readme = "README.md"
 requires-python = ">=3.10"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create an Architecture Design from a Source Fact Graph.
+"""Create an Architecture Concept Graph from a Source Fact Graph.
 
 In the interactive v1.0 Skill workflow the active Agent may author this JSON
 directly. This script provides a conservative, source-grounded architect pass
@@ -286,7 +286,7 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    print(f"Wrote Architecture Design to {args.output}")
+    print(f"Wrote Architecture Concept Graph to {args.output}")
     return 0
 
 

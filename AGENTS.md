@@ -14,16 +14,19 @@ Keep these concerns separate:
 2. vLLM semantic interpretation.
 3. Source Fact Graph normalization.
 4. Agent-guided Architecture Concept design.
-5. Architecture View planning.
-6. Diagram View / layout compatibility and deterministic rendering.
-7. Agent-guided semantic or visual review where applicable.
-8. Draw.io rendering and MCP interaction.
+5. Architecture Design Graph planning.
+6. Architecture View generation from Design.
+7. Diagram View / layout compatibility and deterministic rendering.
+8. Agent-guided semantic or visual review where applicable.
+9. Draw.io rendering and MCP interaction.
 
 Use source-analysis JSON between source parsing and downstream semantic layers.
 For v0.9.1 reviewed mode, Architecture IR remains the semantic source for
 Diagram View. For v1.0+ Architect Mode, Architecture Concept Graph is the
-semantic architecture layer, but it must not be rendered directly. Architecture
-View Graph is the renderer input.
+semantic architecture layer, but it must not be rendered directly. For v1.1+,
+Architecture Design Graph describes the page story, main flow, branches and
+boundaries. Architecture View Graph is generated from Design and is the
+renderer input.
 Diagram View / Architecture View may decide presentation, ports, lanes and route
 hints, but must not change source facts or concept evidence.
 
@@ -45,9 +48,10 @@ hints, but must not change source facts or concept evidence.
 - Build and validate Diagram View before rendering v0.9.1 diagrams.
 - Use `layout_diagram.py` for deterministic coordinates and routed waypoints.
 - Use `build_source_fact_graph.py`, `run_architect_review.py`,
-  `run_view_architect.py`, `validate_architecture_view.py`,
-  `apply_view_layout.py`, `build_boundary_report.py`, and
-  `validate_architecture_quality.py` for v1.0.2 Architect Mode outputs.
+  `run_design_architect.py`, `build_view_from_design.py`,
+  `validate_architecture_view.py`, `apply_view_layout.py`,
+  `build_boundary_report.py`, and `validate_architecture_quality.py` for v1.1
+  Architect Mode outputs.
 - Build `review-lock.json` for reviewed-mode outputs and do not silently reuse a
   stale review when source or baseline hashes change.
 - Put cross-Agent core behavior in the Skill directory.

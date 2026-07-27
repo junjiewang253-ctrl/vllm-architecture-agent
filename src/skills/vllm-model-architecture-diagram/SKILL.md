@@ -9,31 +9,32 @@ compatibility: Requires Python 3, access to the input source file, and a connect
 Analyze a vLLM model adapter Python file and create a human-readable
 architecture diagram.
 
-v1.0.2 uses four layers:
+v1.1 uses five layers:
 
 ```text
 Python source
 -> Source Fact Graph
 -> Architecture Concept Graph
+-> Architecture Design Graph
 -> Architecture View Graph
 -> Deterministic Draw.io Renderer
 ```
 
-Concepts explain what source facts mean. View Graph explains how a human should
-see those concepts: components, data nodes, runtime flow, mapping flow,
-parallel strategy and external boundaries. Renderer must read View Graph, not
-Concept Graph.
+Concepts explain what source facts mean. Design Graph explains the story of
+each page: the question, main flow, branches, boundaries and which facts become
+components versus annotations. View Graph is generated mechanically from Design
+and is the renderer input. Renderer must read View Graph, not Concept Graph.
 
 # Modes
 
-- `architect`: default v1.0.1 workflow.
+- `architect`: default v1.1 workflow.
 - `reviewed`: v0.9.1 patch-audited workflow.
 - `deterministic`: CI/regression baseline.
 
 # Default Command
 
 ```text
-vllm-arch run --mode architect --input samples/hy_v3.py --model-name hy-v3-v1.0.2 --outputs-dir outputs
+vllm-arch run --mode architect --input samples/hy_v3.py --model-name hy-v3-v1.1 --outputs-dir outputs
 ```
 
 # Default Workflow
@@ -62,13 +63,19 @@ python <skill-directory>/scripts/build_source_fact_graph.py outputs/<model>-sour
 python <skill-directory>/scripts/run_architect_review.py outputs/<model>-source-fact-graph.json --source-analysis outputs/<model>-source-analysis.json --semantic-inventory outputs/<model>-semantic-inventory.json --output outputs/<model>-architecture-concept.json
 ```
 
-5. Build Architecture View Graph:
+5. Build Architecture Design Graph:
 
 ```text
-python <skill-directory>/scripts/run_view_architect.py outputs/<model>-architecture-concept.json outputs/<model>-source-fact-graph.json --output outputs/<model>-architecture-view.json
+python <skill-directory>/scripts/run_design_architect.py outputs/<model>-architecture-concept.json outputs/<model>-source-fact-graph.json --output outputs/<model>-architecture-design.json
 ```
 
-6. Build boundary report and validate:
+6. Build Architecture View Graph from Design:
+
+```text
+python <skill-directory>/scripts/build_view_from_design.py outputs/<model>-architecture-design.json --output outputs/<model>-architecture-view.json
+```
+
+7. Build boundary report and validate:
 
 ```text
 python <skill-directory>/scripts/build_boundary_report.py outputs/<model>-architecture-concept.json --output outputs/<model>-boundary-report.json
@@ -76,7 +83,7 @@ python <skill-directory>/scripts/validate_architecture_quality.py outputs/<model
 python <skill-directory>/scripts/validate_architecture_view.py outputs/<model>-architecture-view.json --architecture-concept outputs/<model>-architecture-concept.json --source-fact-graph outputs/<model>-source-fact-graph.json
 ```
 
-7. Layout and render:
+8. Layout and render:
 
 ```text
 python <skill-directory>/scripts/apply_view_layout.py outputs/<model>-architecture-view.json --output outputs/<model>-layout-plan.json
@@ -90,10 +97,10 @@ For HY V3, default View Architect output should include:
 
 - Model Overview
 - Attention Implementation
-- MoE Execution Strategy
+- MoE Execution
 - Parallel Strategy
-- Checkpoint Adaptation
-- vLLM Integration Boundary
+- Weight Adaptation
+- vLLM Boundary
 
 # View Requirements
 
@@ -104,10 +111,10 @@ For HY V3, default View Architect output should include:
 - Attention page must show QKV Projection, Q/K/V Split, HPC fused path,
   fallback Q/K norm + RoPE path, KV Cache Boundary, vLLM Attention Backend and
   Output Projection.
-- MoE page must show Router, Top-K Routing, FusedMoE, Routed Experts, Shared
+- MoE page must show Router, Top-K Selection, FusedMoE, Experts, Shared
   Experts and EP.
-- Checkpoint page must show HF weights, filter/rename, packed/stacked mappings,
-  expert mapping, loader dispatch and vLLM parameters.
+- Checkpoint page must show HF weights, Weight Name Processing, mapping,
+  qkv/gate-up/expert mapping targets, loader and vLLM parameters.
 - Boundary page must distinguish local adapter behavior from imported vLLM
   component behavior.
 

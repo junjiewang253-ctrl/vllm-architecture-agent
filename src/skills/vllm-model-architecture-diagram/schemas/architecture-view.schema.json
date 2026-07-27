@@ -20,7 +20,7 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["id", "type", "label", "concept_refs", "fact_refs", "ports", "visual_role"],
+              "required": ["id", "type", "role", "label", "concept_refs", "fact_refs", "ports", "visual_role"],
               "properties": {
                 "id": { "type": "string" },
                 "type": {
@@ -28,10 +28,15 @@
                 },
                 "label": { "type": "string" },
                 "subtitle": { "type": "string" },
+                "role": {
+                  "enum": ["primary_flow", "secondary_flow", "boundary", "strategy", "annotation", "mapping"]
+                },
                 "concept_refs": { "type": "array", "items": { "type": "string" } },
                 "fact_refs": { "type": "array", "items": { "type": "string" } },
                 "ports": { "type": "array" },
-                "visual_role": { "type": "string" },
+                "visual_role": {
+                  "enum": ["primary_flow", "secondary_flow", "boundary", "strategy", "annotation", "mapping"]
+                },
                 "layout": { "type": "object" }
               },
               "additionalProperties": true
