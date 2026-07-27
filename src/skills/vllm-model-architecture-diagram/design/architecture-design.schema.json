@@ -2,38 +2,320 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Architecture Design Graph",
   "type": "object",
-  "required": ["schema_version", "model_name", "pages"],
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "design_graph_type",
+    "model_name",
+    "source_sha256",
+    "author",
+    "pages",
+    "external_boundaries",
+    "coverage",
+    "assumptions"
+  ],
   "properties": {
-    "schema_version": { "const": "0.1" },
+    "schema_version": { "const": "1.0" },
     "design_graph_type": { "const": "architecture_design_graph" },
-    "source_concept_version": { "type": "string" },
-    "source_fact_graph_version": { "type": "string" },
-    "model_name": { "type": "string" },
-    "pages": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["id", "title", "question", "purpose", "main_flow", "nodes", "edges", "external_boundaries"],
-        "properties": {
-          "id": { "type": "string" },
-          "title": { "type": "string" },
-          "question": { "type": "string" },
-          "purpose": { "type": "string" },
-          "main_flow": { "type": "array", "items": { "type": "string" } },
-          "branches": { "type": "array" },
-          "external_boundaries": { "type": "array", "items": { "type": "string" } },
-          "nodes": { "type": "array" },
-          "edges": { "type": "array" },
-          "groups": { "type": "array" },
-          "lanes": { "type": "array" },
-          "annotations": { "type": "array" },
-          "strategies": { "type": "array" }
-        },
-        "additionalProperties": true
+    "model_name": { "type": "string", "minLength": 1 },
+    "source_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "author": { "$ref": "#/$defs/author" },
+    "pages": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/page" } },
+    "external_boundaries": { "type": "array", "items": { "$ref": "#/$defs/external_boundary" } },
+    "coverage": { "type": "array", "items": { "$ref": "#/$defs/coverage" } },
+    "assumptions": { "type": "array", "items": { "type": "string" } },
+    "visual_patch": { "$ref": "#/$defs/visual_patch" }
+  },
+  "$defs": {
+    "visual_patch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_design_sha256", "applied_operations"],
+      "properties": {
+        "base_design_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "applied_operations": { "type": "array", "items": { "type": "string" } }
       }
     },
-    "boundaries": { "type": "array" },
-    "assumptions": { "type": "array" }
-  },
-  "additionalProperties": true
+    "author": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "agent", "created_at", "prompt_version"],
+      "properties": {
+        "type": { "enum": ["agent", "baseline"] },
+        "agent": { "type": "string" },
+        "created_at": { "type": "string" },
+        "prompt_version": { "type": "string" }
+      }
+    },
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "question",
+        "purpose",
+        "view_kind",
+        "scope",
+        "primary_story",
+        "nodes",
+        "edges",
+        "groups",
+        "annotations",
+        "layout_constraints",
+        "coverage"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "question": { "type": "string", "minLength": 1 },
+        "purpose": { "type": "string", "minLength": 1 },
+        "view_kind": {
+          "enum": [
+            "pipeline",
+            "block_with_residual",
+            "branch_merge",
+            "routed_container",
+            "mapping_dispatch",
+            "strategy_matrix",
+            "boundary_map"
+          ]
+        },
+        "scope": { "type": "array", "items": { "type": "string" } },
+        "primary_story": { "$ref": "#/$defs/primary_story" },
+        "nodes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/node" } },
+        "edges": { "type": "array", "items": { "$ref": "#/$defs/edge" } },
+        "groups": { "type": "array", "items": { "$ref": "#/$defs/group" } },
+        "annotations": { "type": "array", "items": { "$ref": "#/$defs/annotation" } },
+        "layout_constraints": { "$ref": "#/$defs/layout_constraints" },
+        "coverage": { "type": "array", "items": { "$ref": "#/$defs/coverage" } }
+      }
+    },
+    "primary_story": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_node_id", "end_node_id", "ordered_node_ids", "reading_direction"],
+      "properties": {
+        "start_node_id": { "type": "string" },
+        "end_node_id": { "type": "string" },
+        "ordered_node_ids": { "type": "array", "items": { "type": "string" } },
+        "reading_direction": { "enum": ["left_to_right"] }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "semantic_kind",
+        "role",
+        "label",
+        "implementation",
+        "phase",
+        "parent_id",
+        "concept_refs",
+        "fact_refs",
+        "ports",
+        "display",
+        "layout_hint"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "semantic_kind": {
+          "enum": [
+            "data",
+            "component",
+            "process",
+            "storage",
+            "external_component",
+            "strategy",
+            "mapping",
+            "annotation",
+            "merge",
+            "boundary"
+          ]
+        },
+        "role": { "enum": ["primary", "branch", "auxiliary", "contained", "strategy", "boundary", "annotation"] },
+        "label": { "type": "string" },
+        "implementation": { "type": "string" },
+        "phase": { "enum": ["construction", "runtime", "checkpoint_loading", "parallel_partition", "external"] },
+        "parent_id": { "type": ["string", "null"] },
+        "concept_refs": { "type": "array", "items": { "type": "string" } },
+        "fact_refs": { "type": "array", "items": { "type": "string" } },
+        "ports": { "type": "array", "items": { "$ref": "#/$defs/port" } },
+        "display": { "$ref": "#/$defs/display" },
+        "layout_hint": { "$ref": "#/$defs/layout_hint" }
+      }
+    },
+    "port": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "direction", "data_kind", "preferred_side", "order"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "direction": { "enum": ["input", "output", "bidirectional"] },
+        "data_kind": { "enum": ["tensor", "weights", "config", "cache", "control", "capability"] },
+        "preferred_side": { "enum": ["left", "right", "top", "bottom"] },
+        "order": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "display": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "subtitle", "show_implementation", "badges", "max_title_lines", "max_subtitle_lines"],
+      "properties": {
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "show_implementation": { "type": "boolean" },
+        "badges": { "type": "array", "items": { "type": "string" } },
+        "max_title_lines": { "type": "integer", "minimum": 1, "maximum": 2 },
+        "max_subtitle_lines": { "type": "integer", "minimum": 1, "maximum": 2 }
+      }
+    },
+    "layout_hint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["region", "lane", "order", "preferred_size"],
+      "properties": {
+        "region": { "type": ["string", "null"] },
+        "lane": { "type": ["string", "null"] },
+        "order": { "type": "integer", "minimum": 0 },
+        "preferred_size": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["width", "height"],
+          "properties": {
+            "width": { "type": "number", "exclusiveMinimum": 0 },
+            "height": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "source",
+        "target",
+        "source_port",
+        "target_port",
+        "phase",
+        "concept_refs",
+        "fact_refs",
+        "display",
+        "route_hint"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": {
+          "enum": [
+            "tensor_flow",
+            "residual_flow",
+            "dependency",
+            "containment",
+            "mapping",
+            "parallel_effect",
+            "delegation",
+            "external_boundary",
+            "control"
+          ]
+        },
+        "source": { "type": "string" },
+        "target": { "type": "string" },
+        "source_port": { "type": "string" },
+        "target_port": { "type": "string" },
+        "phase": { "enum": ["construction", "runtime", "checkpoint_loading", "parallel_partition", "external"] },
+        "concept_refs": { "type": "array", "items": { "type": "string" } },
+        "fact_refs": { "type": "array", "items": { "type": "string" } },
+        "display": { "$ref": "#/$defs/edge_display" },
+        "route_hint": {
+          "enum": ["direct", "upper_lane", "lower_lane", "branch_top", "branch_bottom", "bus", "local", "hidden"]
+        }
+      }
+    },
+    "edge_display": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["visible", "show_label", "label", "priority"],
+      "properties": {
+        "visible": { "type": "boolean" },
+        "show_label": { "type": "boolean" },
+        "label": { "type": "string" },
+        "priority": { "enum": ["primary", "secondary", "auxiliary"] }
+      }
+    },
+    "group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "kind", "member_ids"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "kind": { "enum": ["region", "lane", "container", "boundary"] },
+        "member_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "annotation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text", "target_ids", "fact_refs"],
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "target_ids": { "type": "array", "items": { "type": "string" } },
+        "fact_refs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "layout_constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["page_size", "orientation", "pattern"],
+      "properties": {
+        "page_size": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "type": "number", "exclusiveMinimum": 0 }
+        },
+        "orientation": { "enum": ["landscape"] },
+        "pattern": {
+          "enum": [
+            "pipeline",
+            "block_with_residual",
+            "branch_merge",
+            "routed_container",
+            "mapping_dispatch",
+            "strategy_matrix",
+            "boundary_map"
+          ]
+        }
+      }
+    },
+    "external_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "reason", "allowed_claim", "fact_refs"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "reason": { "type": "string" },
+        "allowed_claim": { "type": "string" },
+        "fact_refs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["topic", "concept_refs", "fact_refs", "status"],
+      "properties": {
+        "topic": { "type": "string" },
+        "concept_refs": { "type": "array", "items": { "type": "string" } },
+        "fact_refs": { "type": "array", "items": { "type": "string" } },
+        "status": { "enum": ["covered", "external_boundary", "excluded"] }
+      }
+    }
+  }
 }

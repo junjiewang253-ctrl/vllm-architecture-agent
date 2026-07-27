@@ -51,6 +51,8 @@ def _paths(outputs_dir: Path, model: str) -> dict[str, Path]:
         "architecture_concept": outputs_dir / f"{model}-architecture-concept.json",
         "architecture_view": outputs_dir / f"{model}-architecture-view.json",
         "boundary_report": outputs_dir / f"{model}-boundary-report.json",
+        "architect_brief": outputs_dir / f"{model}-architect-brief.json",
+        "architecture_design_template": outputs_dir / f"{model}-architecture-design.template.json",
         "mentor_report": outputs_dir / f"{model}-mentor-report.md",
         "architecture_report": outputs_dir / f"{model}-architecture-report.md",
     }
@@ -98,7 +100,7 @@ def _use_review_pair(
     )
 
 
-def run_pipeline(args: argparse.Namespace) -> None:
+def prepare_architect(args: argparse.Namespace) -> None:
     input_path = args.input
     if not input_path.exists() or input_path.suffix != ".py":
         raise RuntimeError(f"input must be an existing .py file: {input_path}")
@@ -109,36 +111,116 @@ def run_pipeline(args: argparse.Namespace) -> None:
 
     _run([py, str(SCRIPTS / "extract_architecture.py"), str(input_path), "--output", str(paths["source_analysis"])])
     _run([py, str(SCRIPTS / "build_semantic_inventory.py"), str(paths["source_analysis"]), "--output", str(paths["inventory"])])
+    _run([py, str(SCRIPTS / "build_source_fact_graph.py"), str(paths["source_analysis"]), "--output", str(paths["source_fact_graph"])])
+    _run([
+        py,
+        str(SCRIPTS / "build_baseline_concept_graph.py"),
+        str(paths["source_fact_graph"]),
+        "--source-analysis",
+        str(paths["source_analysis"]),
+        "--semantic-inventory",
+        str(paths["inventory"]),
+        "--output",
+        str(paths["architecture_concept"]),
+    ])
+    _run([py, str(SCRIPTS / "build_boundary_report.py"), str(paths["architecture_concept"]), "--output", str(paths["boundary_report"])])
+    _run([
+        py,
+        str(SCRIPTS / "build_architect_brief.py"),
+        str(paths["source_analysis"]),
+        str(paths["source_fact_graph"]),
+        str(paths["architecture_concept"]),
+        str(paths["boundary_report"]),
+        "--source-file",
+        str(input_path),
+        "--output",
+        str(paths["architect_brief"]),
+    ])
+    _run([
+        py,
+        str(SCRIPTS / "build_baseline_design.py"),
+        str(paths["architect_brief"]),
+        str(paths["architecture_concept"]),
+        str(paths["boundary_report"]),
+        "--output",
+        str(paths["architecture_design_template"]),
+    ])
+    print(
+        "vllm-arch prepare completed. "
+        f"Architect brief: {paths['architect_brief']}; "
+        f"design template: {paths['architecture_design_template']}"
+    )
+
+
+def finalize_architect(args: argparse.Namespace) -> None:
+    design_path = args.design
+    if not design_path.exists() or not design_path.is_file():
+        raise RuntimeError(f"architecture design file does not exist: {design_path}")
+    model = _model_name(Path("unused.py"), args.model_name)
+    paths = _paths(args.outputs_dir, model)
+    py = sys.executable
+    required = ["source_fact_graph", "architecture_concept", "boundary_report"]
+    for key in required:
+        if not paths[key].exists():
+            raise RuntimeError(f"finalize requires prepare output: {paths[key]}")
+    _copy_if_needed(design_path, paths["architecture_design"])
+
+    validate_cmd = [
+        py,
+        str(SCRIPTS / "validate_architecture_design.py"),
+        str(paths["architecture_design"]),
+        str(paths["source_fact_graph"]),
+        str(paths["architecture_concept"]),
+    ]
+    if args.source_file is not None:
+        validate_cmd.extend(["--source-file", str(args.source_file)])
+    _run(validate_cmd)
+    _run([py, str(SCRIPTS / "compile_architecture_view.py"), str(paths["architecture_design"]), "--output", str(paths["architecture_view"])])
+    _run([
+        py,
+        str(SCRIPTS / "validate_architecture_view.py"),
+        str(paths["architecture_view"]),
+        "--architecture-concept",
+        str(paths["architecture_concept"]),
+        "--source-fact-graph",
+        str(paths["source_fact_graph"]),
+    ])
+    _run([py, str(SCRIPTS / "apply_view_layout.py"), str(paths["architecture_view"]), "--output", str(paths["layout"])])
+    _run([py, str(SCRIPTS / "render_drawio.py"), str(paths["architecture_view"]), "--layout-plan", str(paths["layout"]), "--output", str(paths["drawio"])])
+    _run([py, str(SCRIPTS / "validate_drawio.py"), str(paths["architecture_view"]), str(paths["drawio"]), "--view", str(paths["architecture_view"]), "--layout-plan", str(paths["layout"])])
+    _run([py, str(SCRIPTS / "validate_visual_layout.py"), str(paths["architecture_view"]), str(paths["drawio"]), "--metrics-output", str(paths["metrics"])])
+    _run([py, str(SCRIPTS / "build_mentor_report.py"), str(paths["architecture_concept"]), str(paths["architecture_view"]), str(paths["boundary_report"]), "--output", str(paths["architecture_report"])])
+    print(f"vllm-arch finalize completed: {paths['drawio']}")
+
+
+def run_pipeline(args: argparse.Namespace) -> None:
+    input_path = args.input
+    if not input_path.exists() or input_path.suffix != ".py":
+        raise RuntimeError(f"input must be an existing .py file: {input_path}")
+    model = _model_name(input_path, args.model_name)
+    paths = _paths(args.outputs_dir, model)
+    args.outputs_dir.mkdir(parents=True, exist_ok=True)
+    py = sys.executable
+
+    if args.mode == "architect" and args.architecture_design is None:
+        raise RuntimeError(
+            "architect mode requires an Agent-authored design file. "
+            "Run `vllm-arch prepare ...`, author outputs/<model>-architecture-design.json, "
+            "then run `vllm-arch finalize --design <path> ...`, or pass --architecture-design."
+        )
+
+    _run([py, str(SCRIPTS / "extract_architecture.py"), str(input_path), "--output", str(paths["source_analysis"])])
+    _run([py, str(SCRIPTS / "build_semantic_inventory.py"), str(paths["source_analysis"]), "--output", str(paths["inventory"])])
     if args.mode == "architect":
-        _run([py, str(SCRIPTS / "build_source_fact_graph.py"), str(paths["source_analysis"]), "--output", str(paths["source_fact_graph"])])
-        _run([
-            py,
-            str(SCRIPTS / "run_architect_review.py"),
-            str(paths["source_fact_graph"]),
-            "--source-analysis",
-            str(paths["source_analysis"]),
-            "--semantic-inventory",
-            str(paths["inventory"]),
-            "--output",
-            str(paths["architecture_concept"]),
-        ])
-        _run([py, str(SCRIPTS / "run_design_architect.py"), str(paths["architecture_concept"]), str(paths["source_fact_graph"]), "--output", str(paths["architecture_design"])])
-        _run([py, str(SCRIPTS / "build_view_from_design.py"), str(paths["architecture_design"]), "--output", str(paths["architecture_view"])])
-        _run([py, str(SCRIPTS / "build_boundary_report.py"), str(paths["architecture_concept"]), "--output", str(paths["boundary_report"])])
-        _run([
-            py,
-            str(SCRIPTS / "validate_architecture_quality.py"),
-            str(paths["source_fact_graph"]),
-            str(paths["architecture_concept"]),
-            str(paths["architecture_view"]),
-            "--boundary-report",
-            str(paths["boundary_report"]),
-        ])
-        _run([py, str(SCRIPTS / "validate_architecture_view.py"), str(paths["architecture_view"]), "--architecture-concept", str(paths["architecture_concept"]), "--source-fact-graph", str(paths["source_fact_graph"])])
-        _run([py, str(SCRIPTS / "apply_view_layout.py"), str(paths["architecture_view"]), "--output", str(paths["layout"])])
-        _run([py, str(SCRIPTS / "render_drawio.py"), str(paths["architecture_view"]), "--layout-plan", str(paths["layout"]), "--output", str(paths["drawio"])])
-        _run([py, str(SCRIPTS / "build_mentor_report.py"), str(paths["architecture_concept"]), str(paths["architecture_view"]), str(paths["boundary_report"]), "--output", str(paths["architecture_report"])])
-        print(f"vllm-arch architect run completed: {paths['drawio']}")
+        prepare_args = argparse.Namespace(input=input_path, model_name=args.model_name, outputs_dir=args.outputs_dir)
+        prepare_architect(prepare_args)
+        finalize_args = argparse.Namespace(
+            design=args.architecture_design,
+            model_name=model,
+            outputs_dir=args.outputs_dir,
+            source_file=input_path,
+        )
+        finalize_architect(finalize_args)
         return
     _run([py, str(SCRIPTS / "build_architecture_ir.py"), str(paths["source_analysis"]), "--output", str(paths["baseline_ir"])])
     _run([py, str(SCRIPTS / "validate_architecture_ir.py"), str(paths["baseline_ir"])])
@@ -320,11 +402,23 @@ def run_pipeline(args: argparse.Namespace) -> None:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="vllm-arch")
     subparsers = parser.add_subparsers(dest="command", required=True)
+    prepare = subparsers.add_parser("prepare")
+    prepare.add_argument("--input", type=Path, default=Path("samples/hy_v3.py"))
+    prepare.add_argument("--outputs-dir", type=Path, default=Path("outputs"))
+    prepare.add_argument("--model-name")
+
+    finalize = subparsers.add_parser("finalize")
+    finalize.add_argument("--design", type=Path, required=True)
+    finalize.add_argument("--outputs-dir", type=Path, default=Path("outputs"))
+    finalize.add_argument("--model-name", required=True)
+    finalize.add_argument("--source-file", type=Path)
+
     run = subparsers.add_parser("run")
     run.add_argument("--input", type=Path, default=Path("samples/hy_v3.py"))
     run.add_argument("--outputs-dir", type=Path, default=Path("outputs"))
     run.add_argument("--model-name")
     run.add_argument("--mode", choices=["deterministic", "reviewed", "architect"], default="reviewed")
+    run.add_argument("--architecture-design", type=Path)
     run.add_argument("--semantic-review", type=Path)
     run.add_argument("--ir-patch", type=Path)
     run.add_argument("--visual-review", type=Path)
@@ -337,7 +431,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
-        if args.command == "run":
+        if args.command == "prepare":
+            prepare_architect(args)
+        elif args.command == "finalize":
+            finalize_architect(args)
+        elif args.command == "run":
             run_pipeline(args)
     except RuntimeError as exc:
         print(f"error: {exc}", file=sys.stderr)

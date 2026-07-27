@@ -773,6 +773,20 @@ def _edge_style(edge_type: str) -> str:
 def _normalize_architecture_view_graph(view: dict[str, Any]) -> dict[str, Any]:
     if view.get("view_graph_type") != "architecture_view_graph":
         return view
+    if view.get("schema_version") == "1.0":
+        pages: list[dict[str, Any]] = []
+        for page in view.get("pages", []):
+            if not isinstance(page, dict):
+                continue
+            normalized = dict(page)
+            normalized["page_type"] = page.get("view_kind", page.get("id"))
+            normalized["annotations"] = page.get("decorations", [])
+            pages.append(normalized)
+        return {
+            "schema_version": "0.1",
+            "model_name": view.get("model_name", "unknown-model"),
+            "pages": pages,
+        }
     pages: list[dict[str, Any]] = []
     for page in view.get("pages", []):
         if not isinstance(page, dict):
@@ -910,6 +924,7 @@ def _render_from_view_plan(view: dict[str, Any], layout_plan: dict[str, Any]) ->
                 "pageHeight": str(layout_page["height"]),
                 "math": "0",
                 "shadow": "0",
+                "background": "#FFFFFF",
             },
         )
         root = ET.SubElement(model, "root")
@@ -1036,6 +1051,7 @@ def render_drawio(ir: dict[str, Any], layout_plan: dict[str, Any] | None = None)
                 "pageHeight": str(page_height),
                 "math": "0",
                 "shadow": "0",
+                "background": "#FFFFFF",
             },
         )
         root = ET.SubElement(model, "root")

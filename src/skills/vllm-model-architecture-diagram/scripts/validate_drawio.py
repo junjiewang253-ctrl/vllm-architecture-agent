@@ -116,12 +116,36 @@ def _is_decorative(cell_id: str) -> bool:
     return cell_id.startswith(DECORATIVE_PREFIX)
 
 
+def _node_id(node: dict[str, Any]) -> str | None:
+    node_id = node.get("id") or node.get("semantic_id")
+    return node_id if isinstance(node_id, str) else None
+
+
+def _edge_id(edge: dict[str, Any]) -> str | None:
+    edge_id = edge.get("id") or edge.get("semantic_id")
+    return edge_id if isinstance(edge_id, str) else None
+
+
+def _page_nodes(page: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_nodes = page.get("nodes")
+    if not isinstance(raw_nodes, list):
+        raw_nodes = page.get("visible_nodes", [])
+    return [node for node in raw_nodes if isinstance(node, dict) and _node_id(node)]
+
+
+def _page_edges(page: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_edges = page.get("edges")
+    if not isinstance(raw_edges, list):
+        raw_edges = page.get("visible_edges", [])
+    return [edge for edge in raw_edges if isinstance(edge, dict) and _edge_id(edge)]
+
+
 def _page_node_ids(page: dict[str, Any]) -> set[str]:
-    return {node["id"] for node in page.get("nodes", []) if isinstance(node, dict) and isinstance(node.get("id"), str)}
+    return {node_id for node in _page_nodes(page) for node_id in [_node_id(node)] if node_id is not None}
 
 
 def _page_edge_ids(page: dict[str, Any]) -> set[str]:
-    return {edge["id"] for edge in page.get("edges", []) if isinstance(edge, dict) and isinstance(edge.get("id"), str)}
+    return {edge_id for edge in _page_edges(page) for edge_id in [_edge_id(edge)] if edge_id is not None}
 
 
 def validate_drawio(ir: dict[str, Any], drawio_path: Path) -> list[str]:
@@ -251,14 +275,16 @@ def _validate_page(
             errors.append(f"page {draw_page.page_id}: extra semantic Draw.io edge not present in IR: {cell_id}")
 
     node_by_id = {
-        node["id"]: node
-        for node in ir_page.get("nodes", [])
-        if isinstance(node, dict) and isinstance(node.get("id"), str)
+        node_id: node
+        for node in _page_nodes(ir_page)
+        for node_id in [_node_id(node)]
+        if node_id is not None
     }
     edge_by_id = {
-        edge["id"]: edge
-        for edge in ir_page.get("edges", [])
-        if isinstance(edge, dict) and isinstance(edge.get("id"), str)
+        edge_id: edge
+        for edge in _page_edges(ir_page)
+        for edge_id in [_edge_id(edge)]
+        if edge_id is not None
     }
 
     for node_id, node in sorted(node_by_id.items()):

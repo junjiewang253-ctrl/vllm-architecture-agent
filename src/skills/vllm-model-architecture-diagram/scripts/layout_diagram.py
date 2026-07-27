@@ -17,7 +17,7 @@ from typing import Any
 
 LAYOUT_PLAN_VERSION = "0.1"
 VIEW_VERSION = "0.1"
-ARCHITECTURE_VIEW_VERSION = "0.1"
+ARCHITECTURE_VIEW_VERSION = "1.0"
 
 
 @dataclass(frozen=True)
@@ -120,6 +120,24 @@ def _route_class(edge_type: str) -> str:
 def _normalize_architecture_view_graph(view: dict[str, Any]) -> dict[str, Any]:
     if view.get("view_graph_type") != "architecture_view_graph":
         return view
+    if view.get("schema_version") == ARCHITECTURE_VIEW_VERSION:
+        pages = []
+        for page in view.get("pages", []):
+            if not isinstance(page, dict):
+                continue
+            normalized = dict(page)
+            normalized["page_type"] = page.get("view_kind", page.get("id"))
+            normalized.setdefault("regions", page.get("regions", []))
+            normalized.setdefault("lanes", page.get("lanes", []))
+            normalized.setdefault("annotations", page.get("decorations", []))
+            normalized.setdefault("layout_constraints", page.get("layout_constraints", {"page_size": [1600, 900]}))
+            pages.append(normalized)
+        return {
+            "schema_version": VIEW_VERSION,
+            "source_architecture_view_version": view.get("schema_version"),
+            "model_name": view.get("model_name", "unknown-model"),
+            "pages": pages,
+        }
     pages: list[dict[str, Any]] = []
     for page in view.get("pages", []):
         if not isinstance(page, dict):
@@ -332,6 +350,211 @@ LAYOUTS: dict[str, dict[str, LayoutBox]] = {
 }
 
 
+def _preferred(node: dict[str, Any], default: tuple[float, float] = (180.0, 74.0)) -> tuple[float, float]:
+    preferred = node.get("preferred_size") if isinstance(node.get("preferred_size"), dict) else {}
+    return float(preferred.get("width", default[0])), float(preferred.get("height", default[1]))
+
+
+def _node_order(node: dict[str, Any]) -> int:
+    layout = node.get("layout") if isinstance(node.get("layout"), dict) else {}
+    return int(layout.get("order", 0))
+
+
+def _node_role(node: dict[str, Any]) -> str:
+    return str(node.get("role") or node.get("visual_role") or "")
+
+
+def _place(boxes: dict[str, LayoutBox], node: dict[str, Any], x: float, y: float, default: tuple[float, float] = (180.0, 74.0)) -> None:
+    node_id = str(node["semantic_id"])
+    width, height = _preferred(node, default)
+    boxes[node_id] = _box(round(x, 2), round(y, 2), round(width, 2), round(height, 2))
+
+
+def _story_nodes(page: dict[str, Any]) -> list[str]:
+    story = page.get("primary_story") if isinstance(page.get("primary_story"), dict) else {}
+    ordered = story.get("ordered_node_ids")
+    return [str(item) for item in ordered] if isinstance(ordered, list) else []
+
+
+def layout_pipeline(page: dict[str, Any]) -> dict[str, LayoutBox]:
+    nodes = {str(node["semantic_id"]): node for node in page.get("visible_nodes", []) if isinstance(node, dict) and isinstance(node.get("semantic_id"), str)}
+    story = [node_id for node_id in _story_nodes(page) if node_id in nodes]
+    boxes: dict[str, LayoutBox] = {}
+    x = 50.0
+    y = 300.0
+    gap = 20.0
+    for node_id in story:
+        node = nodes[node_id]
+        _place(boxes, node, x, y)
+        x += boxes[node_id].width + gap
+    auxiliaries = [node for node in nodes.values() if node["semantic_id"] not in boxes]
+    top_x = 120.0
+    bottom_x = 560.0
+    for index, node in enumerate(sorted(auxiliaries, key=_node_order)):
+        role = _node_role(node)
+        if role in {"auxiliary", "strategy"}:
+            _place(boxes, node, top_x + index * 260.0, 160.0, (190, 62))
+        else:
+            _place(boxes, node, bottom_x + index * 260.0, 470.0, (190, 62))
+    return boxes
+
+
+def layout_block_with_residual(page: dict[str, Any]) -> dict[str, LayoutBox]:
+    nodes = {str(node["semantic_id"]): node for node in page.get("visible_nodes", []) if isinstance(node, dict) and isinstance(node.get("semantic_id"), str)}
+    story = [node_id for node_id in _story_nodes(page) if node_id in nodes]
+    boxes: dict[str, LayoutBox] = {}
+    x = 70.0
+    for node_id in story:
+        node = nodes[node_id]
+        default = (230.0, 90.0) if node_id == "ffn_stage" else (170.0, 78.0)
+        _place(boxes, node, x, 210.0, default)
+        x += boxes[node_id].width + 42.0
+    if "residual_init" in nodes:
+        _place(boxes, nodes["residual_init"], 95.0, 405.0, (180, 58))
+    if "dense_ffn" in nodes and "ffn_stage" in boxes:
+        parent = boxes["ffn_stage"]
+        _place(boxes, nodes["dense_ffn"], parent.x + 24.0, parent.y + 108.0, (120, 56))
+    if "moe_ffn" in nodes and "ffn_stage" in boxes:
+        parent = boxes["ffn_stage"]
+        _place(boxes, nodes["moe_ffn"], parent.x + 200.0, parent.y + 108.0, (120, 56))
+    for node in sorted(nodes.values(), key=_node_order):
+        if str(node["semantic_id"]) not in boxes:
+            _place(boxes, node, 80.0 + _node_order(node) * 160.0, 520.0)
+    return boxes
+
+
+def layout_branch_merge(page: dict[str, Any]) -> dict[str, LayoutBox]:
+    nodes = {str(node["semantic_id"]): node for node in page.get("visible_nodes", []) if isinstance(node, dict) and isinstance(node.get("semantic_id"), str)}
+    boxes: dict[str, LayoutBox] = {}
+    placements = {
+        "attention_input": (60, 390),
+        "qkv_projection": (260, 380),
+        "hpc_rope_norm": (520, 170),
+        "qkv_split": (520, 390),
+        "q_stream": (740, 340),
+        "k_stream": (740, 430),
+        "v_stream": (740, 520),
+        "q_norm": (880, 330),
+        "k_norm": (880, 430),
+        "rope": (1070, 380),
+        "kv_cache": (1100, 190),
+        "attention_backend": (1270, 365),
+        "output_projection": (1510, 382),
+        "attention_output": (1510, 515),
+    }
+    for node_id, node in nodes.items():
+        x, y = placements.get(node_id, (80.0 + _node_order(node) * 120.0, 610.0))
+        default = (210.0, 78.0) if node_id in {"hpc_rope_norm", "attention_backend"} else (150.0, 66.0)
+        _place(boxes, node, float(x), float(y), default)
+    return boxes
+
+
+def layout_routed_container(page: dict[str, Any]) -> dict[str, LayoutBox]:
+    nodes = {str(node["semantic_id"]): node for node in page.get("visible_nodes", []) if isinstance(node, dict) and isinstance(node.get("semantic_id"), str)}
+    boxes: dict[str, LayoutBox] = {}
+    placements = {
+        "moe_input": (70, 320),
+        "flatten_tokens": (280, 320),
+        "gate_linear": (500, 230),
+        "router_logits": (710, 230),
+        "fused_moe": (900, 230),
+        "restore_shape": (1280, 320),
+        "moe_output": (1510, 320),
+        "expert_bias": (610, 100),
+        "eplb_metadata": (800, 100),
+    }
+    for node_id, node in nodes.items():
+        if node_id == "fused_moe":
+            _place(boxes, node, 900, 220, (390, 220))
+        elif node_id == "routed_experts":
+            _place(boxes, node, 930, 320, (120, 56))
+        elif node_id == "shared_experts":
+            _place(boxes, node, 1100, 320, (150, 56))
+        else:
+            x, y = placements.get(node_id, (80.0 + _node_order(node) * 140.0, 520.0))
+            _place(boxes, node, float(x), float(y))
+    return boxes
+
+
+def layout_mapping_dispatch(page: dict[str, Any]) -> dict[str, LayoutBox]:
+    nodes = {str(node["semantic_id"]): node for node in page.get("visible_nodes", []) if isinstance(node, dict) and isinstance(node.get("semantic_id"), str)}
+    boxes: dict[str, LayoutBox] = {}
+    placements = {
+        "wrapper_weights": (70, 130),
+        "wrapper_filter": (280, 120),
+        "speculative_filter": (500, 120),
+        "tied_lm_head_filter": (740, 120),
+        "auto_weights_loader": (1000, 120),
+        "wrapper_loaded_set": (1260, 130),
+        "model_loaded_weight": (70, 430),
+        "fp8_scale_remap": (260, 420),
+        "mapping_dispatch": (470, 375),
+        "stacked_mapping": (760, 290),
+        "qkv_proj": (980, 250),
+        "gate_up_proj": (980, 335),
+        "expert_mapping": (760, 470),
+        "fused_moe_params": (980, 470),
+        "regular_parameter": (760, 610),
+        "pp_missing_filter": (560, 610),
+        "param_weight_loader": (1010, 610),
+        "default_loader": (1210, 610),
+        "model_loaded_params": (1420, 430),
+    }
+    for node_id, node in nodes.items():
+        x, y = placements.get(node_id, (80.0 + _node_order(node) * 120.0, 760.0))
+        default = (240, 110) if node_id == "mapping_dispatch" else (170, 62)
+        _place(boxes, node, float(x), float(y), default)
+    return boxes
+
+
+def layout_strategy_matrix(page: dict[str, Any]) -> dict[str, LayoutBox]:
+    nodes = {str(node["semantic_id"]): node for node in page.get("visible_nodes", []) if isinstance(node, dict) and isinstance(node.get("semantic_id"), str)}
+    boxes: dict[str, LayoutBox] = {}
+    panels = [
+        ("tensor_parallel_panel", "tp_components", 80.0),
+        ("pipeline_parallel_panel", "pp_components", 560.0),
+        ("expert_parallel_panel", "ep_components", 1040.0),
+    ]
+    for panel_id, annotation_id, x in panels:
+        if panel_id in nodes:
+            _place(boxes, nodes[panel_id], x, 160.0, (360, 170))
+        if annotation_id in nodes:
+            _place(boxes, nodes[annotation_id], x + 20.0, 380.0, (320, 150))
+    for node in sorted(nodes.values(), key=_node_order):
+        if str(node["semantic_id"]) not in boxes:
+            _place(boxes, node, 80.0 + _node_order(node) * 180.0, 620.0)
+    return boxes
+
+
+def layout_boundary_map(page: dict[str, Any]) -> dict[str, LayoutBox]:
+    nodes = {str(node["semantic_id"]): node for node in page.get("visible_nodes", []) if isinstance(node, dict) and isinstance(node.get("semantic_id"), str)}
+    boxes: dict[str, LayoutBox] = {}
+    local = ["hyv3_for_causal_lm", "hyv3_model", "hyv3_attention", "hyv3_moe", "local_weight_mapping", "local_parallel_logic", "capabilities"]
+    external = ["external_attention", "external_hpc_rope", "external_fused_moe", "external_auto_loader", "external_param_loaders"]
+    for index, node_id in enumerate(local):
+        if node_id in nodes:
+            _place(boxes, nodes[node_id], 90.0, 130.0 + index * 95.0, (240, 66))
+    if "adapter_boundary" in nodes:
+        _place(boxes, nodes["adapter_boundary"], 690.0, 310.0, (200, 110))
+    for index, node_id in enumerate(external):
+        if node_id in nodes:
+            _place(boxes, nodes[node_id], 1110.0, 150.0 + index * 105.0, (250, 70))
+    return boxes
+
+
+def _pattern_boxes(page: dict[str, Any]) -> dict[str, LayoutBox] | None:
+    page_type = str(page.get("page_type") or page.get("view_kind") or "")
+    return {
+        "pipeline": layout_pipeline,
+        "block_with_residual": layout_block_with_residual,
+        "branch_merge": layout_branch_merge,
+        "routed_container": layout_routed_container,
+        "mapping_dispatch": layout_mapping_dispatch,
+        "strategy_matrix": layout_strategy_matrix,
+        "boundary_map": layout_boundary_map,
+    }.get(page_type, lambda _page: None)(page)
+
+
 def _side_for_port(port_id: str, direction: str) -> str:
     if port_id in {"residual", "updated_residual", "residual_out"}:
         return "bottom" if direction == "output" else "left"
@@ -463,36 +686,6 @@ def _reroute_around_nodes(
     return primary
 
 
-def _manual_route(page_id: str, edge_id: str) -> list[tuple[float, float]] | None:
-    """Return hand-tuned routes for dense local structures.
-
-    These overrides keep the router deterministic while avoiding a few known
-    local crossings that a generic Manhattan fallback cannot infer from the
-    semantic view alone.
-    """
-    attention_routes: dict[str, list[tuple[float, float]]] = {
-        "qkv_projection_to_hpc_fused": [(360, 385), (382, 385), (382, 300), (590, 300), (590, 218), (610, 218)],
-        "qkv_split_to_q_stream": [(535, 372), (590, 372), (590, 403)],
-        "qkv_split_to_k_stream": [(535, 386), (590, 386), (590, 498)],
-        "qkv_split_to_v_stream": [(535, 400), (590, 400), (590, 593)],
-        "q_norm_to_rotary": [(838, 403), (870, 403), (870, 436), (900, 436)],
-        "k_norm_to_rotary": [(838, 498), (870, 498), (870, 466), (900, 466)],
-        "rotary_q_to_attention": [(1042, 436), (1072, 436), (1072, 376), (1110, 376)],
-        "rotary_k_to_attention": [(1042, 466), (1080, 466), (1080, 390), (1110, 390)],
-        "v_stream_to_attention": [(662, 593), (1090, 593), (1090, 404), (1110, 404)],
-    }
-    parallel_routes: dict[str, list[tuple[float, float]]] = {
-        "mapping_dispatch_to_pp_filter_stacked": [(775, 368), (985, 368), (985, 407), (1020, 407)],
-        "mapping_dispatch_to_pp_filter_expert": [(800, 508), (985, 508), (985, 407), (1020, 407)],
-        "mapping_dispatch_to_pp_filter_regular": [(925, 428), (985, 428), (985, 407), (1020, 407)],
-    }
-    if page_id == "attention_detail":
-        return attention_routes.get(edge_id)
-    if page_id == "weight_loading":
-        return parallel_routes.get(edge_id)
-    return None
-
-
 def _clean_points(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
     cleaned: list[tuple[float, float]] = []
     for x, y in points:
@@ -536,9 +729,11 @@ def _layout_page(page: dict[str, Any]) -> dict[str, Any]:
         for node in page.get("visible_nodes", [])
         if isinstance(node, dict) and isinstance(node.get("semantic_id"), str)
     }
-    boxes = dict(LAYOUTS.get(page_id, {}))
+    pattern_boxes = _pattern_boxes(page)
+    boxes = dict(pattern_boxes or LAYOUTS.get(page_id, {}))
     if not boxes or not visible_node_ids.issubset(set(boxes)):
-        boxes = _dynamic_boxes(page)
+        dynamic = _dynamic_boxes(page)
+        boxes.update({node_id: box for node_id, box in dynamic.items() if node_id not in boxes})
     anchors = _anchors(page, boxes)
     obstacle_ids = {
         str(node.get("semantic_id"))
@@ -560,11 +755,10 @@ def _layout_page(page: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"edge {edge.get('semantic_id')} references an unlayoutable port")
         route_class = str(edge.get("route_class") or "direct")
         points = _reroute_around_nodes(source_anchor, target_anchor, route_class, index, obstacle_boxes)
-        points = _manual_route(page_id, str(edge["semantic_id"])) or points
         points = _clean_points(points)
         routed_edges[str(edge["semantic_id"])] = {
             "points": [[x, y] for x, y in points],
-            "visible": route_class != "hidden_semantic",
+            "visible": route_class != "hidden_semantic" and edge.get("visible") is not False,
             "label": edge.get("label"),
             "label_visible": edge.get("label_visible") is True,
             "route_class": route_class,

@@ -23,10 +23,10 @@ Keep these concerns separate:
 Use source-analysis JSON between source parsing and downstream semantic layers.
 For v0.9.1 reviewed mode, Architecture IR remains the semantic source for
 Diagram View. For v1.0+ Architect Mode, Architecture Concept Graph is the
-semantic architecture layer, but it must not be rendered directly. For v1.1+,
-Architecture Design Graph describes the page story, main flow, branches and
-boundaries. Architecture View Graph is generated from Design and is the
-renderer input.
+semantic architecture layer, but it must not be rendered directly. For v1.2,
+Architecture Design Graph is authored by the current Agent and describes the
+page story, main flow, branches and boundaries. Architecture View Graph is
+compiled from Design and is the renderer input.
 Diagram View / Architecture View may decide presentation, ports, lanes and route
 hints, but must not change source facts or concept evidence.
 
@@ -47,11 +47,15 @@ hints, but must not change source facts or concept evidence.
   evidence.
 - Build and validate Diagram View before rendering v0.9.1 diagrams.
 - Use `layout_diagram.py` for deterministic coordinates and routed waypoints.
-- Use `build_source_fact_graph.py`, `run_architect_review.py`,
-  `run_design_architect.py`, `build_view_from_design.py`,
-  `validate_architecture_view.py`, `apply_view_layout.py`,
-  `build_boundary_report.py`, and `validate_architecture_quality.py` for v1.1
-  Architect Mode outputs.
+- Use `vllm-arch prepare` to build deterministic context for v1.2 Architect
+  Mode, then have the current Agent write `architecture-design.json`, then run
+  `vllm-arch finalize`.
+- Do not silently use `build_baseline_design.py` as the architect default. It is
+  only a deterministic/template fallback.
+- Use `build_architect_brief.py`, `validate_architecture_design.py`,
+  `compile_architecture_view.py`, `validate_architecture_view.py`,
+  `apply_view_layout.py`, `render_drawio.py`, `validate_drawio.py`, and
+  `validate_visual_layout.py` for v1.2 Architect Mode outputs.
 - Build `review-lock.json` for reviewed-mode outputs and do not silently reuse a
   stale review when source or baseline hashes change.
 - Put cross-Agent core behavior in the Skill directory.

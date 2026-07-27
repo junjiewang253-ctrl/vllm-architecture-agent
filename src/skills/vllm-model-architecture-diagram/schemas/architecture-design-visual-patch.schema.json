@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/vllm-architecture-agent/architecture-design-visual-patch.schema.json",
+  "title": "Architecture Design Visual Patch",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "base_design_sha256", "operations"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "base_design_sha256": { "type": "string", "minLength": 64, "maxLength": 64 },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["op_id", "op", "page_id", "target_id", "reason"],
+        "properties": {
+          "op_id": { "type": "string", "minLength": 1 },
+          "op": {
+            "enum": [
+              "update_display",
+              "set_badge_visibility",
+              "set_preferred_size",
+              "set_route_hint",
+              "set_edge_label_visibility",
+              "set_region",
+              "set_lane"
+            ]
+          },
+          "page_id": { "type": "string", "minLength": 1 },
+          "target_id": { "type": "string", "minLength": 1 },
+          "reason": { "type": "string", "minLength": 1 },
+          "value": {}
+        }
+      }
+    }
+  }
+}

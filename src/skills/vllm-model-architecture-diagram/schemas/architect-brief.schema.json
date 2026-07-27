@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Architect Brief",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "model_name",
+    "source_file",
+    "source_sha256",
+    "model_profile",
+    "candidate_pages",
+    "concepts",
+    "fact_clusters",
+    "external_boundaries",
+    "required_topics",
+    "diagram_grammar",
+    "known_baseline_problems"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "model_name": { "type": "string" },
+    "source_file": { "type": "string" },
+    "source_sha256": { "type": "string" },
+    "model_profile": { "type": "object" },
+    "candidate_pages": { "type": "array" },
+    "concepts": { "type": "array" },
+    "fact_clusters": { "type": "array" },
+    "external_boundaries": { "type": "array" },
+    "required_topics": { "type": "array" },
+    "diagram_grammar": { "type": "object" },
+    "known_baseline_problems": { "type": "array" }
+  }
+}

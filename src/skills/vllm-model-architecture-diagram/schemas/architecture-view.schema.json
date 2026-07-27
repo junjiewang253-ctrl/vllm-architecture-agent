@@ -2,76 +2,25 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Architecture View Graph",
   "type": "object",
-  "required": ["schema_version", "model_name", "pages", "boundaries", "legend"],
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "view_graph_type",
+    "source_design_version",
+    "model_name",
+    "source_sha256",
+    "pages",
+    "external_boundaries",
+    "legend"
+  ],
   "properties": {
-    "schema_version": { "const": "0.1" },
+    "schema_version": { "const": "1.0" },
     "view_graph_type": { "const": "architecture_view_graph" },
+    "source_design_version": { "const": "1.0" },
     "model_name": { "type": "string" },
-    "pages": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["id", "title", "purpose", "nodes", "edges", "groups", "lanes"],
-        "properties": {
-          "id": { "type": "string" },
-          "title": { "type": "string" },
-          "purpose": { "type": "string" },
-          "nodes": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": ["id", "type", "role", "label", "concept_refs", "fact_refs", "ports", "visual_role"],
-              "properties": {
-                "id": { "type": "string" },
-                "type": {
-                  "enum": ["component", "data", "process", "storage", "boundary", "annotation", "capability", "group"]
-                },
-                "label": { "type": "string" },
-                "subtitle": { "type": "string" },
-                "role": {
-                  "enum": ["primary_flow", "secondary_flow", "boundary", "strategy", "annotation", "mapping"]
-                },
-                "concept_refs": { "type": "array", "items": { "type": "string" } },
-                "fact_refs": { "type": "array", "items": { "type": "string" } },
-                "ports": { "type": "array" },
-                "visual_role": {
-                  "enum": ["primary_flow", "secondary_flow", "boundary", "strategy", "annotation", "mapping"]
-                },
-                "layout": { "type": "object" }
-              },
-              "additionalProperties": true
-            }
-          },
-          "edges": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": ["id", "type", "source", "target", "concept_refs", "fact_refs"],
-              "properties": {
-                "id": { "type": "string" },
-                "type": {
-                  "enum": ["runtime_flow", "dependency", "mapping", "parallel", "delegation", "boundary", "annotation"]
-                },
-                "source": { "type": "string" },
-                "target": { "type": "string" },
-                "source_port": { "type": "string" },
-                "target_port": { "type": "string" },
-                "label": { "type": "string" },
-                "show_label": { "type": "boolean" },
-                "concept_refs": { "type": "array", "items": { "type": "string" } },
-                "fact_refs": { "type": "array", "items": { "type": "string" } }
-              },
-              "additionalProperties": true
-            }
-          },
-          "groups": { "type": "array" },
-          "lanes": { "type": "array" }
-        },
-        "additionalProperties": true
-      }
-    },
-    "boundaries": { "type": "array" },
+    "source_sha256": { "type": "string" },
+    "pages": { "type": "array" },
+    "external_boundaries": { "type": "array" },
     "legend": { "type": "array" }
-  },
-  "additionalProperties": true
+  }
 }

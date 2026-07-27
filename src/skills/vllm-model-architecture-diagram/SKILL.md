@@ -1,139 +1,133 @@
 ---
 name: vllm-model-architecture-diagram
-description: Analyze a vLLM model adapter Python file and generate a source-grounded, View-Graph-driven Draw.io architecture diagram and architecture report.
+description: Analyze a vLLM model adapter Python file and generate a source-grounded, Agent-designed, View-Graph-rendered Draw.io architecture diagram and architecture report.
 compatibility: Requires Python 3, access to the input source file, and a connected Draw.io MCP server for optional opening/export.
 ---
 
 # Goal
 
-Analyze a vLLM model adapter Python file and create a human-readable
-architecture diagram.
+Analyze a vLLM model adapter Python file and create a human-readable,
+evidence-grounded architecture diagram.
 
-v1.1 uses five layers:
+v1.2 uses six layers:
 
 ```text
 Python source
+-> Source Analysis
 -> Source Fact Graph
 -> Architecture Concept Graph
--> Architecture Design Graph
+-> Agent-authored Architecture Design Graph
 -> Architecture View Graph
 -> Deterministic Draw.io Renderer
 ```
 
-Concepts explain what source facts mean. Design Graph explains the story of
-each page: the question, main flow, branches, boundaries and which facts become
-components versus annotations. View Graph is generated mechanically from Design
-and is the renderer input. Renderer must read View Graph, not Concept Graph.
+Scripts define what is true and evidenced. The current Codex Agent designs the
+Architecture Design Graph: page questions, primary stories, branches, merges,
+boundaries, nodes, ports and edge semantics. The renderer reads Architecture
+View Graph only; it must not read Concept Graph directly or invent architecture.
 
 # Modes
 
-- `architect`: default v1.1 workflow.
+- `architect`: v1.2 Agent Architect mode. Requires an Agent-authored Design.
+- `deterministic`: CI/regression fallback.
 - `reviewed`: v0.9.1 patch-audited workflow.
-- `deterministic`: CI/regression baseline.
 
-# Default Command
+# Default Architect Workflow
 
-```text
-vllm-arch run --mode architect --input samples/hy_v3.py --model-name hy-v3-v1.1 --outputs-dir outputs
-```
-
-# Default Workflow
-
-1. Extract source analysis:
+1. Prepare deterministic context:
 
 ```text
-python <skill-directory>/scripts/extract_architecture.py <input.py> --output outputs/<model>-source-analysis.json
+vllm-arch prepare --input samples/hy_v3.py --model-name hy-v3 --outputs-dir outputs
 ```
 
-2. Build semantic inventory:
+This writes:
+
+- `outputs/<model>-source-analysis.json`
+- `outputs/<model>-semantic-inventory.json`
+- `outputs/<model>-source-fact-graph.json`
+- `outputs/<model>-architecture-concept.json`
+- `outputs/<model>-boundary-report.json`
+- `outputs/<model>-architect-brief.json`
+- `outputs/<model>-architecture-design.template.json`
+
+2. Codex Agent reads the input source, Architect Brief, Concept Graph, Boundary
+   Report, `references/architect-design-prompt.md`,
+   `references/diagram-grammar.md`, `references/page-patterns.md`, and
+   `references/visual-quality-rubric.md`.
+
+3. Codex Agent writes:
 
 ```text
-python <skill-directory>/scripts/build_semantic_inventory.py outputs/<model>-source-analysis.json --output outputs/<model>-semantic-inventory.json
+outputs/<model>-architecture-design.json
 ```
 
-3. Build Source Fact Graph:
+The Design must use schema `1.0`, `author.type = "agent"`, and source-backed
+`concept_refs` and `fact_refs`.
+
+4. Finalize:
 
 ```text
-python <skill-directory>/scripts/build_source_fact_graph.py outputs/<model>-source-analysis.json --output outputs/<model>-source-fact-graph.json
+vllm-arch finalize --design outputs/<model>-architecture-design.json --model-name <model> --outputs-dir outputs --source-file samples/hy_v3.py
 ```
 
-4. Build Architecture Concept Graph:
+Finalize runs:
 
-```text
-python <skill-directory>/scripts/run_architect_review.py outputs/<model>-source-fact-graph.json --source-analysis outputs/<model>-source-analysis.json --semantic-inventory outputs/<model>-semantic-inventory.json --output outputs/<model>-architecture-concept.json
-```
+- `validate_architecture_design.py`
+- `compile_architecture_view.py`
+- `validate_architecture_view.py`
+- `apply_view_layout.py`
+- `render_drawio.py`
+- `validate_drawio.py`
+- `validate_visual_layout.py`
+- `build_mentor_report.py`
 
-5. Build Architecture Design Graph:
+Any validator failure stops the workflow. Do not use Draw.io MCP or manual XML
+edits to bypass validation.
 
-```text
-python <skill-directory>/scripts/run_design_architect.py outputs/<model>-architecture-concept.json outputs/<model>-source-fact-graph.json --output outputs/<model>-architecture-design.json
-```
+# Architect Rules
 
-6. Build Architecture View Graph from Design:
+Codex may:
 
-```text
-python <skill-directory>/scripts/build_view_from_design.py outputs/<model>-architecture-design.json --output outputs/<model>-architecture-view.json
-```
+- decide pages and page questions;
+- choose primary stories, branches and merge points;
+- decide whether a concept becomes a component, data node, process, container,
+  badge or annotation;
+- separate runtime flow from dependency, mapping, parallelism and boundaries;
+- perform one visual-only review by patching display, size, route hints,
+  regions or lanes.
 
-7. Build boundary report and validate:
+Codex must not:
 
-```text
-python <skill-directory>/scripts/build_boundary_report.py outputs/<model>-architecture-concept.json --output outputs/<model>-boundary-report.json
-python <skill-directory>/scripts/validate_architecture_quality.py outputs/<model>-source-fact-graph.json outputs/<model>-architecture-concept.json outputs/<model>-architecture-view.json --boundary-report outputs/<model>-boundary-report.json
-python <skill-directory>/scripts/validate_architecture_view.py outputs/<model>-architecture-view.json --architecture-concept outputs/<model>-architecture-concept.json --source-fact-graph outputs/<model>-source-fact-graph.json
-```
-
-8. Layout and render:
-
-```text
-python <skill-directory>/scripts/apply_view_layout.py outputs/<model>-architecture-view.json --output outputs/<model>-layout-plan.json
-python <skill-directory>/scripts/render_drawio.py outputs/<model>-architecture-view.json --layout-plan outputs/<model>-layout-plan.json --output outputs/<model>-architecture.drawio
-python <skill-directory>/scripts/build_mentor_report.py outputs/<model>-architecture-concept.json outputs/<model>-architecture-view.json outputs/<model>-boundary-report.json --output outputs/<model>-architecture-report.md
-```
-
-# Required Pages
-
-For HY V3, default View Architect output should include:
-
-- Model Overview
-- Attention Implementation
-- MoE Execution
-- Parallel Strategy
-- Weight Adaptation
-- vLLM Boundary
-
-# View Requirements
-
-- Concept Graph must not be rendered directly.
-- Every core View node must have `concept_refs` and `fact_refs`.
-- Each page must have a purpose and at least three nodes.
-- Pages must not be only concept cards.
-- Attention page must show QKV Projection, Q/K/V Split, HPC fused path,
-  fallback Q/K norm + RoPE path, KV Cache Boundary, vLLM Attention Backend and
-  Output Projection.
-- MoE page must show Router, Top-K Selection, FusedMoE, Experts, Shared
-  Experts and EP.
-- Checkpoint page must show HF weights, Weight Name Processing, mapping,
-  qkv/gate-up/expert mapping targets, loader and vLLM parameters.
-- Boundary page must distinguish local adapter behavior from imported vLLM
-  component behavior.
-
-# Agent Rules
-
-The Agent may design architecture concepts and view nodes, but may not:
-
-- create nodes without source-backed facts;
 - modify Source Fact Graph or Concept Graph to hide missing evidence;
-- invent runtime flow;
-- treat external component internals as direct local behavior;
-- write Draw.io XML directly.
+- create nodes or edges without source-backed facts;
+- directly write Draw.io XML;
+- mark external imported behavior as direct local behavior;
+- change edge source/target, phase, evidence or concept/fact references during
+  visual review.
+
+# Expected HY V3 Pages
+
+For `samples/hy_v3.py`, an Agent-authored Design should produce:
+
+- Model Execution Overview
+- Decoder Block
+- Attention Adaptation
+- MoE Execution
+- Checkpoint and Weight Loading
+- Parallel Strategies
+- vLLM Adapter Boundary
+
+`simple_model.py` should produce a smaller page set; do not hardcode HY V3 page
+lists into production architect mode.
 
 # Draw.io MCP
 
-After scripts generate `.drawio`, use Draw.io MCP to open, inspect and export.
-MCP must not add/delete semantic View nodes or reinterpret evidence.
+After scripts generate `.drawio`, Draw.io MCP may open, inspect and export.
+MCP must not add or remove semantic View nodes or edges. If visual-only MCP
+changes are made, rerun Draw.io and visual validators.
 
 # Completion Report
 
 Report generated files, page list, View node/edge counts, validators, test
-result, Draw.io path, architecture report path and remaining limitations.
+result, Draw.io path, architecture report path, legacy code used or not used,
+and remaining external boundaries.
