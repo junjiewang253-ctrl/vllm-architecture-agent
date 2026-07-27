@@ -1,20 +1,35 @@
 # Evidence Policy
 
-Confidence levels:
+Evidence schema version is `2.1`.
 
-- `direct`: the cited source line directly performs the construction, call,
-  branch, return, mapping, or assignment.
-- `derived`: the claim combines multiple direct facts. State the reasoning.
-- `external`: local code proves a dependency or delegation, but the behavior
-  happens in an imported component or a file not traversed.
+## Confidence
 
-Rules:
+`direct`: local source directly constructs, calls, branches, returns, filters,
+maps, loads or assigns.
 
-- direct claims cannot rely only on import lines;
-- derived claims need at least two evidence entries;
-- external claims must say what local code proves and what remains outside the
-  inspected boundary;
-- do not infer concrete config values when only symbolic config access exists;
-- checkpoint loading is not runtime tensor flow;
-- source line references belong in `evidence.json` and `report.md`, not in node
-  titles.
+`derived`: multiple local facts support a higher-level architecture statement.
+Derived claims require a non-empty `derivation`.
+
+`external`: local code proves a dependency or delegation, but the implementation
+is outside the reviewed boundary. External claims require `external_boundary`.
+
+## Source Item IDs
+
+Claims should reference relevant source item IDs:
+
+- class IDs;
+- method IDs;
+- function IDs;
+- branch IDs;
+- mapping IDs;
+- capability IDs.
+
+## Rules
+
+- Direct claims cannot rely only on imports.
+- Derived claims need at least two evidence entries.
+- Evidence file paths must be part of `files_read`.
+- Line ranges must be valid and should include the cited symbol when possible.
+- Checkpoint loading is not runtime tensor flow.
+- Symbolic config expressions remain symbolic; do not invent concrete values.
+- External behavior can be drawn as a boundary, not as local direct behavior.

@@ -1,0 +1,462 @@
+<mxfile host="embed.diagrams.net" pages="4">
+  <diagram id="model-architecture-and-execution" name="Model Architecture and Execution">
+    <mxGraphModel dx="1106" dy="521" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="800" pageHeight="600" background="#ffffff" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="p1_title" parent="1" style="rounded=0;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#ffffff;fontStyle=1;fontSize=15;align=left;spacingLeft=8;" value="Model Architecture and Execution" vertex="1">
+          <mxGeometry height="24" width="740" x="30" y="14" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_region_a" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#eef6ff;strokeColor=#7aa7d9;fontStyle=1;fontSize=12;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;" value="Class and Component Composition" vertex="1">
+          <mxGeometry height="430" width="225" x="30" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_region_b" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#f7fbff;strokeColor=#7aa7d9;fontStyle=1;fontSize=12;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;" value="End-to-End Runtime" vertex="1">
+          <mxGeometry height="430" width="250" x="280" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_region_c" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#fff7ed;strokeColor=#d99a5b;fontStyle=1;fontSize=12;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;" value="Output Boundary" vertex="1">
+          <mxGeometry height="250" width="215" x="555" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_wrapper" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#315f8f;fontStyle=1;fontSize=12;" value="HYV3ForCausalLM wrapper" vertex="1">
+          <mxGeometry height="48" width="170" x="55" y="115" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_model" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#315f8f;fontStyle=1;fontSize=12;" value="HYV3Model base body" vertex="1">
+          <mxGeometry height="45" width="150" x="65" y="178" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_embed" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#e7f5ff;strokeColor=#2b7dbd;fontSize=11;" value="VocabParallelEmbedding TP" vertex="1">
+          <mxGeometry height="42" width="150" x="65" y="238" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_layers" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#eaf7ea;strokeColor=#4b9d58;fontSize=11;" value="DecoderLayer x local range HYV3Attention + Dense/MoE" vertex="1">
+          <mxGeometry height="58" width="150" x="65" y="294" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_norm" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#315f8f;fontSize=11;" value="Final RMSNorm last PP rank" vertex="1">
+          <mxGeometry height="42" width="150" x="65" y="366" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_caps" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#f2f2f2;strokeColor=#999999;fontSize=11;" value="Capabilities PP | LoRA | MoE | torch.compile" vertex="1">
+          <mxGeometry height="50" width="170" x="55" y="425" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_input" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#2b7dbd;fontStyle=1;fontSize=11;" value="input_ids / inputs_embeds" vertex="1">
+          <mxGeometry height="40" width="165" x="315" y="115" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_first" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#e7f5ff;strokeColor=#2b7dbd;fontSize=10;" value="First PP rank embed unless inputs_embeds given" vertex="1">
+          <mxGeometry height="50" width="185" x="305" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_nonfirst" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#fff8db;strokeColor=#b59a2f;fontSize=10;" value="Non-first PP rank IntermediateTensors in" vertex="1">
+          <mxGeometry height="48" width="165" x="315" y="235" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_slice" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#eaf7ea;strokeColor=#4b9d58;fontSize=11;" value="local decoder slice start_layer...end_layer" vertex="1">
+          <mxGeometry height="50" width="165" x="315" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_nonlast" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#fff8db;strokeColor=#b59a2f;fontSize=10;" value="Non-last rank return IntermediateTensors" vertex="1">
+          <mxGeometry height="55" width="90" x="300" y="365" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_last" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#315f8f;fontSize=10;" value="Last rank Final Add + RMSNorm" vertex="1">
+          <mxGeometry height="55" width="100" x="400" y="365" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_hidden" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#315f8f;fontSize=11;" value="hidden states" vertex="1">
+          <mxGeometry height="35" width="105" x="345" y="440" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_lm" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#d99a5b;fontSize=11;" value="ParallelLMHead TP output head" vertex="1">
+          <mxGeometry height="45" width="150" x="585" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_lp" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#fff3e6;strokeColor=#d99a5b;fontStyle=1;fontSize=11;" value="LogitsProcessor external vLLM layer" vertex="1">
+          <mxGeometry height="48" width="150" x="585" y="190" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_logits" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#d99a5b;fontStyle=1;fontSize=11;" value="logits" vertex="1">
+          <mxGeometry height="35" width="90" x="615" y="260" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_edge1" edge="1" parent="1" source="p1_input" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#2b7dbd;strokeWidth=2;" target="p1_first" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_edge2" edge="1" parent="1" source="p1_first" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#2b7dbd;strokeWidth=2;" target="p1_slice" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_edge3" edge="1" parent="1" source="p1_nonfirst" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#b59a2f;dashed=1;" target="p1_slice" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_edge4" edge="1" parent="1" source="p1_slice" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#2b7dbd;strokeWidth=2;" target="p1_last" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_edge5" edge="1" parent="1" source="p1_slice" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#b59a2f;dashed=1;" target="p1_nonlast" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_edge6" edge="1" parent="1" source="p1_last" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#2b7dbd;strokeWidth=2;" target="p1_hidden" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_edge7" edge="1" parent="1" source="p1_hidden" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#d99a5b;strokeWidth=2;" target="p1_lp" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="520" y="458" />
+              <mxPoint x="520" y="214" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p1_edge8" edge="1" parent="1" source="p1_lm" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#d99a5b;dashed=1;" target="p1_lp" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_edge9" edge="1" parent="1" source="p1_lp" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#d99a5b;strokeWidth=2;" target="p1_logits" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_question" parent="1" style="rounded=0;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#ffffff;fontSize=10;align=left;spacingLeft=8;fontColor=#444444;" value="How do the wrapper, body, pipeline ranks and logits path fit together in vLLM?" vertex="1">
+          <mxGeometry height="18" width="740" x="30" y="42" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="decoder-and-attention" name="Decoder and Attention">
+    <mxGraphModel dx="1191" dy="562" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="800" pageHeight="600" background="#ffffff" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="p2_title" value="Decoder and Attention" style="rounded=0;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#ffffff;fontStyle=1;fontSize=15;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="30" y="14" width="740" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_region_dec" value="Decoder Runtime" style="rounded=1;whiteSpace=wrap;fillColor=#f7fbff;strokeColor=#7aa7d9;fontStyle=1;fontSize=12;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="30" y="70" width="350" height="198" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_region_var" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#eef9ee;strokeColor=#62a867;fontStyle=1;fontSize=12;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;" value="FFN Construction Variant" vertex="1">
+          <mxGeometry height="130" width="170" x="30" y="275" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_region_dense" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#eef9ee;strokeColor=#62a867;fontStyle=1;fontSize=12;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;" value="Dense FFN Internal Flow" vertex="1">
+          <mxGeometry height="130" width="165" x="215" y="275" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_region_ac" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#fff7ed;strokeColor=#d99a5b;fontStyle=1;fontSize=12;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;" value="Attention Construction Panel" vertex="1">
+          <mxGeometry height="190" width="170" x="400" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_region_af" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#fffdf5;strokeColor=#d99a5b;fontStyle=1;fontSize=12;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;" value="Attention Forward Detail" vertex="1">
+          <mxGeometry height="270" width="370" x="400" y="275" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_in" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#2b7dbd;fontSize=10;" value="Decoder Input hidden + residual" vertex="1">
+          <mxGeometry height="42" width="80" x="50" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_rms1" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#2b7dbd;fontSize=10;" value="Input RMSNorm fused handoff" vertex="1">
+          <mxGeometry height="42" width="88" x="145" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_attn" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#fff3e6;strokeColor=#d99a5b;fontSize=10;fontStyle=1;" value="HYV3Attention" vertex="1">
+          <mxGeometry height="42" width="95" x="250" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_rms2" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#2b7dbd;fontSize=10;" value="Post-Attn RMSNorm fused handoff" vertex="1">
+          <mxGeometry height="42" width="95" x="70" y="190" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_ffn" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#eaf7ea;strokeColor=#4b9d58;fontSize=10;" value="FFN Stage Dense or MoE" vertex="1">
+          <mxGeometry height="42" width="88" x="185" y="190" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_out" value="Decoder Output hidden + residual" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#2b7dbd;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="292" y="184" width="78" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_res_note" value="Residual lane: init from hidden when residual is None" style="rounded=1;whiteSpace=wrap;fillColor=#fff8db;strokeColor=#b59a2f;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="55" y="242" width="290" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_var1" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#62a867;fontSize=10;" value="First K layers HYV3FeedForward" vertex="1">
+          <mxGeometry height="36" width="130" x="50" y="315" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_var2" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#62a867;fontSize=10;" value="Remaining layers HYV3MoEFused" vertex="1">
+          <mxGeometry height="36" width="130" x="50" y="358" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_d1" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#62a867;fontSize=9;" value="gate_up_proj MergedColumnParallelLinear" vertex="1">
+          <mxGeometry height="34" width="125" x="235" y="310" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_d2" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#62a867;fontSize=9;" value="SiluAndMul" vertex="1">
+          <mxGeometry height="28" width="95" x="250" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_d3" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#62a867;fontSize=9;" value="down_proj RowParallelLinear" vertex="1">
+          <mxGeometry height="34" width="125" x="235" y="383" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_ac1" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#d99a5b;fontSize=9;" value="TP heads per rank KV partition / replication" vertex="1">
+          <mxGeometry height="42" width="130" x="420" y="108" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_ac2" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#d99a5b;fontSize=9;" value="QKVParallelLinear RowParallelLinear" vertex="1">
+          <mxGeometry height="38" width="130" x="420" y="158" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_ac3" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#d99a5b;fontSize=9;" value="Optional Q/K RMSNorm RoPE + quant_config" vertex="1">
+          <mxGeometry height="42" width="130" x="420" y="204" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_qkv" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#d99a5b;fontStyle=1;fontSize=10;" value="Hidden States -&gt; QKV Projection" vertex="1">
+          <mxGeometry height="34" width="145" x="420" y="318" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_split" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#d99a5b;fontSize=10;" value="Split Q / K / V" vertex="1">
+          <mxGeometry height="30" width="95" x="445" y="375" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_hpc" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#fff3e6;strokeColor=#d99a5b;fontSize=9;" value="Configured HPC path HpcRopeNorm(qkv)" vertex="1">
+          <mxGeometry height="44" width="135" x="595" y="305" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_rope" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#d99a5b;fontSize=9;" value="fallback Q/K optional Norm -&gt; RoPE" vertex="1">
+          <mxGeometry height="42" width="135" x="575" y="382" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_v" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#d99a5b;fontSize=9;" value="V bypasses Q/K Norm" vertex="1">
+          <mxGeometry height="38" width="95" x="445" y="455" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_backend" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffeceb;strokeColor=#c65345;dashed=1;fontStyle=1;fontSize=10;" value="vLLM Attention Backend external KV cache read" vertex="1">
+          <mxGeometry height="45" width="130" x="615" y="455" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_oproj" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#d99a5b;fontSize=9;" value="Output Projection RowParallelLinear" vertex="1">
+          <mxGeometry height="32" width="130" x="615" y="510" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e1" edge="1" parent="1" source="p2_in" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#2b7dbd;strokeWidth=2;" target="p2_rms1" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e2" edge="1" parent="1" source="p2_rms1" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#2b7dbd;strokeWidth=2;" target="p2_attn" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e3" edge="1" parent="1" source="p2_attn" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#2b7dbd;strokeWidth=2;" target="p2_rms2" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="298" y="175" />
+              <mxPoint x="118" y="175" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p2_e4" edge="1" parent="1" source="p2_rms2" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#2b7dbd;strokeWidth=2;" target="p2_ffn" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e5" edge="1" parent="1" source="p2_ffn" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#2b7dbd;strokeWidth=2;" target="p2_out" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e6" edge="1" parent="1" source="p2_d1" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#62a867;strokeWidth=2;" target="p2_d2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e7" edge="1" parent="1" source="p2_d2" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#62a867;strokeWidth=2;" target="p2_d3" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e8" edge="1" parent="1" source="p2_qkv" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#d99a5b;strokeWidth=2;" target="p2_split" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e9" value="" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#d99a5b;dashed=1;fontSize=9;" edge="1" parent="1" source="p2_qkv" target="p2_hpc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e10" value="" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#d99a5b;dashed=1;fontSize=9;" edge="1" parent="1" source="p2_split" target="p2_rope">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e11" edge="1" parent="1" source="p2_split" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#d99a5b;fontSize=9;" target="p2_v" value="V">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e12" edge="1" parent="1" source="p2_hpc" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#d99a5b;strokeWidth=2;" target="p2_backend" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="680" y="360" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p2_e13" edge="1" parent="1" source="p2_rope" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#d99a5b;strokeWidth=2;" target="p2_backend" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e14" edge="1" parent="1" source="p2_v" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#d99a5b;strokeWidth=2;" target="p2_backend" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e15" edge="1" parent="1" source="p2_backend" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#d99a5b;strokeWidth=2;" target="p2_oproj" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_question" value="How does one decoder block run, and how is HY V3 attention adapted to vLLM attention?" style="rounded=0;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#ffffff;fontSize=10;align=left;spacingLeft=8;fontColor=#444444;" vertex="1" parent="1">
+          <mxGeometry x="30" y="42" width="740" height="18" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="moe-architecture-and-routing" name="MoE Architecture and Routing">
+    <mxGraphModel dx="1106" dy="521" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="800" pageHeight="600" background="#ffffff" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="p3_title" parent="1" style="rounded=0;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#ffffff;fontStyle=1;fontSize=15;align=left;spacingLeft=8;" value="MoE Architecture and Routing" vertex="1">
+          <mxGeometry height="24" width="740" x="30" y="14" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_conf" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#eef9ee;strokeColor=#62a867;fontStyle=1;fontSize=12;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;" value="Construction and Configuration" vertex="1">
+          <mxGeometry height="235" width="210" x="30" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_runtime" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#f7fbff;strokeColor=#7aa7d9;fontStyle=1;fontSize=12;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;" value="Runtime Routing" vertex="1">
+          <mxGeometry height="235" width="270" x="260" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_comp" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#fff7ed;strokeColor=#d99a5b;fontStyle=1;fontSize=12;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;" value="FusedMoE Composition" vertex="1">
+          <mxGeometry height="235" width="220" x="550" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_ep" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#f2f2f2;strokeColor=#999999;fontStyle=1;fontSize=12;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;" value="Expert Parallel Metadata" vertex="1">
+          <mxGeometry height="190" width="740" x="30" y="325" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_params" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#62a867;fontSize=10;align=left;spacingLeft=8;" value="Routing parameters num_experts | top_k scoring=sigmoid | grouped_topk route_norm | scaling factor shared expert count | expert_bias" vertex="1">
+          <mxGeometry height="120" width="170" x="50" y="115" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_gateconf" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#62a867;fontSize=10;" value="GateLinear expert logits" vertex="1">
+          <mxGeometry height="38" width="140" x="65" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_hidden" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#2b7dbd;fontStyle=1;fontSize=10;" value="Hidden States" vertex="1">
+          <mxGeometry height="32" width="100" x="285" y="115" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_flat" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#2b7dbd;fontSize=10;" value="Flatten Tokens" vertex="1">
+          <mxGeometry height="32" width="105" x="400" y="115" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_gate" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#2b7dbd;fontSize=10;" value="GateLinear" vertex="1">
+          <mxGeometry height="32" width="85" x="300" y="172" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_logits" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#2b7dbd;fontSize=10;" value="Router Logits" vertex="1">
+          <mxGeometry height="32" width="95" x="410" y="172" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_fused" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#fff3e6;strokeColor=#d99a5b;fontStyle=1;fontSize=10;" value="FusedMoE hidden_states + router_logits" vertex="1">
+          <mxGeometry height="45" width="145" x="322" y="230" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_restore" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#2b7dbd;fontSize=10;" value="Restore Original Shape view(orig_shape)" vertex="1">
+          <mxGeometry height="38" width="150" x="320" y="285" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_container" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffeceb;strokeColor=#c65345;dashed=1;fontSize=10;fontStyle=1;align=center;verticalAlign=top;spacingTop=6;" value="FusedMoE external runtime boundary" vertex="1">
+          <mxGeometry height="155" width="170" x="575" y="112" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_routed" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#d99a5b;fontSize=10;" value="Routed Experts" vertex="1">
+          <mxGeometry height="34" width="130" x="595" y="155" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_shared" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#d99a5b;fontSize=10;" value="Optional Shared Experts HYV3FeedForward" vertex="1">
+          <mxGeometry height="42" width="130" x="595" y="205" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_ep1" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#999999;fontSize=10;" value="EP group / rank / size get_ep_group" vertex="1">
+          <mxGeometry height="45" width="140" x="60" y="375" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_ep2" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#999999;fontSize=10;" value="physical/local experts start/end range" vertex="1">
+          <mxGeometry height="45" width="140" x="230" y="375" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_ep3" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#999999;fontSize=10;" value="redundant experts EPLB config" vertex="1">
+          <mxGeometry height="45" width="140" x="400" y="375" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_ep4" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#999999;fontSize=10;" value="update_expert_map metadata refresh" vertex="1">
+          <mxGeometry height="45" width="140" x="570" y="375" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_note" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#cccccc;fontSize=10;" value="Dashed metadata edges are construction/parallel dependencies, not runtime tensor inputs." vertex="1">
+          <mxGeometry height="32" width="560" x="120" y="455" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e1" edge="1" parent="1" source="p3_hidden" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#2b7dbd;strokeWidth=2;" target="p3_flat" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e2" edge="1" parent="1" source="p3_flat" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#2b7dbd;strokeWidth=2;" target="p3_gate" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="452" y="155" />
+              <mxPoint x="342" y="155" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p3_e3" value="" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#2b7dbd;strokeWidth=2;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="385" y="188" as="sourcePoint" /><mxPoint x="410" y="188" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="p3_e4" edge="1" parent="1" source="p3_flat" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#2b7dbd;fontSize=9;" target="p3_fused" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e5" edge="1" parent="1" source="p3_logits" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#2b7dbd;fontSize=9;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.65;entryY=0;entryPerimeter=0;" target="p3_fused" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e6" edge="1" parent="1" source="p3_fused" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#2b7dbd;strokeWidth=2;" target="p3_restore" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e9" edge="1" parent="1" source="p3_ep1" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#999999;dashed=1;" target="p3_ep2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e10" edge="1" parent="1" source="p3_ep2" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#999999;dashed=1;" target="p3_ep3" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e11" edge="1" parent="1" source="p3_ep3" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#999999;dashed=1;" target="p3_ep4" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_question" parent="1" style="rounded=0;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#ffffff;fontSize=10;align=left;spacingLeft=8;fontColor=#444444;" value="How does HYV3MoEFused route tokens, configure experts and expose EP metadata?" vertex="1">
+          <mxGeometry height="18" width="740" x="30" y="42" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="parallelism-configuration-and-weight-loading" name="Parallelism, Configuration and Weight Loading">
+    <mxGraphModel dx="1191" dy="562" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="800" pageHeight="600" background="#ffffff" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="p4_title" parent="1" style="rounded=0;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#ffffff;fontStyle=1;fontSize=15;align=left;spacingLeft=8;" value="Parallelism, Configuration and Weight Loading" vertex="1">
+          <mxGeometry height="24" width="740" x="30" y="14" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_tp" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#e7f5ff;strokeColor=#2b7dbd;fontStyle=1;fontSize=10;align=left;spacingLeft=8;" value="Tensor Parallel Strategy world size | head partition Embedding | QKV | MergedColumn | Row | LMHead" vertex="1">
+          <mxGeometry height="95" width="230" x="30" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_pp" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#fff8db;strokeColor=#b59a2f;fontStyle=1;fontSize=10;align=left;spacingLeft=8;" value="Pipeline Parallel Strategy make_layers | local start/end first/non-first input | non-last/last output PP missing parameter filter" vertex="1">
+          <mxGeometry height="95" width="230" x="285" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_ep" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#eef9ee;strokeColor=#62a867;fontStyle=1;fontSize=10;align=left;spacingLeft=8;" value="Expert Parallel Strategy get_ep_group | EP rank/size physical/local experts | redundant experts | EPLB" vertex="1">
+          <mxGeometry height="95" width="230" x="540" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_conf" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#f2f2f2;strokeColor=#999999;fontStyle=1;fontSize=10;align=left;spacingLeft=8;" value="Configuration and Capabilities quant_config is construction dependency | SupportsLoRA is capability badge | torch.compile decorator | no LoRA -&gt; checkpoint edge" vertex="1">
+          <mxGeometry height="55" width="740" x="30" y="188" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_wrap" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#fff7ed;strokeColor=#d99a5b;fontStyle=1;fontSize=12;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;" value="Wrapper Weight Loading" vertex="1">
+          <mxGeometry height="230" width="350" x="30" y="265" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_model" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#fff7ed;strokeColor=#d99a5b;fontStyle=1;fontSize=12;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;" value="Model Weight Dispatch" vertex="1">
+          <mxGeometry height="285" width="365" x="405" y="265" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_w1" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#d99a5b;fontSize=10;fontStyle=1;" value="HYV3ForCausalLM.load_weights" vertex="1">
+          <mxGeometry height="34" width="145" x="55" y="315" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_w2" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#d99a5b;fontSize=10;" value="_filter_weights speculative layer filtering" vertex="1">
+          <mxGeometry height="42" width="135" x="215" y="315" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_w3" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#d99a5b;fontSize=10;" value="tied LM-head filtering skip_prefixes" vertex="1">
+          <mxGeometry height="42" width="140" x="55" y="390" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_w4" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffeceb;strokeColor=#c65345;dashed=1;fontSize=10;fontStyle=1;" value="AutoWeightsLoader external boundary" vertex="1">
+          <mxGeometry height="42" width="135" x="215" y="390" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_w5" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#d99a5b;fontSize=10;" value="Loaded Set" vertex="1">
+          <mxGeometry height="30" width="100" x="130" y="455" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_m1" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#7f4bb2;fontSize=10;fontStyle=1;" value="HYV3Model.load_weights" vertex="1">
+          <mxGeometry height="32" width="145" x="425" y="305" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_m2" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#7f4bb2;fontSize=10;" value="optional FP8 scale remap" vertex="1">
+          <mxGeometry height="32" width="145" x="590" y="305" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_m3" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#f3e8ff;strokeColor=#7f4bb2;fontSize=10;fontStyle=1;" value="Weight Dispatch" vertex="1">
+          <mxGeometry height="34" width="145" x="505" y="360" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_stack" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#7f4bb2;fontSize=9;" value="stacked mapping q/k/v -&gt; qkv_proj gate/up -&gt; gate_up_proj" vertex="1">
+          <mxGeometry height="70" width="105" x="425" y="425" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_expert" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#7f4bb2;fontSize=9;" value="expert mapping expert_id + shard_id FusedMoE params" vertex="1">
+          <mxGeometry height="70" width="105" x="545" y="425" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_regular" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#7f4bb2;fontSize=9;" value="regular parameter router.gate rename param/default loader" vertex="1">
+          <mxGeometry height="70" width="90" x="665" y="425" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_policy" parent="1" style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#cccccc;fontSize=10;" value="Shared loading policies: PP missing skip | missing bias skip | non-local expert skip | loaded_params collection" vertex="1">
+          <mxGeometry height="28" width="320" x="430" y="515" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e1" edge="1" parent="1" source="p4_w1" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#d99a5b;strokeWidth=2;" target="p4_w2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e2" edge="1" parent="1" source="p4_w2" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#d99a5b;strokeWidth=2;" target="p4_w3" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="282" y="375" />
+              <mxPoint x="125" y="375" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p4_e3" edge="1" parent="1" source="p4_w3" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#d99a5b;strokeWidth=2;" target="p4_w4" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e4" edge="1" parent="1" source="p4_w4" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#d99a5b;strokeWidth=2;" target="p4_w5" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="282" y="470" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p4_e5" edge="1" parent="1" source="p4_m1" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#7f4bb2;strokeWidth=2;" target="p4_m2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e6" edge="1" parent="1" source="p4_m2" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#7f4bb2;strokeWidth=2;" target="p4_m3" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e7" edge="1" parent="1" source="p4_m3" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#7f4bb2;" target="p4_stack" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e8" edge="1" parent="1" source="p4_m3" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#7f4bb2;" target="p4_expert" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e9" edge="1" parent="1" source="p4_m3" style="endArrow=classic;edgeStyle=orthogonalEdgeStyle;strokeColor=#7f4bb2;" target="p4_regular" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_question" parent="1" style="rounded=0;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#ffffff;fontSize=10;align=left;spacingLeft=8;fontColor=#444444;" value="How are TP, PP, EP, configuration capabilities and two weight loading paths organized?" vertex="1">
+          <mxGeometry height="18" width="740" x="30" y="42" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

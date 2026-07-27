@@ -31,6 +31,8 @@ def make_repo(tmp_path: Path) -> Path:
         "hybrid_adapter.py": "hybrid_adapter.py",
         "custom_weight_loader_adapter.py": "custom_weight_loader_adapter.py",
         "helper_module.py": "helper_module.py",
+        "nested_class_adapter.py": "nested_class_adapter.py",
+        "complex_branch_adapter.py": "complex_branch_adapter.py",
     }
     for source, destination in mapping.items():
         shutil.copyfile(FIXTURES / source, models / destination)
@@ -93,6 +95,10 @@ def test_context_collector_detects_distinct_model_categories(tmp_path: Path) -> 
     assert "decoder_text_generation" in dense["classification"]["category_candidates"]
     assert dense["capability_signals"]["moe"]["detected"] is False
     assert dense["module_assignments"]
+    assert dense["schema_version"] == "2.1"
+    assert dense["source_coverage"]["all_classes_indexed"] is True
+    assert dense["source_coverage"]["all_methods_indexed"] is True
+    assert dense["source_coverage"]["unindexed_nodes"] == []
     assert "pages" not in dense
 
     moe = collector.collect_source_context(repo, resolver.resolve_model_target(repo, architecture="MoeForCausalLM"))
@@ -149,4 +155,50 @@ def test_prepare_templates_are_empty_skeletons(tmp_path: Path) -> None:
     plan = json.loads((output / "architecture-plan.template.json").read_text(encoding="utf-8"))
     evidence = json.loads((output / "evidence.template.json").read_text(encoding="utf-8"))
     assert plan["pages"] == []
+    assert len(plan["class_review"]) > 0
+    assert len(plan["method_review"]) > 0
+    assert "coverage_manifest" in plan
+    assert plan["schema_version"] == "2.1"
     assert evidence["claims"] == []
+    assert evidence["schema_version"] == "2.1"
+
+
+def test_recursive_catalog_indexes_nested_classes_and_module_functions(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    resolver = load_script("resolve_model_target")
+    collector = load_script("collect_source_context")
+    target = repo / "vllm" / "model_executor" / "models" / "nested_class_adapter.py"
+    context = collector.collect_source_context(repo, resolver.resolve_model_target(repo, input_path=target))
+
+    class_names = {item["qualified_name"]: item for item in context["classes"]}
+    assert "OuterModel" in class_names
+    assert "OuterModel.InnerBlock" in class_names
+    assert class_names["OuterModel.InnerBlock"]["parent_class_id"] == class_names["OuterModel"]["class_id"]
+    methods = {item["qualified_name"]: item for item in context["methods"]}
+    assert "OuterModel.InnerBlock.forward" in methods
+    assert "OuterModel.forward" in methods
+    assert "OuterModel.hidden_size" in methods
+    assert {item["qualified_name"] for item in context["module_functions"]} == {"module_helper"}
+    outer_calls = {
+        call["target"]
+        for call in context["calls"]
+        if call["owner_id"] == methods["OuterModel.forward"]["method_id"]
+    }
+    assert "should_not_be_counted" not in " ".join(outer_calls)
+    assert context["source_coverage"]["ast_class_count"] == context["source_coverage"]["catalogued_class_count"]
+    assert context["source_coverage"]["ast_method_count"] == context["source_coverage"]["catalogued_method_count"]
+
+
+def test_branch_and_weight_mapping_catalog(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    resolver = load_script("resolve_model_target")
+    collector = load_script("collect_source_context")
+    target = repo / "vllm" / "model_executor" / "models" / "complex_branch_adapter.py"
+    context = collector.collect_source_context(repo, resolver.resolve_model_target(repo, input_path=target))
+
+    branch_kinds = {item["kind"] for item in context["branches"]}
+    assert {"if", "match"}.issubset(branch_kinds)
+    assert any(item["architecture_relevance_candidate"] == "high" for item in context["branches"])
+    mapping_kinds = {item["kind"] for item in context["weight_mappings"]}
+    assert "rename" in mapping_kinds
+    assert "default_loader" in mapping_kinds or "loader_dispatch" in mapping_kinds

@@ -1,28 +1,45 @@
 # Diagram Design Guide
 
-Use a white opaque background.
+Use a white opaque background and compact, readable hierarchy.
 
-Visual hierarchy:
+## Page Structure
 
-- page header: title and one-line question;
-- primary runtime path: prominent arrows and compact labels;
-- secondary dependencies: thinner dashed lines;
-- checkpoint mappings: distinct mapping color or line style;
-- parallel/capability information: badges, side notes, or panels;
-- external components: clear boundary or separate column.
+Top: title and one engineering question.
 
-Node text:
+Center: main flow or core structure.
 
-- title: architecture concept;
-- subtitle: implementation class or method;
-- avoid long Python expressions;
-- keep line numbers in evidence and report.
+Side/bottom: detail regions, parameter panels, capability badges and external
+boundaries.
 
-Review checklist:
+## Visual Semantics
 
-- every page has a clear reading direction;
-- no text overlap;
-- no edge runs through node bodies;
-- no repeated labels on every tensor edge;
-- no giant empty area;
-- no page is only cards without flow or relationships.
+- Runtime tensor flow: blue solid primary arrows.
+- Residual/data bypass: thinner solid lines.
+- Construction/config dependency: gray dashed lines.
+- Weight mapping: purple mapping style.
+- External delegation: red or orange dashed boundary crossing.
+- Containment: containers, not arrows.
+- Capability: badges, not flow nodes.
+- Parallel strategy: independent panel.
+
+## Density Targets
+
+- primary flow nodes: 5 to 12;
+- total semantic modules: 12 to 28;
+- visible edges: 8 to 26;
+- parameter panel: at most 10 items;
+- title: at most two lines;
+- subtitle: at most two lines.
+
+Long Python expressions belong in Evidence and report, not in diagram nodes.
+
+## Avoid
+
+- every class as a standalone card;
+- every parameter as a node;
+- TP to PP to EP serial chains;
+- checkpoint loading as runtime tensor flow;
+- wrapper and base loader methods drawn as direct serial calls without evidence;
+- capability badges connected as fake runtime dependencies;
+- construction variants drawn as token-time decisions;
+- deleting core behavior only to make the page cleaner.

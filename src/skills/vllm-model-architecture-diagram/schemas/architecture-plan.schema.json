@@ -8,62 +8,124 @@
     "schema_version",
     "model_name",
     "target_file",
+    "source_sha256",
+    "detail_level",
     "model_category",
     "files_read",
+    "traversal_notes",
+    "page_budget",
     "pages",
+    "class_review",
+    "method_review",
+    "function_review",
+    "coverage_manifest",
     "global_boundaries",
     "omissions",
     "unresolved"
   ],
+  "$defs": {
+    "pageRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["page_id", "region_id"],
+      "properties": {
+        "page_id": { "type": "string" },
+        "region_id": { "type": "string" }
+      }
+    },
+    "manifestItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item_id", "status", "page_refs", "claim_ids", "reason"],
+      "properties": {
+        "item_id": { "type": "string" },
+        "status": {
+          "enum": [
+            "rendered_detail",
+            "rendered_aggregate",
+            "documented_external",
+            "excluded_with_reason",
+            "unresolved",
+            null
+          ]
+        },
+        "page_refs": { "type": "array", "items": { "$ref": "#/$defs/pageRef" } },
+        "claim_ids": { "type": "array", "items": { "type": "string" } },
+        "reason": { "type": "string" }
+      }
+    }
+  },
   "properties": {
-    "schema_version": { "const": "2.0" },
-    "model_name": { "type": "string", "minLength": 1 },
-    "target_file": { "type": "string", "minLength": 1 },
+    "schema_version": { "const": "2.1" },
+    "model_name": { "type": "string" },
+    "target_file": { "type": "string" },
+    "source_sha256": { "type": "string" },
+    "detail_level": { "enum": ["overview", "standard", "complete"] },
     "model_category": { "type": "array", "items": { "type": "string" } },
     "files_read": { "type": "array", "items": { "type": "string" } },
+    "traversal_notes": { "type": "array", "items": { "type": "object" } },
+    "page_budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_pages", "max_pages"],
+      "properties": {
+        "target_pages": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "max_pages": { "type": "integer", "minimum": 1, "maximum": 5 }
+      }
+    },
     "pages": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 12,
+      "maxItems": 5,
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": [
           "id",
           "title",
+          "export_name",
           "question",
           "purpose",
+          "topics",
           "view_pattern",
           "scope",
           "claim_ids",
           "main_story",
+          "detail_regions",
           "secondary_topics",
           "external_boundaries",
           "visual_decisions",
           "detail_budget"
         ],
         "properties": {
-          "id": { "type": "string", "minLength": 1 },
-          "title": { "type": "string", "minLength": 1 },
-          "question": { "type": "string", "minLength": 1 },
-          "purpose": { "type": "string", "minLength": 1 },
-          "view_pattern": {
-            "enum": [
-              "pipeline",
-              "block",
-              "branch_merge",
-              "routed_container",
-              "mapping_flow",
-              "strategy_matrix",
-              "boundary_map",
-              "multimodal_pipeline",
-              "state_machine",
-              "component_map"
-            ]
-          },
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "export_name": { "type": "string" },
+          "question": { "type": "string" },
+          "purpose": { "type": "string" },
+          "topics": { "type": "array", "items": { "type": "string" } },
+          "view_pattern": { "type": "string" },
           "scope": { "type": "array", "items": { "type": "string" } },
-          "claim_ids": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+          "claim_ids": { "type": "array", "items": { "type": "string" } },
           "main_story": { "type": "array", "items": { "type": "string" } },
+          "detail_regions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "title", "type", "question", "source_item_ids", "claim_ids", "visual_form"],
+              "properties": {
+                "id": { "type": "string" },
+                "title": { "type": "string" },
+                "type": { "type": "string" },
+                "question": { "type": "string" },
+                "source_item_ids": { "type": "array", "items": { "type": "string" } },
+                "claim_ids": { "type": "array", "items": { "type": "string" } },
+                "visual_form": { "type": "string" }
+              }
+            }
+          },
           "secondary_topics": { "type": "array", "items": { "type": "string" } },
           "external_boundaries": { "type": "array", "items": { "type": "string" } },
           "visual_decisions": { "type": "array", "items": { "type": "string" } },
@@ -78,6 +140,20 @@
             }
           }
         }
+      }
+    },
+    "class_review": { "type": "array", "items": { "type": "object" } },
+    "method_review": { "type": "array", "items": { "type": "object" } },
+    "function_review": { "type": "array", "items": { "type": "object" } },
+    "coverage_manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["branches", "weight_mappings", "capabilities", "external_boundaries"],
+      "properties": {
+        "branches": { "type": "array", "items": { "$ref": "#/$defs/manifestItem" } },
+        "weight_mappings": { "type": "array", "items": { "$ref": "#/$defs/manifestItem" } },
+        "capabilities": { "type": "array", "items": { "$ref": "#/$defs/manifestItem" } },
+        "external_boundaries": { "type": "array", "items": { "$ref": "#/$defs/manifestItem" } }
       }
     },
     "global_boundaries": { "type": "array", "items": { "type": "string" } },

@@ -92,10 +92,12 @@ def cmd_validate(args: argparse.Namespace) -> int:
     evidence = None
     if args.context and args.context.exists():
         context = json.loads(args.context.read_text(encoding="utf-8"))
+    if args.plan and args.plan.exists():
+        plan = json.loads(args.plan.read_text(encoding="utf-8"))
     if args.evidence and args.evidence.exists():
         evidence = json.loads(args.evidence.read_text(encoding="utf-8"))
         evidence_mod = _load_script("validate_evidence")
-        errors, warnings, summary = evidence_mod.validate_evidence(evidence, context=context, plan=None)
+        errors, warnings, summary = evidence_mod.validate_evidence(evidence, context=context, plan=plan)
         for warning in warnings:
             print(f"WARNING: {warning}")
         if errors:
@@ -105,7 +107,6 @@ def cmd_validate(args: argparse.Namespace) -> int:
         else:
             print(f"Evidence validation passed: {json.dumps(summary, sort_keys=True)}")
     if args.plan and args.plan.exists():
-        plan = json.loads(args.plan.read_text(encoding="utf-8"))
         plan_mod = _load_script("validate_architecture_plan")
         errors, warnings = plan_mod.validate_plan(plan, evidence=evidence, context=context)
         for warning in warnings:
@@ -118,7 +119,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
             print("Architecture plan validation passed")
     if args.drawio and args.drawio.exists():
         drawio_mod = _load_script("validate_drawio")
-        errors = drawio_mod.validate_drawio(args.drawio, plan=plan, images=args.image or [])
+        errors = drawio_mod.validate_drawio(args.drawio, plan=plan, images=args.image or [], images_dir=args.images_dir)
         if errors:
             failed = True
             for error in errors:
@@ -166,6 +167,7 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--evidence", type=Path)
     validate.add_argument("--drawio", type=Path)
     validate.add_argument("--image", action="append", type=Path, default=[])
+    validate.add_argument("--images-dir", type=Path)
     validate.set_defaults(func=cmd_validate)
 
     scan = subparsers.add_parser("scan", help="Scan vllm/model_executor/models compatibility")

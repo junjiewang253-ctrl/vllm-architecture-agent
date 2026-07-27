@@ -1,0 +1,594 @@
+{
+  "claims": [
+    {
+      "category": "structure",
+      "confidence": "direct",
+      "derivation": "",
+      "evidence": [
+        {
+          "end_line": 685,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Wrapper constructs model, LM head and logits processor.",
+          "start_line": 660,
+          "symbol": "self.model"
+        },
+        {
+          "end_line": 496,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Model constructs embedding, decoder layers and final norm.",
+          "start_line": 437,
+          "symbol": "make_layers"
+        }
+      ],
+      "external_boundary": "",
+      "id": "claim:model-composition",
+      "phase": "construction",
+      "source_item_ids": [
+        "method:HYV3ForCausalLM.__init__:660",
+        "method:HYV3Model.__init__:437"
+      ],
+      "statement": "HYV3ForCausalLM owns HYV3Model, LM head and LogitsProcessor; HYV3Model owns embeddings, decoder layers and final norm.",
+      "used_in_pages": [
+        "model-architecture-and-execution"
+      ]
+    },
+    {
+      "category": "runtime",
+      "confidence": "direct",
+      "derivation": "",
+      "evidence": [
+        {
+          "end_line": 561,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Forward implements PP rank branches and final hidden-state production.",
+          "start_line": 529,
+          "symbol": "get_pp_group"
+        }
+      ],
+      "external_boundary": "",
+      "id": "claim:model-runtime-pipeline",
+      "phase": "runtime",
+      "source_item_ids": [
+        "method:HYV3Model.forward:529",
+        "branch:HYV3Model.forward:536:1",
+        "branch:HYV3Model.forward:551:3"
+      ],
+      "statement": "Model forward separates first/non-first rank input handling, iterates the local decoder slice, returns IntermediateTensors on non-last ranks and finalizes add+norm on last rank.",
+      "used_in_pages": [
+        "model-architecture-and-execution"
+      ]
+    },
+    {
+      "category": "runtime",
+      "confidence": "direct",
+      "derivation": "",
+      "evidence": [
+        {
+          "end_line": 708,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Wrapper compute_logits calls LogitsProcessor with lm_head and hidden_states.",
+          "start_line": 703,
+          "symbol": "logits_processor"
+        }
+      ],
+      "external_boundary": "",
+      "id": "claim:compute-logits",
+      "phase": "runtime",
+      "source_item_ids": [
+        "method:HYV3ForCausalLM.compute_logits:703"
+      ],
+      "statement": "compute_logits combines ParallelLMHead and hidden states through LogitsProcessor to produce logits.",
+      "used_in_pages": [
+        "model-architecture-and-execution"
+      ]
+    },
+    {
+      "category": "capability",
+      "confidence": "derived",
+      "derivation": "Class decorators and inherited interfaces combine into capability markers; they are displayed as badges rather than tensor flow.",
+      "evidence": [
+        {
+          "end_line": 436,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Decorator marks HYV3Model for torch compile support.",
+          "start_line": 435,
+          "symbol": "support_torch_compile"
+        },
+        {
+          "end_line": 654,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Wrapper inherits SupportsPP and SupportsLoRA.",
+          "start_line": 654,
+          "symbol": "SupportsLoRA"
+        },
+        {
+          "end_line": 436,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Base model inherits MixtureOfExperts.",
+          "start_line": 436,
+          "symbol": "MixtureOfExperts"
+        }
+      ],
+      "external_boundary": "",
+      "id": "claim:adapter-capabilities",
+      "phase": "capability",
+      "source_item_ids": [
+        "class:HYV3ForCausalLM:654",
+        "class:HYV3Model:436",
+        "capability:pipeline_parallel",
+        "capability:lora",
+        "capability:torch_compile",
+        "capability:moe"
+      ],
+      "statement": "The wrapper exposes PP and LoRA capabilities while the base model is marked torch-compile capable and implements MoE interfaces.",
+      "used_in_pages": [
+        "model-architecture-and-execution",
+        "parallelism-configuration-and-weight-loading"
+      ]
+    },
+    {
+      "category": "runtime",
+      "confidence": "direct",
+      "derivation": "",
+      "evidence": [
+        {
+          "end_line": 432,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Decoder forward contains residual initialization and RMSNorm calls.",
+          "start_line": 410,
+          "symbol": "residual is None"
+        }
+      ],
+      "external_boundary": "",
+      "id": "claim:decoder-residual-lanes",
+      "phase": "runtime",
+      "source_item_ids": [
+        "method:HYV3DecoderLayer.forward:410",
+        "branch:HYV3DecoderLayer.forward:417:1"
+      ],
+      "statement": "Decoder forward keeps hidden-state and residual lanes separate, initializes residual from hidden states when residual is None, and uses fused RMSNorm handoffs.",
+      "used_in_pages": [
+        "decoder-and-attention"
+      ]
+    },
+    {
+      "category": "construction",
+      "confidence": "direct",
+      "derivation": "",
+      "evidence": [
+        {
+          "end_line": 408,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Decoder __init__ chooses HYV3FeedForward or HYV3MoEFused based on layer index.",
+          "start_line": 367,
+          "symbol": "first_k_dense_replace"
+        }
+      ],
+      "external_boundary": "",
+      "id": "claim:ffn-construction-variant",
+      "phase": "construction",
+      "source_item_ids": [
+        "method:HYV3DecoderLayer.__init__:367",
+        "branch:HYV3DecoderLayer.__init__:395:2"
+      ],
+      "statement": "Decoder construction chooses exactly one FFN implementation per layer: Dense FFN for first_k_dense_replace layers and HYV3MoEFused for remaining layers.",
+      "used_in_pages": [
+        "decoder-and-attention"
+      ]
+    },
+    {
+      "category": "runtime",
+      "confidence": "direct",
+      "derivation": "",
+      "evidence": [
+        {
+          "end_line": 117,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Dense FFN constructs gate_up/down projections and activation.",
+          "start_line": 87,
+          "symbol": "MergedColumnParallelLinear"
+        },
+        {
+          "end_line": 123,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Dense FFN forward applies gate_up, activation and down projection.",
+          "start_line": 119,
+          "symbol": "self.gate_up_proj"
+        }
+      ],
+      "external_boundary": "",
+      "id": "claim:dense-ffn-flow",
+      "phase": "runtime",
+      "source_item_ids": [
+        "method:HYV3FeedForward.__init__:87",
+        "method:HYV3FeedForward.forward:119"
+      ],
+      "statement": "Dense HYV3FeedForward uses MergedColumnParallelLinear gate_up_proj, SiluAndMul and RowParallelLinear down_proj.",
+      "used_in_pages": [
+        "decoder-and-attention"
+      ]
+    },
+    {
+      "category": "construction",
+      "confidence": "direct",
+      "derivation": "",
+      "evidence": [
+        {
+          "end_line": 329,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Attention __init__ constructs projections and decides HpcRopeNorm support.",
+          "start_line": 225,
+          "symbol": "QKVParallelLinear"
+        }
+      ],
+      "external_boundary": "",
+      "id": "claim:attention-construction",
+      "phase": "construction",
+      "source_item_ids": [
+        "method:HYV3Attention.__init__:225",
+        "branch:HYV3Attention.__init__:313:4"
+      ],
+      "statement": "Attention construction partitions heads for tensor parallelism, constructs QKVParallelLinear, RowParallelLinear, RoPE, optional Q/K RMSNorm, vLLM Attention and optional HpcRopeNorm support.",
+      "used_in_pages": [
+        "decoder-and-attention"
+      ]
+    },
+    {
+      "category": "runtime",
+      "confidence": "direct",
+      "derivation": "",
+      "evidence": [
+        {
+          "end_line": 363,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Attention forward shows qkv projection, split, HPC path and fallback path.",
+          "start_line": 331,
+          "symbol": "qkv"
+        }
+      ],
+      "external_boundary": "",
+      "id": "claim:attention-forward-paths",
+      "phase": "runtime",
+      "source_item_ids": [
+        "method:HYV3Attention.forward:331",
+        "branch:HYV3Attention.forward:339:1",
+        "branch:HYV3Attention.forward:347:2"
+      ],
+      "statement": "Attention forward projects hidden states to qkv, splits q/k/v, sends the whole qkv tensor to HpcRopeNorm when configured, and otherwise applies optional Q/K RMSNorm then RoPE while V bypasses Q/K Norm.",
+      "used_in_pages": [
+        "decoder-and-attention"
+      ]
+    },
+    {
+      "category": "external",
+      "confidence": "external",
+      "derivation": "",
+      "evidence": [
+        {
+          "end_line": 361,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Local code delegates to imported Attention after local q/k/v preparation.",
+          "start_line": 339,
+          "symbol": "self.attn"
+        }
+      ],
+      "external_boundary": "Attention is imported from vLLM; the local file proves delegation and arguments but not backend internals or KV cache read behavior.",
+      "id": "claim:attention-external-backend",
+      "phase": "external",
+      "source_item_ids": [
+        "method:HYV3Attention.forward:331",
+        "capability:custom_attention"
+      ],
+      "statement": "vLLM Attention consumes the prepared q/k/v tensors; KV cache read and attention backend internals are external to this model file.",
+      "used_in_pages": [
+        "decoder-and-attention"
+      ]
+    },
+    {
+      "category": "construction",
+      "confidence": "direct",
+      "derivation": "",
+      "evidence": [
+        {
+          "end_line": 205,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "MoE __init__ configures GateLinear, optional shared FFN, expert bias and FusedMoE parameters.",
+          "start_line": 127,
+          "symbol": "FusedMoE"
+        }
+      ],
+      "external_boundary": "",
+      "id": "claim:moe-construction-config",
+      "phase": "construction",
+      "source_item_ids": [
+        "method:HYV3MoEFused.__init__:127",
+        "branch:HYV3MoEFused.__init__:169:2"
+      ],
+      "statement": "HYV3MoEFused construction derives expert counts, top_k, scoring, grouped routing, shared expert, expert bias and FusedMoE configuration.",
+      "used_in_pages": [
+        "moe-architecture-and-routing"
+      ]
+    },
+    {
+      "category": "runtime",
+      "confidence": "direct",
+      "derivation": "",
+      "evidence": [
+        {
+          "end_line": 221,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "MoE forward performs flatten, gate, FusedMoE call and restore shape.",
+          "start_line": 207,
+          "symbol": "final_hidden_states.view"
+        }
+      ],
+      "external_boundary": "",
+      "id": "claim:moe-runtime-routing",
+      "phase": "runtime",
+      "source_item_ids": [
+        "method:HYV3MoEFused.forward:207"
+      ],
+      "statement": "MoE forward flattens tokens, computes router logits with GateLinear, passes hidden states and router logits into FusedMoE, then restores original shape.",
+      "used_in_pages": [
+        "moe-architecture-and-routing"
+      ]
+    },
+    {
+      "category": "construction",
+      "confidence": "derived",
+      "derivation": "The optional shared_mlp assignment and FusedMoE constructor arguments jointly establish contained expert composition.",
+      "evidence": [
+        {
+          "end_line": 179,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Shared experts are conditionally constructed.",
+          "start_line": 169,
+          "symbol": "shared_mlp"
+        },
+        {
+          "end_line": 205,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "FusedMoE receives routed and shared expert configuration.",
+          "start_line": 187,
+          "symbol": "shared_experts"
+        }
+      ],
+      "external_boundary": "",
+      "id": "claim:moe-fused-composition",
+      "phase": "construction",
+      "source_item_ids": [
+        "method:HYV3MoEFused.__init__:127",
+        "branch:HYV3MoEFused.__init__:169:2",
+        "mapping:HYV3MoEFused.__init__:187:18"
+      ],
+      "statement": "FusedMoE contains routed experts and optionally a shared HYV3FeedForward; experts are internal composition, not a post-FusedMoE serial runtime step.",
+      "used_in_pages": [
+        "moe-architecture-and-routing"
+      ]
+    },
+    {
+      "category": "parallel",
+      "confidence": "direct",
+      "derivation": "",
+      "evidence": [
+        {
+          "end_line": 158,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "MoE construction records EP group, rank, size and physical expert ranges.",
+          "start_line": 127,
+          "symbol": "get_ep_group"
+        },
+        {
+          "end_line": 516,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Model metadata update propagates physical expert information to MoE layers.",
+          "start_line": 501,
+          "symbol": "update_expert_map"
+        }
+      ],
+      "external_boundary": "",
+      "id": "claim:expert-parallel-metadata",
+      "phase": "parallel",
+      "source_item_ids": [
+        "method:HYV3MoEFused.__init__:127",
+        "method:HYV3Model.update_physical_experts_metadata:501",
+        "capability:expert_parallel"
+      ],
+      "statement": "The model records EP group/rank/size, physical/local/redundant experts and updates expert maps through MoE layers.",
+      "used_in_pages": [
+        "moe-architecture-and-routing",
+        "parallelism-configuration-and-weight-loading"
+      ]
+    },
+    {
+      "category": "external",
+      "confidence": "external",
+      "derivation": "",
+      "evidence": [
+        {
+          "end_line": 221,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Local MoE forward delegates expert execution to imported FusedMoE.",
+          "start_line": 207,
+          "symbol": "self.experts"
+        }
+      ],
+      "external_boundary": "The model file proves the FusedMoE call and arguments; dispatch/combine internals live in vLLM FusedMoE.",
+      "id": "claim:moe-external-runtime",
+      "phase": "external",
+      "source_item_ids": [
+        "method:HYV3MoEFused.forward:207",
+        "capability:moe"
+      ],
+      "statement": "FusedMoE dispatch and combine execution are implemented in the imported vLLM FusedMoE component.",
+      "used_in_pages": [
+        "moe-architecture-and-routing"
+      ]
+    },
+    {
+      "category": "parallel",
+      "confidence": "derived",
+      "derivation": "Separate TP, PP and EP constructs appear in different methods and phases, so the diagram groups them in separate strategy panels.",
+      "evidence": [
+        {
+          "end_line": 281,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Attention uses TP world size and head partitioning.",
+          "start_line": 225,
+          "symbol": "get_tensor_model_parallel_world_size"
+        },
+        {
+          "end_line": 462,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Model uses make_layers for PP layer slicing.",
+          "start_line": 457,
+          "symbol": "make_layers"
+        },
+        {
+          "end_line": 158,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "MoE uses EP group and local expert metadata.",
+          "start_line": 127,
+          "symbol": "get_ep_group"
+        }
+      ],
+      "external_boundary": "",
+      "id": "claim:parallel-strategies",
+      "phase": "parallel",
+      "source_item_ids": [
+        "capability:tensor_parallel",
+        "capability:pipeline_parallel",
+        "capability:expert_parallel",
+        "method:HYV3Model.forward:529",
+        "method:HYV3Attention.__init__:225",
+        "method:HYV3MoEFused.__init__:127"
+      ],
+      "statement": "Tensor, pipeline and expert parallel strategies affect different components and should be shown as independent panels rather than a serial tensor flow.",
+      "used_in_pages": [
+        "parallelism-configuration-and-weight-loading"
+      ]
+    },
+    {
+      "category": "capability",
+      "confidence": "derived",
+      "derivation": "The evidence spans constructor arguments and interface/decorator markers, which support capability badges and config dependencies only.",
+      "evidence": [
+        {
+          "end_line": 109,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Quant config is passed to linear layers during construction.",
+          "start_line": 92,
+          "symbol": "quant_config"
+        },
+        {
+          "end_line": 654,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "LoRA appears as an adapter interface.",
+          "start_line": 654,
+          "symbol": "SupportsLoRA"
+        },
+        {
+          "end_line": 435,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "torch compile appears as a decorator.",
+          "start_line": 435,
+          "symbol": "support_torch_compile"
+        }
+      ],
+      "external_boundary": "",
+      "id": "claim:configuration-capability-boundaries",
+      "phase": "capability",
+      "source_item_ids": [
+        "capability:quantization",
+        "capability:lora",
+        "capability:torch_compile"
+      ],
+      "statement": "Quantization is a construction dependency, LoRA is a local capability marker, and torch.compile is a decorator capability rather than a runtime tensor path.",
+      "used_in_pages": [
+        "parallelism-configuration-and-weight-loading"
+      ]
+    },
+    {
+      "category": "loading",
+      "confidence": "direct",
+      "derivation": "",
+      "evidence": [
+        {
+          "end_line": 722,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Wrapper load_weights defines _filter_weights and calls AutoWeightsLoader.load_weights.",
+          "start_line": 710,
+          "symbol": "AutoWeightsLoader"
+        }
+      ],
+      "external_boundary": "",
+      "id": "claim:wrapper-weight-loading",
+      "phase": "loading",
+      "source_item_ids": [
+        "method:HYV3ForCausalLM.load_weights:710",
+        "mapping:HYV3ForCausalLM.load_weights:718:2",
+        "mapping:HYV3ForCausalLM.load_weights:722:3"
+      ],
+      "statement": "HYV3ForCausalLM.load_weights has its own wrapper entrypoint, filters speculative layers, handles tied LM-head skipping through AutoWeightsLoader configuration and delegates loading externally.",
+      "used_in_pages": [
+        "parallelism-configuration-and-weight-loading"
+      ]
+    },
+    {
+      "category": "loading",
+      "confidence": "direct",
+      "derivation": "",
+      "evidence": [
+        {
+          "end_line": 651,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Model load_weights defines stacked mapping, expert mapping and regular fallback loader dispatch.",
+          "start_line": 563,
+          "symbol": "stacked_params_mapping"
+        }
+      ],
+      "external_boundary": "",
+      "id": "claim:model-weight-dispatch",
+      "phase": "loading",
+      "source_item_ids": [
+        "method:HYV3Model.load_weights:563",
+        "mapping:HYV3Model.load_weights:564:1",
+        "mapping:HYV3Model.load_weights:573:2"
+      ],
+      "statement": "HYV3Model.load_weights is a separate manual dispatch entrypoint with stacked, expert and regular parameter paths.",
+      "used_in_pages": [
+        "parallelism-configuration-and-weight-loading"
+      ]
+    },
+    {
+      "category": "loading",
+      "confidence": "direct",
+      "derivation": "",
+      "evidence": [
+        {
+          "end_line": 648,
+          "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+          "reason": "Model load_weights applies remap, skip, PP filter, router rename and loader selection policies.",
+          "start_line": 576,
+          "symbol": "maybe_remap_kv_scale_name"
+        }
+      ],
+      "external_boundary": "",
+      "id": "claim:weight-loading-policies",
+      "phase": "loading",
+      "source_item_ids": [
+        "method:HYV3Model.load_weights:563",
+        "branch:HYV3Model.load_weights:578:2",
+        "branch:HYV3Model.load_weights:595:7",
+        "branch:HYV3Model.load_weights:641:15"
+      ],
+      "statement": "FP8 scale remapping occurs before mapping dispatch; PP missing, bias, non-local expert and router.gate policies are filters or renames, not runtime tensor flow.",
+      "used_in_pages": [
+        "parallelism-configuration-and-weight-loading"
+      ]
+    }
+  ],
+  "schema_version": "2.1",
+  "source_sha256": "99be7c95901c8a778757360dcd2c28b805b3fbdc59bc5abd913cc3322fa13b48",
+  "target_file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py"
+}

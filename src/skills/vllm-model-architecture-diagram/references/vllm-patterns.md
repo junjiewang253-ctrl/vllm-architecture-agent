@@ -1,37 +1,44 @@
 # vLLM Patterns
 
-Use these as recognition aids, not as final diagram templates.
+Use these as recognition aids. They are not final diagram templates.
 
-Registry:
+## Registry
 
-- model architectures are registered in model registry mappings;
-- registry parsing must be static and must not import vLLM.
+Model architecture names are statically mapped in model registry dictionaries.
+Do not import vLLM to resolve registry entries.
 
-Common interfaces and capabilities:
+## Capabilities
 
-- `SupportsPP` indicates pipeline-parallel support;
-- `SupportsLoRA` indicates LoRA support;
-- `SupportsMultiModal` indicates multimodal input handling;
-- `MixtureOfExperts` indicates MoE integration;
-- `support_torch_compile` indicates compile-related capability.
+- `SupportsPP`: pipeline-parallel support.
+- `SupportsLoRA`: local LoRA capability marker.
+- `SupportsMultiModal`: multimodal inputs.
+- `MixtureOfExperts`: MoE integration.
+- `support_torch_compile`: compile compatibility.
 
-Common model building blocks:
+## Components
 
-- embeddings such as vocabulary-parallel embedding layers;
-- tensor-parallel projections and row/column parallel linear layers;
+- embeddings and pooling heads;
+- QKV, column, merged-column and row parallel projections;
 - attention backend wrappers;
-- fused MoE layers;
+- normalization layers;
+- dense FFN blocks;
+- fused MoE blocks and routers;
 - logits processors and output heads;
-- pooling or classification heads;
+- multimodal encoders and fusion logic;
 - recurrent or state-space blocks.
 
-Common loading patterns:
+## Loading
 
-- packed parameter mappings;
+Look for:
+
+- packed module mappings;
 - stacked parameter mappings;
 - expert parameter mappings;
-- weight name filtering or remapping;
-- automatic loaders and per-parameter weight loaders.
+- name remap;
+- skip/filter branches;
+- `AutoWeightsLoader`;
+- per-parameter `weight_loader`;
+- `default_weight_loader`.
 
-Treat imported runtime internals as external unless you actually read the
-implementation file.
+Treat imported runtime internals as external unless you actually read their
+implementation files.

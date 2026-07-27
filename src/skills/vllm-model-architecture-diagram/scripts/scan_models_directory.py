@@ -53,7 +53,7 @@ def scan_models_directory(repo_root: Path) -> dict[str, Any]:
     python_files = sorted(models_root.glob("*.py")) if models_root.exists() else []
     if not models_root.exists():
         return {
-            "schema_version": "2.0",
+            "schema_version": "2.1",
             "repo_root": str(repo_root),
             "models_root": str(models_root),
             "entries": [],
@@ -143,7 +143,7 @@ def scan_models_directory(repo_root: Path) -> dict[str, Any]:
         "prepare_success_rate": round(len(prepare_successes) / len(registered_results), 4) if registered_results else 1.0,
     }
     return {
-        "schema_version": "2.0",
+        "schema_version": "2.1",
         "repo_root": str(repo_root),
         "models_root": str(models_root.resolve()),
         "entries": results,

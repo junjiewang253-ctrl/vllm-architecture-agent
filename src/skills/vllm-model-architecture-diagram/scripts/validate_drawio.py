@@ -46,7 +46,21 @@ def _visible_semantic_nodes(model: ET.Element) -> list[ET.Element]:
     return nodes
 
 
-def validate_drawio(drawio_path: Path, plan: dict[str, Any] | None = None, images: list[Path] | None = None) -> list[str]:
+def _page_text(model: ET.Element) -> str:
+    values: list[str] = []
+    for cell in model.findall(".//mxCell"):
+        value = cell.attrib.get("value")
+        if value:
+            values.append(value)
+    return "\n".join(values)
+
+
+def validate_drawio(
+    drawio_path: Path,
+    plan: dict[str, Any] | None = None,
+    images: list[Path] | None = None,
+    images_dir: Path | None = None,
+) -> list[str]:
     errors: list[str] = []
     if not drawio_path.exists():
         return [f"drawio file does not exist: {drawio_path}"]
@@ -65,14 +79,27 @@ def validate_drawio(drawio_path: Path, plan: dict[str, Any] | None = None, image
     if len(page_ids) != len(set(page_ids)):
         errors.append("drawio page IDs must be unique")
 
+    plan_pages_by_title: dict[str, dict[str, Any]] = {}
     if plan:
+        max_pages = plan.get("page_budget", {}).get("max_pages")
+        if isinstance(max_pages, int) and len(pages) > max_pages:
+            errors.append("drawio page count exceeds plan.page_budget.max_pages")
         expected_titles = [page["title"] for page in plan.get("pages", [])]
+        plan_pages_by_title = {page["title"]: page for page in plan.get("pages", [])}
         missing = sorted(set(expected_titles) - set(page_names))
         extra = sorted(set(page_names) - set(expected_titles))
         for title in missing:
             errors.append(f"plan page missing from drawio: {title}")
         for title in extra:
             errors.append(f"drawio contains page not present in plan: {title}")
+        for page in plan.get("pages", []):
+            if not page.get("export_name"):
+                errors.append(f"{page.get('id')}: plan page is missing export_name")
+        if images_dir and images_dir.exists():
+            for page in plan.get("pages", []):
+                export_name = page.get("export_name")
+                if export_name and not (images_dir / f"{export_name}.png").exists():
+                    errors.append(f"{page.get('id')}: expected PNG export is missing: {images_dir / f'{export_name}.png'}")
 
     all_cell_ids: set[str] = set()
     for page in pages:
@@ -80,8 +107,11 @@ def validate_drawio(drawio_path: Path, plan: dict[str, Any] | None = None, image
         if model is None:
             errors.append(f"{_page_name(page)}: missing mxGraphModel")
             continue
+        page_title = _page_name(page)
         background = model.attrib.get("background") or model.attrib.get("pageBackgroundColor")
-        if background and background.lower() not in {"#ffffff", "white"}:
+        if not background:
+            errors.append(f"{page_title}: page background must be explicitly white")
+        elif background.lower() not in {"#ffffff", "white"}:
             errors.append(f"{_page_name(page)}: page background must be white")
         semantic_nodes = _visible_semantic_nodes(model)
         if not semantic_nodes:
@@ -90,6 +120,20 @@ def validate_drawio(drawio_path: Path, plan: dict[str, Any] | None = None, image
             matching = next((item for item in plan.get("pages", []) if item.get("title") == _page_name(page)), {})
             if matching.get("view_pattern") not in {"boundary_map", "component_map"}:
                 errors.append(f"{_page_name(page)}: page has fewer than three visible semantic nodes")
+        if plan and page_title in plan_pages_by_title:
+            matching = plan_pages_by_title[page_title]
+            if matching.get("view_pattern") not in {"boundary_map", "component_map"} and len(semantic_nodes) < 5:
+                errors.append(f"{page_title}: full model page should contain at least five visible semantic nodes")
+            page_text = _page_text(model)
+            if matching.get("title") not in page_text:
+                errors.append(f"{page_title}: page title is not present in visible cell text")
+            regions = matching.get("detail_regions", [])
+            if not regions:
+                errors.append(f"{page_title}: plan page has no detail regions")
+            for region in regions:
+                region_title = region.get("title")
+                if region_title and region_title not in page_text:
+                    errors.append(f"{page_title}: detail region title is missing from drawio text: {region_title}")
         for cell in model.findall(".//mxCell"):
             cell_id = cell.attrib.get("id")
             if not cell_id:
@@ -126,8 +170,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("drawio", type=Path)
     parser.add_argument("--plan", type=Path)
     parser.add_argument("--image", action="append", type=Path, default=[])
+    parser.add_argument("--images-dir", type=Path)
     args = parser.parse_args(argv)
-    errors = validate_drawio(args.drawio, plan=_load_plan(args.plan), images=args.image)
+    errors = validate_drawio(
+        args.drawio,
+        plan=_load_plan(args.plan),
+        images=args.image,
+        images_dir=args.images_dir,
+    )
     if errors:
         for error in errors:
             print(f"ERROR: {error}")

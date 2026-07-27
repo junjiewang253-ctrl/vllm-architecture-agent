@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vllm-architecture-agent"
-version = "2.0.0"
+version = "2.1.0"
 description = "Agent-native Skill for analyzing vLLM model adapters and producing source-grounded Draw.io architecture diagrams."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -21,6 +21,7 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+pythonpath = ["src"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

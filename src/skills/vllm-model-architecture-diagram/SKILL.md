@@ -1,11 +1,12 @@
 # vLLM Model Architecture Diagram
 
 Use this Skill when the user asks to analyze a vLLM model adapter file or a
-registered vLLM architecture name and generate architecture diagrams.
+registered vLLM architecture name and generate a small set of complete,
+high-density architecture diagrams.
 
-The v2.0 workflow is Agent-native. Scripts collect and validate source context;
-Codex is responsible for architecture understanding, page selection, diagram
-design, Draw.io construction, visual review, and the final report.
+The v2.1 workflow remains Agent-native. Scripts collect and validate source
+structure; Codex reads the source, decides what matters, chooses pages, designs
+the diagram, draws with Draw.io MCP, reviews the PNG, and writes the report.
 
 ## Scope
 
@@ -15,13 +16,9 @@ Default targets are files under:
 vllm/model_executor/models/*.py
 ```
 
-The user may provide either:
-
-- a Python file path; or
-- a registry architecture name.
-
-If an architecture name is supplied, resolve it through
-`vllm/model_executor/models/registry.py` without importing vLLM.
+The user may provide either a Python file path or a registry architecture name.
+Resolve architecture names through `vllm/model_executor/models/registry.py`
+without importing vLLM, torch, transformers, or CUDA-dependent modules.
 
 ## Default Output
 
@@ -29,21 +26,48 @@ Use one output directory per model:
 
 ```text
 outputs/<model>/
-├── source-context.json
-├── architecture-plan.json
-├── evidence.json
-├── architecture.drawio
-├── report.md
-├── visual-review.md
-└── images/
+  source-context.json
+  architecture-plan.json
+  evidence.json
+  architecture.drawio
+  report.md
+  visual-review.md
+  images/
 ```
 
-Do not generate legacy IR, Concept, View, Layout Plan, Patch, Lock, or Coverage
-JSON by default.
+Do not generate legacy IR, Concept Graph, View Graph, Layout Plan, Patch, Lock,
+or Coverage JSON by default.
 
-## Step 1: Resolve Input
+## Page Budget
 
-Run `vllm-arch prepare` or the underlying scripts:
+Default detail level is `complete`.
+
+For a full model, target four high-density composite pages and keep the hard
+maximum at five pages. A helper or shared utility file may use one or two pages.
+
+Do not stop after a simple overview. Do not create one page per class or method.
+Use embedded detail regions inside a small number of pages.
+
+When a page is dense, try these before adding a page:
+
+1. nested containers;
+2. embedded subgraphs;
+3. component trees;
+4. parameter panels;
+5. variant tables;
+6. mapping trees;
+7. ports instead of low-information data objects;
+8. capability badges;
+9. side panels for config and metadata;
+10. aggregation of repeated low-level steps;
+11. fewer edge labels;
+12. adjusted canvas size.
+
+Do not delete core behavior just to make the page prettier.
+
+## Step 1: Prepare Source Context
+
+Run:
 
 ```powershell
 vllm-arch prepare `
@@ -52,7 +76,7 @@ vllm-arch prepare `
   --outputs-dir outputs/<model>
 ```
 
-For registry architecture input:
+Or by registry architecture:
 
 ```powershell
 vllm-arch prepare `
@@ -64,10 +88,34 @@ vllm-arch prepare `
 This creates `source-context.json`, `architecture-plan.template.json`, and
 `evidence.template.json`.
 
-## Step 2: Read Source
+## Step 2: Complete Target-File Review
 
-Read the target model file first. Use `source-context.json` as an index, not as
-the architecture answer.
+Read the complete target Python file. Then inspect `source-context.json`:
+
+- `source_coverage`;
+- `classes`;
+- `methods`;
+- `module_functions`;
+- `branches`;
+- `weight_mappings`;
+- `capability_signals`;
+- `related_file_candidates`.
+
+Use Source Context as a checklist, not as the final architecture answer.
+
+You must review:
+
+- every class source range;
+- every method;
+- every module-level function;
+- every high or medium branch;
+- every weight mapping;
+- every detected capability.
+
+No silent omission is allowed. Not everything must become a node, but everything
+must receive a disposition in `architecture-plan.json`.
+
+## Step 3: Traverse Related Source
 
 Default traversal budget:
 
@@ -75,54 +123,85 @@ Default traversal budget:
 - default related file count: 20;
 - suggested maximum related file count: 30.
 
-Read related files only when needed to support a diagram claim or external
-boundary. Stop when the main diagram claims are supported, an external component
-boundary is reached, or the budget is reached.
+Read related files when they prove a claim, clarify an interface, or define an
+external boundary. Stop when:
 
-Record every file actually read in `architecture-plan.json`.
+- the page claims are supported;
+- the source reaches a stable imported component boundary;
+- more recursion will not change the diagram;
+- the traversal budget is reached.
 
-## Step 3: Write Architecture Plan
+Record every file read in `files_read` and explain important stops in
+`traversal_notes`.
 
-Create `architecture-plan.json` from the template.
+## Step 4: Plan Composite Pages
 
-The plan describes what diagrams should communicate. It must not contain Draw.io
-XML or exact coordinates.
+Fill `architecture-plan.json` before drawing.
 
 For each page:
 
 - state the engineering question;
-- state the purpose;
-- choose a view pattern;
-- list source-backed claim IDs;
-- outline the main story;
-- list secondary topics;
-- list external boundaries;
-- set a detail budget.
+- choose a `view_pattern`;
+- list topics;
+- provide at least one `detail_region`;
+- map each region to `source_item_ids` and `claim_ids`;
+- set a realistic detail budget.
 
-Page selection is dynamic:
+Typical full-model clustering:
 
-- always consider a Model Overview and Adapter Boundary;
-- add Decoder, Attention, MoE, Weight Loading, Parallel Strategies, Multimodal,
-  Pooling, Classification, Hybrid/Recurrent, Quantization, LoRA, or other pages
-  only when source evidence supports them;
-- do not create empty or irrelevant pages.
+- Model Composition + End-to-End Execution;
+- Repeated Block + Main Compute Mechanism;
+- Specialized Subsystem, such as MoE, multimodal, pooling, or recurrent state;
+- Parallelism + Configuration + Weight Loading + Boundaries.
 
-## Step 4: Write Evidence
+Use a fifth page only if two visual revision rounds still cannot make the four
+pages readable.
 
-Create `evidence.json`.
+## Step 5: Fill Review Checklists
 
-Use three confidence levels:
+The plan template includes empty checklist items. Codex must complete them.
 
-- `direct`: local source directly proves the claim;
-- `derived`: multiple local facts support a higher-level claim;
-- `external`: local source proves a call or dependency, but implementation is
-  outside the target file or traversal boundary.
+Class review:
 
-Direct evidence must cite concrete file line ranges and cannot rely only on
-import lines. External claims must describe the local evidence and the boundary
-that was not analyzed.
+- every class gets one entry;
+- primary components cannot be excluded;
+- rendered classes need page and region refs;
+- excluded or unresolved classes need a concrete reason.
 
-## Step 5: Validate Plan and Evidence
+Method review:
+
+- every method gets one entry;
+- core methods must be `rendered_detail` or `rendered_aggregate`;
+- each core method needs a claim and a page/region ref;
+- trivial helpers can be excluded with reason.
+
+Function review:
+
+- every module-level function gets one entry;
+- helper functions can be aggregated or excluded, but not ignored.
+
+Coverage manifest:
+
+- every high/medium branch;
+- every weight mapping;
+- every detected capability;
+- external boundaries that affect diagram interpretation.
+
+## Step 6: Write Evidence
+
+Create `evidence.json` with schema version `2.1`.
+
+Use:
+
+- `direct`: local source directly proves the behavior;
+- `derived`: multiple source facts support a higher-level claim;
+- `external`: local code proves a delegation or dependency, but implementation
+  is outside the reviewed boundary.
+
+Direct claims cannot rely only on imports. Derived claims require derivation and
+at least two evidence entries. External claims require an explicit boundary.
+
+## Step 7: Validate Before Drawing
 
 Run:
 
@@ -133,48 +212,50 @@ vllm-arch validate `
   --evidence outputs/<model>/evidence.json
 ```
 
-Fix any errors before drawing. Warnings should be addressed when they affect
-diagram clarity.
+Fix errors before opening Draw.io. Treat coverage warnings as design feedback.
 
-## Step 6: Draw With Draw.io MCP
+## Step 8: Draw With Draw.io MCP
 
-Use Draw.io MCP for diagram creation and editing. The Agent designs the diagram;
-MCP is the drawing surface.
+Use Draw.io MCP for diagram creation and editing. Codex controls page design and
+layout. Scripts do not render final diagrams.
 
-Required drawing rules:
+Drawing rules:
 
-- page names must match `architecture-plan.json`;
-- runtime data flow uses primary arrows;
-- configuration, capability, parallelism, and checkpoint loading must not be
-  drawn as runtime tensor flow;
-- external components must be placed behind a clear boundary;
-- module implementation names belong in subtitles;
-- source line numbers and long code expressions stay in `evidence.json` and
-  `report.md`, not inside node titles;
-- ordinary data-flow edge labels should be hidden unless the label disambiguates
-  a branch;
-- use a white, opaque page background.
+- page names match the plan titles exactly;
+- each detail region title appears on the matching page;
+- runtime tensor flow uses primary arrows;
+- construction/config dependencies use dashed or secondary lines;
+- checkpoint loading is not runtime tensor flow;
+- TP/PP/EP are panels or badges, not a serial data path;
+- external components sit behind an explicit boundary;
+- implementation names are subtitles;
+- source line numbers and long expressions stay in Evidence and report;
+- ordinary tensor edge labels are hidden unless needed for a branch;
+- background is white and opaque.
 
-Use `assets/drawio-style-template.drawio` as a style reference when helpful.
+Use `assets/drawio-style-template.drawio` as a style reference when useful.
 
-## Step 7: Visual Review
+## Step 9: Visual Review
 
-Export a first PNG draft. Inspect it and write `visual-review.md` covering:
+Export the first PNG draft and write `visual-review.md`.
 
-- whether each page answers its question;
+Check:
+
+- whether every detail region appears in the diagram;
+- whether a page is still only an overview;
+- whether core methods appear only in the report but not in a diagram region;
+- phase confusion between construction, runtime, loading, and parallelism;
+- config lines drawn as tensor flow;
+- external behavior drawn as local direct behavior;
 - text overlap;
-- edges crossing through nodes;
-- long or confusing lines;
-- repeated labels;
-- excessive whitespace;
-- overly dense regions;
-- concept-card pages that should become flows, maps, or boundaries.
+- edge-through-node problems;
+- large empty spaces;
+- whether grouping or folding would improve density.
 
-Make at most two visual revision rounds. Revisions may adjust layout, grouping,
-labels, edge visibility, page split/merge, and visual hierarchy. Revisions must
-not invent new source behavior or promote external behavior to direct evidence.
+Make at least one visual review pass for a formal example. Make at most two
+revision rounds.
 
-## Step 8: Validate Draw.io
+## Step 10: Validate Draw.io and Exports
 
 Run:
 
@@ -183,40 +264,41 @@ vllm-arch validate `
   --context outputs/<model>/source-context.json `
   --plan outputs/<model>/architecture-plan.json `
   --evidence outputs/<model>/evidence.json `
-  --drawio outputs/<model>/architecture.drawio
+  --drawio outputs/<model>/architecture.drawio `
+  --images-dir outputs/<model>/images
 ```
 
-Do not export final images if validation fails.
+Do not treat the diagram as final if validation fails.
 
-## Step 9: Final Report
+## Step 11: Final Report
 
 Write `report.md` with:
 
 - target model and registry mapping;
-- files read and traversal stops;
-- model category;
-- key architecture conclusions;
-- page-by-page walkthrough;
-- TP/PP/EP/LoRA/quantization or other capabilities;
-- weight loading behavior, if relevant;
+- files read and why traversal stopped;
+- source coverage summary;
+- class/method/function review summary;
+- branch/mapping/capability coverage;
+- page-by-page explanation;
+- construction/runtime/loading/parallel separation;
 - external boundaries;
 - unresolved items;
-- intentionally omitted details;
+- omitted details and reasons;
 - validation results and output paths.
 
 Separate Source-proven, Derived, and External-boundary statements.
 
 ## Degradation
 
-If the target is a helper or shared utility file, produce a boundary or utility
-map rather than a full model diagram.
+For partial targets, generate one to five pages and clearly state what is
+missing.
 
-If only partial source context can be collected, report the partial status,
-warnings, and next files to inspect. Never invent missing runtime behavior.
+For helper or shared utility files, generate one or two utility/boundary pages.
+Never force a full model flow onto helper code.
 
-## Reference Files
+## References
 
-Read these only as needed:
+Read these when needed:
 
 - `references/analysis-guide.md`
 - `references/vllm-patterns.md`

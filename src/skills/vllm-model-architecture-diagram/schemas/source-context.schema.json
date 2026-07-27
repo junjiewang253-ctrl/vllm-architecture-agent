@@ -7,9 +7,15 @@
   "required": [
     "schema_version",
     "target",
+    "source_sha256",
+    "source_coverage",
     "classification",
     "classes",
     "methods",
+    "module_functions",
+    "calls",
+    "branches",
+    "loops",
     "imports",
     "module_assignments",
     "control_flow_landmarks",
@@ -20,31 +26,228 @@
     "traversal_defaults",
     "warnings"
   ],
+  "$defs": {
+    "lineRange": {
+      "type": "object",
+      "required": ["start_line", "end_line"],
+      "properties": {
+        "start_line": { "type": "integer", "minimum": 1 },
+        "end_line": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "classCatalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "class_id",
+        "name",
+        "qualified_name",
+        "parent_class_id",
+        "bases",
+        "decorators",
+        "start_line",
+        "end_line",
+        "source_range_sha256",
+        "method_ids",
+        "nested_class_ids",
+        "category_candidates"
+      ],
+      "properties": {
+        "class_id": { "type": "string", "pattern": "^class:.+:[0-9]+$" },
+        "name": { "type": "string" },
+        "qualified_name": { "type": "string" },
+        "parent_class_id": { "type": ["string", "null"] },
+        "bases": { "type": "array", "items": { "type": "string" } },
+        "decorators": { "type": "array", "items": { "type": "string" } },
+        "start_line": { "type": "integer", "minimum": 1 },
+        "end_line": { "type": "integer", "minimum": 1 },
+        "source_range_sha256": { "type": "string" },
+        "method_ids": { "type": "array", "items": { "type": "string" } },
+        "nested_class_ids": { "type": "array", "items": { "type": "string" } },
+        "category_candidates": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "methodCatalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method_id",
+        "qualified_name",
+        "owner_class_id",
+        "name",
+        "parameters",
+        "start_line",
+        "end_line",
+        "call_ids",
+        "branch_ids",
+        "loop_ids",
+        "return_summaries",
+        "importance_candidate",
+        "importance_reasons"
+      ],
+      "properties": {
+        "method_id": { "type": "string", "pattern": "^method:.+:[0-9]+$" },
+        "qualified_name": { "type": "string" },
+        "owner_class_id": { "type": "string" },
+        "name": { "type": "string" },
+        "parameters": { "type": "array", "items": { "type": "string" } },
+        "start_line": { "type": "integer", "minimum": 1 },
+        "end_line": { "type": "integer", "minimum": 1 },
+        "call_ids": { "type": "array", "items": { "type": "string" } },
+        "branch_ids": { "type": "array", "items": { "type": "string" } },
+        "loop_ids": { "type": "array", "items": { "type": "string" } },
+        "return_summaries": { "type": "array", "items": { "type": "object" } },
+        "importance_candidate": { "enum": ["core", "supporting", "trivial"] },
+        "importance_reasons": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "moduleFunction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "function_id",
+        "name",
+        "qualified_name",
+        "start_line",
+        "end_line",
+        "parameters",
+        "call_ids",
+        "branch_ids",
+        "loop_ids",
+        "importance_candidate",
+        "importance_reasons"
+      ],
+      "properties": {
+        "function_id": { "type": "string", "pattern": "^function:.+:[0-9]+$" },
+        "name": { "type": "string" },
+        "qualified_name": { "type": "string" },
+        "start_line": { "type": "integer", "minimum": 1 },
+        "end_line": { "type": "integer", "minimum": 1 },
+        "parameters": { "type": "array", "items": { "type": "string" } },
+        "call_ids": { "type": "array", "items": { "type": "string" } },
+        "branch_ids": { "type": "array", "items": { "type": "string" } },
+        "loop_ids": { "type": "array", "items": { "type": "string" } },
+        "importance_candidate": { "enum": ["core", "supporting", "trivial"] },
+        "importance_reasons": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "branch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branch_id",
+        "owner_id",
+        "kind",
+        "condition",
+        "start_line",
+        "end_line",
+        "has_else",
+        "architecture_relevance_candidate"
+      ],
+      "properties": {
+        "branch_id": { "type": "string", "pattern": "^branch:.+:[0-9]+:[0-9]+$" },
+        "owner_id": { "type": "string" },
+        "kind": { "enum": ["if", "match"] },
+        "condition": { "type": "string" },
+        "start_line": { "type": "integer", "minimum": 1 },
+        "end_line": { "type": "integer", "minimum": 1 },
+        "has_else": { "type": "boolean" },
+        "architecture_relevance_candidate": { "enum": ["high", "medium", "low"] }
+      }
+    },
+    "mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mapping_id",
+        "owner_id",
+        "kind",
+        "source_summary",
+        "target_summary",
+        "start_line",
+        "end_line",
+        "architecture_relevance_candidate"
+      ],
+      "properties": {
+        "mapping_id": { "type": "string", "pattern": "^mapping:.+:[0-9]+:[0-9]+$" },
+        "owner_id": { "type": "string" },
+        "kind": {
+          "enum": [
+            "packed_mapping",
+            "stacked_mapping",
+            "expert_mapping",
+            "rename",
+            "filter",
+            "skip",
+            "loader_dispatch",
+            "default_loader",
+            "automatic_loader",
+            "unknown"
+          ]
+        },
+        "source_summary": { "type": "string" },
+        "target_summary": { "type": "string" },
+        "start_line": { "type": "integer", "minimum": 1 },
+        "end_line": { "type": "integer", "minimum": 1 },
+        "architecture_relevance_candidate": { "enum": ["high", "medium", "low"] }
+      }
+    }
+  },
   "properties": {
-    "schema_version": { "const": "2.0" },
+    "schema_version": { "const": "2.1" },
     "target": { "type": "object" },
     "source_sha256": { "type": "string" },
-    "classification": {
+    "source_coverage": {
       "type": "object",
-      "required": ["status", "category_candidates"],
+      "additionalProperties": false,
+      "required": [
+        "source_sha256",
+        "ast_class_count",
+        "catalogued_class_count",
+        "top_level_class_count",
+        "nested_class_count",
+        "ast_method_count",
+        "catalogued_method_count",
+        "ast_module_function_count",
+        "catalogued_module_function_count",
+        "branch_count",
+        "loop_count",
+        "weight_mapping_count",
+        "all_classes_indexed",
+        "all_methods_indexed",
+        "all_module_functions_indexed",
+        "unindexed_nodes"
+      ],
       "properties": {
-        "status": {
-          "enum": ["full", "partial", "boundary-only", "helper", "unsupported"]
-        },
-        "category_candidates": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "reason": { "type": "string" }
-      },
-      "additionalProperties": true
+        "source_sha256": { "type": "string" },
+        "ast_class_count": { "type": "integer" },
+        "catalogued_class_count": { "type": "integer" },
+        "top_level_class_count": { "type": "integer" },
+        "nested_class_count": { "type": "integer" },
+        "ast_method_count": { "type": "integer" },
+        "catalogued_method_count": { "type": "integer" },
+        "ast_module_function_count": { "type": "integer" },
+        "catalogued_module_function_count": { "type": "integer" },
+        "branch_count": { "type": "integer" },
+        "loop_count": { "type": "integer" },
+        "weight_mapping_count": { "type": "integer" },
+        "all_classes_indexed": { "type": "boolean" },
+        "all_methods_indexed": { "type": "boolean" },
+        "all_module_functions_indexed": { "type": "boolean" },
+        "unindexed_nodes": { "type": "array", "items": { "type": "string" } }
+      }
     },
-    "classes": { "type": "array", "items": { "type": "object" } },
-    "methods": { "type": "array", "items": { "type": "object" } },
+    "classification": { "type": "object" },
+    "classes": { "type": "array", "items": { "$ref": "#/$defs/classCatalog" } },
+    "methods": { "type": "array", "items": { "$ref": "#/$defs/methodCatalog" } },
+    "module_functions": { "type": "array", "items": { "$ref": "#/$defs/moduleFunction" } },
+    "calls": { "type": "array", "items": { "type": "object" } },
+    "branches": { "type": "array", "items": { "$ref": "#/$defs/branch" } },
+    "loops": { "type": "array", "items": { "type": "object" } },
     "imports": { "type": "array", "items": { "type": "object" } },
     "module_assignments": { "type": "array", "items": { "type": "object" } },
     "control_flow_landmarks": { "type": "array", "items": { "type": "object" } },
-    "weight_mappings": { "type": "array", "items": { "type": "object" } },
+    "weight_mappings": { "type": "array", "items": { "$ref": "#/$defs/mapping" } },
     "registry_info": { "type": "object" },
     "capability_signals": { "type": "object" },
     "related_file_candidates": { "type": "array", "items": { "type": "object" } },
