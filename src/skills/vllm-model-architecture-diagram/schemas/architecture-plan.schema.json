@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/vllm-architecture-agent/architecture-plan.schema.json",
+  "title": "vLLM Architecture Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "model_name",
+    "target_file",
+    "model_category",
+    "files_read",
+    "pages",
+    "global_boundaries",
+    "omissions",
+    "unresolved"
+  ],
+  "properties": {
+    "schema_version": { "const": "2.0" },
+    "model_name": { "type": "string", "minLength": 1 },
+    "target_file": { "type": "string", "minLength": 1 },
+    "model_category": { "type": "array", "items": { "type": "string" } },
+    "files_read": { "type": "array", "items": { "type": "string" } },
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "question",
+          "purpose",
+          "view_pattern",
+          "scope",
+          "claim_ids",
+          "main_story",
+          "secondary_topics",
+          "external_boundaries",
+          "visual_decisions",
+          "detail_budget"
+        ],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "question": { "type": "string", "minLength": 1 },
+          "purpose": { "type": "string", "minLength": 1 },
+          "view_pattern": {
+            "enum": [
+              "pipeline",
+              "block",
+              "branch_merge",
+              "routed_container",
+              "mapping_flow",
+              "strategy_matrix",
+              "boundary_map",
+              "multimodal_pipeline",
+              "state_machine",
+              "component_map"
+            ]
+          },
+          "scope": { "type": "array", "items": { "type": "string" } },
+          "claim_ids": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+          "main_story": { "type": "array", "items": { "type": "string" } },
+          "secondary_topics": { "type": "array", "items": { "type": "string" } },
+          "external_boundaries": { "type": "array", "items": { "type": "string" } },
+          "visual_decisions": { "type": "array", "items": { "type": "string" } },
+          "detail_budget": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["max_primary_nodes", "max_total_nodes", "max_visible_edges"],
+            "properties": {
+              "max_primary_nodes": { "type": "integer", "minimum": 1 },
+              "max_total_nodes": { "type": "integer", "minimum": 1 },
+              "max_visible_edges": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      }
+    },
+    "global_boundaries": { "type": "array", "items": { "type": "string" } },
+    "omissions": { "type": "array", "items": { "type": "object" } },
+    "unresolved": { "type": "array", "items": { "type": "object" } }
+  }
+}

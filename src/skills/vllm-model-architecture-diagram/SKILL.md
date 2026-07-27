@@ -1,133 +1,225 @@
----
-name: vllm-model-architecture-diagram
-description: Analyze a vLLM model adapter Python file and generate a source-grounded, Agent-designed, View-Graph-rendered Draw.io architecture diagram and architecture report.
-compatibility: Requires Python 3, access to the input source file, and a connected Draw.io MCP server for optional opening/export.
----
+# vLLM Model Architecture Diagram
 
-# Goal
+Use this Skill when the user asks to analyze a vLLM model adapter file or a
+registered vLLM architecture name and generate architecture diagrams.
 
-Analyze a vLLM model adapter Python file and create a human-readable,
-evidence-grounded architecture diagram.
+The v2.0 workflow is Agent-native. Scripts collect and validate source context;
+Codex is responsible for architecture understanding, page selection, diagram
+design, Draw.io construction, visual review, and the final report.
 
-v1.2 uses six layers:
+## Scope
 
-```text
-Python source
--> Source Analysis
--> Source Fact Graph
--> Architecture Concept Graph
--> Agent-authored Architecture Design Graph
--> Architecture View Graph
--> Deterministic Draw.io Renderer
-```
-
-Scripts define what is true and evidenced. The current Codex Agent designs the
-Architecture Design Graph: page questions, primary stories, branches, merges,
-boundaries, nodes, ports and edge semantics. The renderer reads Architecture
-View Graph only; it must not read Concept Graph directly or invent architecture.
-
-# Modes
-
-- `architect`: v1.2 Agent Architect mode. Requires an Agent-authored Design.
-- `deterministic`: CI/regression fallback.
-- `reviewed`: v0.9.1 patch-audited workflow.
-
-# Default Architect Workflow
-
-1. Prepare deterministic context:
+Default targets are files under:
 
 ```text
-vllm-arch prepare --input samples/hy_v3.py --model-name hy-v3 --outputs-dir outputs
+vllm/model_executor/models/*.py
 ```
 
-This writes:
+The user may provide either:
 
-- `outputs/<model>-source-analysis.json`
-- `outputs/<model>-semantic-inventory.json`
-- `outputs/<model>-source-fact-graph.json`
-- `outputs/<model>-architecture-concept.json`
-- `outputs/<model>-boundary-report.json`
-- `outputs/<model>-architect-brief.json`
-- `outputs/<model>-architecture-design.template.json`
+- a Python file path; or
+- a registry architecture name.
 
-2. Codex Agent reads the input source, Architect Brief, Concept Graph, Boundary
-   Report, `references/architect-design-prompt.md`,
-   `references/diagram-grammar.md`, `references/page-patterns.md`, and
-   `references/visual-quality-rubric.md`.
+If an architecture name is supplied, resolve it through
+`vllm/model_executor/models/registry.py` without importing vLLM.
 
-3. Codex Agent writes:
+## Default Output
+
+Use one output directory per model:
 
 ```text
-outputs/<model>-architecture-design.json
+outputs/<model>/
+├── source-context.json
+├── architecture-plan.json
+├── evidence.json
+├── architecture.drawio
+├── report.md
+├── visual-review.md
+└── images/
 ```
 
-The Design must use schema `1.0`, `author.type = "agent"`, and source-backed
-`concept_refs` and `fact_refs`.
+Do not generate legacy IR, Concept, View, Layout Plan, Patch, Lock, or Coverage
+JSON by default.
 
-4. Finalize:
+## Step 1: Resolve Input
 
-```text
-vllm-arch finalize --design outputs/<model>-architecture-design.json --model-name <model> --outputs-dir outputs --source-file samples/hy_v3.py
+Run `vllm-arch prepare` or the underlying scripts:
+
+```powershell
+vllm-arch prepare `
+  --repo-root <vllm-repo-root> `
+  --input <model-file.py> `
+  --outputs-dir outputs/<model>
 ```
 
-Finalize runs:
+For registry architecture input:
 
-- `validate_architecture_design.py`
-- `compile_architecture_view.py`
-- `validate_architecture_view.py`
-- `apply_view_layout.py`
-- `render_drawio.py`
-- `validate_drawio.py`
-- `validate_visual_layout.py`
-- `build_mentor_report.py`
+```powershell
+vllm-arch prepare `
+  --repo-root <vllm-repo-root> `
+  --architecture <ArchitectureName> `
+  --outputs-dir outputs/<model>
+```
 
-Any validator failure stops the workflow. Do not use Draw.io MCP or manual XML
-edits to bypass validation.
+This creates `source-context.json`, `architecture-plan.template.json`, and
+`evidence.template.json`.
 
-# Architect Rules
+## Step 2: Read Source
 
-Codex may:
+Read the target model file first. Use `source-context.json` as an index, not as
+the architecture answer.
 
-- decide pages and page questions;
-- choose primary stories, branches and merge points;
-- decide whether a concept becomes a component, data node, process, container,
-  badge or annotation;
-- separate runtime flow from dependency, mapping, parallelism and boundaries;
-- perform one visual-only review by patching display, size, route hints,
-  regions or lanes.
+Default traversal budget:
 
-Codex must not:
+- maximum follow depth: 3;
+- default related file count: 20;
+- suggested maximum related file count: 30.
 
-- modify Source Fact Graph or Concept Graph to hide missing evidence;
-- create nodes or edges without source-backed facts;
-- directly write Draw.io XML;
-- mark external imported behavior as direct local behavior;
-- change edge source/target, phase, evidence or concept/fact references during
-  visual review.
+Read related files only when needed to support a diagram claim or external
+boundary. Stop when the main diagram claims are supported, an external component
+boundary is reached, or the budget is reached.
 
-# Expected HY V3 Pages
+Record every file actually read in `architecture-plan.json`.
 
-For `samples/hy_v3.py`, an Agent-authored Design should produce:
+## Step 3: Write Architecture Plan
 
-- Model Execution Overview
-- Decoder Block
-- Attention Adaptation
-- MoE Execution
-- Checkpoint and Weight Loading
-- Parallel Strategies
-- vLLM Adapter Boundary
+Create `architecture-plan.json` from the template.
 
-`simple_model.py` should produce a smaller page set; do not hardcode HY V3 page
-lists into production architect mode.
+The plan describes what diagrams should communicate. It must not contain Draw.io
+XML or exact coordinates.
 
-# Draw.io MCP
+For each page:
 
-After scripts generate `.drawio`, Draw.io MCP may open, inspect and export.
-MCP must not add or remove semantic View nodes or edges. If visual-only MCP
-changes are made, rerun Draw.io and visual validators.
+- state the engineering question;
+- state the purpose;
+- choose a view pattern;
+- list source-backed claim IDs;
+- outline the main story;
+- list secondary topics;
+- list external boundaries;
+- set a detail budget.
 
-# Completion Report
+Page selection is dynamic:
 
-Report generated files, page list, View node/edge counts, validators, test
-result, Draw.io path, architecture report path, legacy code used or not used,
-and remaining external boundaries.
+- always consider a Model Overview and Adapter Boundary;
+- add Decoder, Attention, MoE, Weight Loading, Parallel Strategies, Multimodal,
+  Pooling, Classification, Hybrid/Recurrent, Quantization, LoRA, or other pages
+  only when source evidence supports them;
+- do not create empty or irrelevant pages.
+
+## Step 4: Write Evidence
+
+Create `evidence.json`.
+
+Use three confidence levels:
+
+- `direct`: local source directly proves the claim;
+- `derived`: multiple local facts support a higher-level claim;
+- `external`: local source proves a call or dependency, but implementation is
+  outside the target file or traversal boundary.
+
+Direct evidence must cite concrete file line ranges and cannot rely only on
+import lines. External claims must describe the local evidence and the boundary
+that was not analyzed.
+
+## Step 5: Validate Plan and Evidence
+
+Run:
+
+```powershell
+vllm-arch validate `
+  --context outputs/<model>/source-context.json `
+  --plan outputs/<model>/architecture-plan.json `
+  --evidence outputs/<model>/evidence.json
+```
+
+Fix any errors before drawing. Warnings should be addressed when they affect
+diagram clarity.
+
+## Step 6: Draw With Draw.io MCP
+
+Use Draw.io MCP for diagram creation and editing. The Agent designs the diagram;
+MCP is the drawing surface.
+
+Required drawing rules:
+
+- page names must match `architecture-plan.json`;
+- runtime data flow uses primary arrows;
+- configuration, capability, parallelism, and checkpoint loading must not be
+  drawn as runtime tensor flow;
+- external components must be placed behind a clear boundary;
+- module implementation names belong in subtitles;
+- source line numbers and long code expressions stay in `evidence.json` and
+  `report.md`, not inside node titles;
+- ordinary data-flow edge labels should be hidden unless the label disambiguates
+  a branch;
+- use a white, opaque page background.
+
+Use `assets/drawio-style-template.drawio` as a style reference when helpful.
+
+## Step 7: Visual Review
+
+Export a first PNG draft. Inspect it and write `visual-review.md` covering:
+
+- whether each page answers its question;
+- text overlap;
+- edges crossing through nodes;
+- long or confusing lines;
+- repeated labels;
+- excessive whitespace;
+- overly dense regions;
+- concept-card pages that should become flows, maps, or boundaries.
+
+Make at most two visual revision rounds. Revisions may adjust layout, grouping,
+labels, edge visibility, page split/merge, and visual hierarchy. Revisions must
+not invent new source behavior or promote external behavior to direct evidence.
+
+## Step 8: Validate Draw.io
+
+Run:
+
+```powershell
+vllm-arch validate `
+  --context outputs/<model>/source-context.json `
+  --plan outputs/<model>/architecture-plan.json `
+  --evidence outputs/<model>/evidence.json `
+  --drawio outputs/<model>/architecture.drawio
+```
+
+Do not export final images if validation fails.
+
+## Step 9: Final Report
+
+Write `report.md` with:
+
+- target model and registry mapping;
+- files read and traversal stops;
+- model category;
+- key architecture conclusions;
+- page-by-page walkthrough;
+- TP/PP/EP/LoRA/quantization or other capabilities;
+- weight loading behavior, if relevant;
+- external boundaries;
+- unresolved items;
+- intentionally omitted details;
+- validation results and output paths.
+
+Separate Source-proven, Derived, and External-boundary statements.
+
+## Degradation
+
+If the target is a helper or shared utility file, produce a boundary or utility
+map rather than a full model diagram.
+
+If only partial source context can be collected, report the partial status,
+warnings, and next files to inspect. Never invent missing runtime behavior.
+
+## Reference Files
+
+Read these only as needed:
+
+- `references/analysis-guide.md`
+- `references/vllm-patterns.md`
+- `references/page-playbook.md`
+- `references/diagram-design-guide.md`
+- `references/evidence-policy.md`

@@ -1,100 +1,79 @@
 # vLLM Architecture Agent
 
-An Agent Skill for source-grounded vLLM model adapter architecture analysis.
+Agent-native Skill for source-grounded vLLM model adapter architecture diagrams.
 
-## Current Status
+Version 2.0 is a subtractive refactor. The default workflow no longer runs the
+old compiler pipeline of IR, concept graphs, view graphs, layout plans, patches,
+locks, and deterministic Draw.io rendering. Scripts now collect and validate
+mechanical facts; Codex reads source, chooses pages, designs the diagram, draws
+with Draw.io MCP, reviews the PNG, and writes the report.
 
-Version 1.2 is an **Evidence-Grounded Agent Diagram Designer**. It keeps
-deterministic extraction, fact graphs, concept graphs, validation and rendering,
-but requires the current Codex Agent to author the Architecture Design Graph.
-
-```text
-Python source
--> Source Analysis
--> Source Fact Graph
--> Architecture Concept Graph
--> Agent-authored Architecture Design Graph
--> Architecture View Graph
--> Pattern-based Layout
--> Draw.io
-```
-
-Concepts are not rendered directly. Design states the engineering question,
-main story, branches, boundaries, nodes, ports and edge semantics. View is
-compiled from Design and is the only renderer input.
-
-## v1.2 Workflow
-
-Prepare deterministic context:
-
-```powershell
-vllm-arch prepare `
-  --input samples\hy_v3.py `
-  --model-name hy-v3 `
-  --outputs-dir outputs
-```
-
-Codex then writes:
+## Short Instruction
 
 ```text
-outputs/<model>-architecture-design.json
+使用 $vllm-model-architecture-diagram 分析 <vLLM 模型文件或 Architecture 名称>，生成架构图。
 ```
 
-Finalize:
+## CLI
+
+The default `vllm-arch` command exposes only four commands:
 
 ```powershell
-vllm-arch finalize `
-  --design outputs\hy-v3-architecture-design.json `
-  --model-name hy-v3 `
-  --outputs-dir outputs `
-  --source-file samples\hy_v3.py
+vllm-arch list-models --repo-root D:\path\to\vllm
+vllm-arch prepare --repo-root D:\path\to\vllm --input D:\path\to\vllm\vllm\model_executor\models\model_file.py --outputs-dir outputs\model
+vllm-arch prepare --repo-root D:\path\to\vllm --architecture SomeForCausalLM --outputs-dir outputs\some-model
+vllm-arch validate --context outputs\model\source-context.json --plan outputs\model\architecture-plan.json --evidence outputs\model\evidence.json --drawio outputs\model\architecture.drawio
+vllm-arch scan --repo-root D:\path\to\vllm --output outputs\compatibility-report.json
 ```
 
-`vllm-arch run --mode architect` is only a convenience wrapper and requires
-`--architecture-design`; it does not silently fall back to the deterministic
-template.
+The CLI never imports vLLM, torch, or transformers when resolving registry
+entries.
 
 ## Outputs
 
-For `samples/hy_v3.py`, v1.2 produces:
+Default per-model output:
 
-- `outputs/<model>-source-analysis.json`
-- `outputs/<model>-semantic-inventory.json`
-- `outputs/<model>-source-fact-graph.json`
-- `outputs/<model>-architecture-concept.json`
-- `outputs/<model>-boundary-report.json`
-- `outputs/<model>-architect-brief.json`
-- `outputs/<model>-architecture-design.json`
-- `outputs/<model>-architecture-view.json`
-- `outputs/<model>-layout-plan.json`
-- `outputs/<model>-layout-metrics.json`
-- `outputs/<model>-architecture.drawio`
-- `outputs/<model>-architecture-report.md`
+```text
+outputs/<model>/
+├── source-context.json
+├── architecture-plan.json
+├── evidence.json
+├── architecture.drawio
+├── report.md
+├── visual-review.md
+└── images/
+```
 
-Expected HY V3 pages:
+`prepare` creates `architecture-plan.template.json` and
+`evidence.template.json`. Codex fills them as `architecture-plan.json` and
+`evidence.json` after reading source.
 
-- Model Execution Overview
-- Decoder Block
-- Attention Adaptation
-- MoE Execution
-- Checkpoint and Weight Loading
-- Parallel Strategies
-- vLLM Adapter Boundary
+## Compatibility
 
-## Validation
+v2.0 targets `vllm/model_executor/models/*.py` and supports file input or
+registry architecture names. The Source Context collector recognizes candidate
+categories such as decoder-only text generation, embedding/pooling,
+classification, multimodal, speculative, hybrid/recurrent, attention-free,
+custom loading, tensor parallel, pipeline parallel, expert parallel, LoRA,
+quantization, and helper/shared modules.
 
-Finalize runs:
+Compatibility means graceful handling, not identical pages for every model.
+Codex decides page sets dynamically from source evidence.
 
-- Architecture Design validation
-- Architecture View validation
-- Draw.io semantic validation
-- Visual layout validation
+## External Boundaries
 
-Any validator failure stops the workflow.
+External runtime internals are not claimed as direct source facts unless Codex
+actually reads the relevant local file. Imported attention backends, fused expert
+runtimes, automatic loaders, kernels, schedulers, workers, and engine internals
+must be documented as external boundaries when not analyzed.
 
-## Boundaries
+## Legacy
 
-The project does not recursively analyze external vLLM components. Imported
-component internals such as `Attention`, `HpcRopeNorm`, `FusedMoE` and
-`AutoWeightsLoader` are represented as explicit boundaries unless the input file
-itself proves the behavior.
+The v0.4 through v1.2 compiler-style pipeline is preserved under:
+
+```text
+legacy/compiler-pipeline-v1/
+```
+
+It is retained for history and comparison only. It is not the default Skill,
+not the default CLI, and not part of default pytest.

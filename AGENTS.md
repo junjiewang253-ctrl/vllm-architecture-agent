@@ -2,90 +2,75 @@
 
 ## Single source of truth
 
-- The canonical Skill is `src/skills/vllm-model-architecture-diagram/`.
+- The canonical v2.0 Skill is `src/skills/vllm-model-architecture-diagram/`.
 - Do not edit `.agents/skills/` as source; it is a local Codex development link.
 - Do not edit generated packages under `dist/`.
+- The old compiler-style research pipeline is archived in
+  `legacy/compiler-pipeline-v1/` and must not be imported by the default v2.0
+  workflow.
 
-## Architecture
+## v2.0 Architecture
 
 Keep these concerns separate:
 
-1. Python source fact extraction.
-2. vLLM semantic interpretation.
-3. Source Fact Graph normalization.
-4. Agent-guided Architecture Concept design.
-5. Architecture Design Graph planning.
-6. Architecture View generation from Design.
-7. Diagram View / layout compatibility and deterministic rendering.
-8. Agent-guided semantic or visual review where applicable.
-9. Draw.io rendering and MCP interaction.
+1. Static model target resolution.
+2. Lightweight Source Context collection.
+3. Codex source traversal and architecture planning.
+4. Evidence authoring and validation.
+5. Draw.io MCP diagram creation and visual review.
+6. Structural Draw.io validation.
+7. Compatibility scanning.
 
-Use source-analysis JSON between source parsing and downstream semantic layers.
-For v0.9.1 reviewed mode, Architecture IR remains the semantic source for
-Diagram View. For v1.0+ Architect Mode, Architecture Concept Graph is the
-semantic architecture layer, but it must not be rendered directly. For v1.2,
-Architecture Design Graph is authored by the current Agent and describes the
-page story, main flow, branches and boundaries. Architecture View Graph is
-compiled from Design and is the renderer input.
-Diagram View / Architecture View may decide presentation, ports, lanes and route
-hints, but must not change source facts or concept evidence.
+Scripts are allowed to decide what source facts exist and whether files are
+valid. Scripts must not decide final architecture pages, semantic nodes, or
+layout. Codex is the architecture designer.
 
 ## Implementation rules
 
-- Use Python's standard `ast` module for the initial extractor.
-- Preserve source line numbers for extracted facts.
-- Do not infer concrete values from missing config files.
+- Use Python's standard `ast` module for static parsing.
+- Do not import vLLM, torch, transformers, or CUDA-dependent modules in default
+  resolver, context, or scan scripts.
+- Do not infer concrete config values from missing config files.
 - Do not treat checkpoint loading as runtime tensor flow.
-- Do not let Agents hand-write complete Draw.io XML; use `render_drawio.py`.
-- Do not add or remove semantic nodes or edges through Draw.io MCP.
-- Build semantic inventory and validate reviewed semantic coverage before
-  rendering v0.9.1 diagrams.
-- Agents may produce `semantic-review.json`, `architecture-ir.patch.json`,
-  `visual-review.json`, and `diagram-view.patch.json`; deterministic scripts
-  must validate and apply those files.
-- Do not let Agent review patches promote external imported behavior to direct
-  evidence.
-- Build and validate Diagram View before rendering v0.9.1 diagrams.
-- Use `layout_diagram.py` for deterministic coordinates and routed waypoints.
-- Use `vllm-arch prepare` to build deterministic context for v1.2 Architect
-  Mode, then have the current Agent write `architecture-design.json`, then run
-  `vllm-arch finalize`.
-- Do not silently use `build_baseline_design.py` as the architect default. It is
-  only a deterministic/template fallback.
-- Use `build_architect_brief.py`, `validate_architecture_design.py`,
-  `compile_architecture_view.py`, `validate_architecture_view.py`,
-  `apply_view_layout.py`, `render_drawio.py`, `validate_drawio.py`, and
-  `validate_visual_layout.py` for v1.2 Architect Mode outputs.
-- Build `review-lock.json` for reviewed-mode outputs and do not silently reuse a
-  stale review when source or baseline hashes change.
+- Do not hardcode final pages, nodes, edges, or coordinates for any model.
+- Do not let scripts generate Architecture IR, Concept Graph, View Graph,
+  Layout Plan, Review Patch, Review Lock, or Coverage files by default.
+- Draw.io XML may be created by Codex through Draw.io MCP, but it must follow
+  `architecture-plan.json` and `evidence.json`.
+- Do not let Draw.io edits invent source behavior or promote external behavior
+  to direct evidence.
 - Put cross-Agent core behavior in the Skill directory.
-- Put Codex-, Claude Code- or other Agent-specific packaging under
+- Put Codex-, Claude Code-, or other Agent-specific packaging under
   `integrations/`.
+
+## Default CLI
+
+Only these commands are default:
+
+```text
+vllm-arch list-models
+vllm-arch prepare
+vllm-arch validate
+vllm-arch scan
+```
+
+Do not reintroduce default `architect`, `deterministic`, `reviewed`,
+`finalize`, patch, lock, IR, or renderer commands.
 
 ## Validation
 
-After changing extractor code:
+After changing v2.0 scripts or CLI:
 
 ```text
 pytest
-python src/skills/vllm-model-architecture-diagram/scripts/extract_architecture.py samples/simple_model.py --output outputs/simple-model-source-analysis.json
 ```
 
-Test the small synthetic model before testing a complex vLLM adapter.
-
-After changing IR, renderer, or Draw.io validation code:
+For local fixture-like validation:
 
 ```text
-pytest
-python src/skills/vllm-model-architecture-diagram/scripts/extract_architecture.py samples/hy_v3.py --output outputs/hy-v3-source-analysis.json
-python src/skills/vllm-model-architecture-diagram/scripts/build_semantic_inventory.py outputs/hy-v3-source-analysis.json --output outputs/hy-v3-semantic-inventory.json
-python src/skills/vllm-model-architecture-diagram/scripts/build_architecture_ir.py outputs/hy-v3-source-analysis.json --output outputs/hy-v3-architecture-ir.json
-python src/skills/vllm-model-architecture-diagram/scripts/validate_architecture_ir.py outputs/hy-v3-architecture-ir.json
-python src/skills/vllm-model-architecture-diagram/scripts/validate_semantic_coverage.py outputs/hy-v3-source-analysis.json outputs/hy-v3-semantic-inventory.json outputs/hy-v3-architecture-ir.json --output outputs/hy-v3-semantic-coverage.json
-python src/skills/vllm-model-architecture-diagram/scripts/build_diagram_view.py outputs/hy-v3-architecture-ir.json --output outputs/hy-v3-diagram-view.json
-python src/skills/vllm-model-architecture-diagram/scripts/validate_diagram_view.py outputs/hy-v3-architecture-ir.json outputs/hy-v3-diagram-view.json
-python src/skills/vllm-model-architecture-diagram/scripts/layout_diagram.py outputs/hy-v3-diagram-view.json --output outputs/hy-v3-layout-plan.json
-python src/skills/vllm-model-architecture-diagram/scripts/render_drawio.py outputs/hy-v3-diagram-view.json --layout-plan outputs/hy-v3-layout-plan.json --output outputs/hy-v3-architecture.drawio
-python src/skills/vllm-model-architecture-diagram/scripts/validate_drawio.py outputs/hy-v3-architecture-ir.json outputs/hy-v3-architecture.drawio --view outputs/hy-v3-diagram-view.json --layout-plan outputs/hy-v3-layout-plan.json
-python src/skills/vllm-model-architecture-diagram/scripts/validate_visual_layout.py outputs/hy-v3-architecture-ir.json outputs/hy-v3-architecture.drawio --metrics-output outputs/hy-v3-layout-metrics.json
+vllm-arch prepare --repo-root <repo> --architecture <ArchitectureName> --outputs-dir outputs/<model>
+vllm-arch scan --repo-root <repo> --output outputs/compatibility-report.json
 ```
+
+When a real vLLM checkout is available, set `VLLM_REPO_ROOT` and run pytest to
+include the optional full-directory scan test.

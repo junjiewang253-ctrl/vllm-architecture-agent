@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/vllm-architecture-agent/source-context.schema.json",
+  "title": "vLLM Architecture Source Context",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "target",
+    "classification",
+    "classes",
+    "methods",
+    "imports",
+    "module_assignments",
+    "control_flow_landmarks",
+    "weight_mappings",
+    "registry_info",
+    "capability_signals",
+    "related_file_candidates",
+    "traversal_defaults",
+    "warnings"
+  ],
+  "properties": {
+    "schema_version": { "const": "2.0" },
+    "target": { "type": "object" },
+    "source_sha256": { "type": "string" },
+    "classification": {
+      "type": "object",
+      "required": ["status", "category_candidates"],
+      "properties": {
+        "status": {
+          "enum": ["full", "partial", "boundary-only", "helper", "unsupported"]
+        },
+        "category_candidates": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "reason": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "classes": { "type": "array", "items": { "type": "object" } },
+    "methods": { "type": "array", "items": { "type": "object" } },
+    "imports": { "type": "array", "items": { "type": "object" } },
+    "module_assignments": { "type": "array", "items": { "type": "object" } },
+    "control_flow_landmarks": { "type": "array", "items": { "type": "object" } },
+    "weight_mappings": { "type": "array", "items": { "type": "object" } },
+    "registry_info": { "type": "object" },
+    "capability_signals": { "type": "object" },
+    "related_file_candidates": { "type": "array", "items": { "type": "object" } },
+    "traversal_defaults": { "type": "object" },
+    "warnings": { "type": "array", "items": { "type": "string" } }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/vllm-architecture-agent/evidence.schema.json",
+  "title": "vLLM Architecture Evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "target_file", "claims"],
+  "properties": {
+    "schema_version": { "const": "2.0" },
+    "target_file": { "type": "string", "minLength": 1 },
+    "source_sha256": { "type": "string" },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["id", "statement", "category", "confidence", "evidence", "used_in_pages"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "statement": { "type": "string", "minLength": 1 },
+          "category": { "type": "string", "minLength": 1 },
+          "confidence": { "enum": ["direct", "derived", "external"] },
+          "external_boundary": { "type": "string" },
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["file", "start_line", "end_line", "symbol", "reason"],
+              "properties": {
+                "file": { "type": "string", "minLength": 1 },
+                "start_line": { "type": "integer", "minimum": 1 },
+                "end_line": { "type": "integer", "minimum": 1 },
+                "symbol": { "type": "string" },
+                "reason": { "type": "string", "minLength": 1 }
+              }
+            }
+          },
+          "used_in_pages": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}
