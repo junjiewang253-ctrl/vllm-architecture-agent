@@ -1,3 +1,8 @@
+---
+name: vllm-model-architecture-diagram
+description: Analyze vLLM model adapter Python files or registered architecture names, review source-grounded model structure and execution behavior, and use Draw.io MCP to create editable, high-density architecture diagrams with evidence and validation. Use when the user asks to analyze a model under vllm/model_executor/models, inspect a vLLM adapter, explain its architecture, or generate Draw.io architecture diagrams from model source code.
+---
+
 # vLLM Model Architecture Diagram
 
 Use this Skill when the user asks to analyze a vLLM model adapter file or a registered architecture name and generate architecture diagrams.
