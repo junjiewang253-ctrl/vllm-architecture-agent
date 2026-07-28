@@ -126,6 +126,10 @@ vllm-arch scan
 
 然后重启 VS Code Codex。
 
+Draw.io MCP 是最终绘图的必需工具。MCP 不可用时，Skill 应停止并说明阻塞，
+不得使用脚本手写 `.drawio`，也不得生成空白或零字节 PNG 作为替代。最终 PNG
+必须由 Draw.io MCP 导出，并由 Codex 实际打开检查后至少修改一轮。
+
 **没有真实 vLLM checkout**
 
 先使用 `samples/hy_v3.py` 体验完整流程。需要验证某个 vLLM 版本的全目录兼容性时，准备本地 checkout 后执行：

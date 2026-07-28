@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import struct
+import zlib
 from copy import deepcopy
 from pathlib import Path
 
@@ -411,15 +413,64 @@ def test_branch_mapping_capability_manifest_required(tmp_path: Path) -> None:
     assert any("coverage_manifest.weight_mappings missing" in error for error in errors)
 
 
-def write_drawio(path: Path, page_names: list[str], *, html: bool = False, background: str = "#ffffff") -> None:
+def test_flow_page_requires_ordered_main_story(tmp_path: Path) -> None:
+    repo, context = make_context(tmp_path)
+    evidence = valid_evidence(context)
+    plan = valid_plan(context)
+    plan["pages"][0]["main_story"] = ["runtime summary"]
+
+    validator = load_script("validate_architecture_plan")
+    errors, _ = validator.validate_plan(
+        plan,
+        evidence=evidence,
+        context=context,
+        repo_root=repo,
+    )
+
+    assert any("main_story must contain at least three ordered steps" in error for error in errors)
+
+
+def write_drawio(
+    path: Path,
+    page_names: list[str],
+    *,
+    html: bool = False,
+    background: str = "#ffffff",
+    include_edges: bool = True,
+) -> None:
     diagrams = []
     for index, name in enumerate(page_names, start=1):
         html_style = "html=1;" if html else "html=0;"
         values = "Model Overview Runtime Path Composition Component Tree Adapter Boundary External Boundary"
+        prefix = name.lower().replace(" ", "_")
+        edges = ""
+        if include_edges:
+            edges = (
+                f'<mxCell id="{prefix}_edge_1" edge="1" source="{prefix}_a" target="{prefix}_b" '
+                'parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>'
+                f'<mxCell id="{prefix}_edge_2" edge="1" source="{prefix}_b" target="{prefix}_c" '
+                'parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>'
+            )
         diagrams.append(
-            f'''<diagram id="page-{index}" name="{name}"><mxGraphModel background="{background}"><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="{name.lower().replace(' ', '_')}_a" value="{name}" style="{html_style}rounded=1;" vertex="1" parent="1"><mxGeometry x="40" y="40" width="120" height="50" as="geometry"/></mxCell><mxCell id="{name.lower().replace(' ', '_')}_b" value="{values}" style="html=0;rounded=1;" vertex="1" parent="1"><mxGeometry x="200" y="40" width="200" height="70" as="geometry"/></mxCell><mxCell id="{name.lower().replace(' ', '_')}_c" value="C" style="html=0;rounded=1;" vertex="1" parent="1"><mxGeometry x="440" y="40" width="120" height="50" as="geometry"/></mxCell><mxCell id="{name.lower().replace(' ', '_')}_d" value="D" style="html=0;rounded=1;" vertex="1" parent="1"><mxGeometry x="600" y="40" width="120" height="50" as="geometry"/></mxCell><mxCell id="{name.lower().replace(' ', '_')}_e" value="E" style="html=0;rounded=1;" vertex="1" parent="1"><mxGeometry x="760" y="40" width="120" height="50" as="geometry"/></mxCell></root></mxGraphModel></diagram>'''
+            f'''<diagram id="page-{index}" name="{name}"><mxGraphModel background="{background}"><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="{prefix}_a" value="{name}" style="{html_style}rounded=1;" vertex="1" parent="1"><mxGeometry x="40" y="40" width="120" height="50" as="geometry"/></mxCell><mxCell id="{prefix}_b" value="{values}" style="html=0;rounded=1;" vertex="1" parent="1"><mxGeometry x="200" y="40" width="200" height="70" as="geometry"/></mxCell><mxCell id="{prefix}_c" value="C" style="html=0;rounded=1;" vertex="1" parent="1"><mxGeometry x="440" y="40" width="120" height="50" as="geometry"/></mxCell><mxCell id="{prefix}_d" value="D" style="html=0;rounded=1;" vertex="1" parent="1"><mxGeometry x="600" y="40" width="120" height="50" as="geometry"/></mxCell><mxCell id="{prefix}_e" value="E" style="html=0;rounded=1;" vertex="1" parent="1"><mxGeometry x="760" y="40" width="120" height="50" as="geometry"/></mxCell>{edges}</root></mxGraphModel></diagram>'''
         )
     path.write_text(f'<mxfile host="app.diagrams.net">{"".join(diagrams)}</mxfile>', encoding="utf-8")
+
+
+def write_png(path: Path, width: int = 640, height: int = 360) -> None:
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        checksum = zlib.crc32(kind + data) & 0xFFFFFFFF
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", checksum)
+
+    scanline = b"\x00" + (b"\xff\xff\xff" * width)
+    image_data = zlib.compress(scanline * height)
+    png = (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", image_data)
+        + chunk(b"IEND", b"")
+    )
+    path.write_bytes(png)
 
 
 def test_drawio_validator_checks_pages_regions_and_html(tmp_path: Path) -> None:
@@ -430,7 +481,7 @@ def test_drawio_validator_checks_pages_regions_and_html(tmp_path: Path) -> None:
     images = tmp_path / "images"
     images.mkdir()
     for page in plan["pages"]:
-        (images / f"{page['export_name']}.png").write_bytes(b"png")
+        write_png(images / f"{page['export_name']}.png")
     validator = load_script("validate_drawio")
     assert validator.validate_drawio(drawio, plan=plan, images_dir=images) == []
 
@@ -460,3 +511,24 @@ def test_drawio_validator_fails_missing_detail_region_title(tmp_path: Path) -> N
     validator = load_script("validate_drawio")
     errors = validator.validate_drawio(drawio, plan=plan)
     assert any("detail region title is missing" in error for error in errors)
+
+
+def test_drawio_validator_rejects_placeholder_png_and_card_only_flow(tmp_path: Path) -> None:
+    _, context = make_context(tmp_path)
+    plan = valid_plan(context)
+    drawio = tmp_path / "architecture.drawio"
+    write_drawio(
+        drawio,
+        [page["title"] for page in plan["pages"]],
+        include_edges=False,
+    )
+    images = tmp_path / "images"
+    images.mkdir()
+    for page in plan["pages"]:
+        (images / f"{page['export_name']}.png").write_bytes(b"")
+
+    validator = load_script("validate_drawio")
+    errors = validator.validate_drawio(drawio, plan=plan, images_dir=images)
+
+    assert any("flow-oriented page must contain at least two visible connected edges" in error for error in errors)
+    assert any("PNG export is empty" in error for error in errors)

@@ -154,11 +154,31 @@ If validation fails, fix Plan or Evidence before opening Draw.io.
 
 ### 8. Draw With Draw.io MCP
 
-Use Draw.io MCP. Do not use the legacy deterministic renderer.
+Use Draw.io MCP. This is a hard requirement, not a preferred implementation.
+Do not use the legacy deterministic renderer.
+
+Before creating any diagram:
+
+1. Confirm the Draw.io MCP tools are available.
+2. Call `start_session` and wait for a successful session result.
+3. If the tools are unavailable or the session fails, stop after the validated
+   Plan and Evidence artifacts. Report the drawing stage as blocked.
+
+Never fall back to manufacturing output files. In particular:
+
+- do not write or edit `.drawio` XML with Python, PowerShell, shell redirection,
+  here-strings, templates or text replacement;
+- do not create `.png` or `.svg` files with `touch`, `New-Item`, copied bytes,
+  image-generation tools or placeholder content;
+- do not claim a visual review without opening every exported page image;
+- do not report completion merely because an XML file passes structural
+  validation.
 
 Rules:
 
 - call `start_session`;
+- create the first draft with `create_new_diagram`;
+- make subsequent diagram changes with `edit_diagram` and page tools;
 - create or edit pages matching Plan titles exactly;
 - use one page per planned page, no unrelated extra pages;
 - include every detail region title visibly on its page;
@@ -173,13 +193,18 @@ Rules:
 
 ### 9. Export Draft PNGs
 
-Export one PNG per page into `outputs/<model>/images/`.
+Use Draw.io MCP `export_diagram` to save the editable `.drawio` file and one
+PNG per page into `outputs/<model>/images/`.
 
-PNG exports must not show Draw.io editor grid and should use clear readable fonts.
+Every PNG must be a real, non-empty PNG export with meaningful page dimensions.
+Zero-byte files, renamed text files and placeholder images are invalid. PNG
+exports must not show the Draw.io editor grid and should use clear readable
+fonts.
 
 ### 10. Visual Review
 
-View every PNG and write `visual-review.md`.
+Open every exported PNG with the available image-viewing tool and write
+`visual-review.md`. A file-existence check is not a visual review.
 
 Check:
 
@@ -194,7 +219,9 @@ Check:
 - no huge empty spaces;
 - no misleading serial chain for mutually exclusive branches.
 
-Make at least one visual revision pass and at most two.
+After inspecting Draft 1, make at least one actual diagram edit through Draw.io
+MCP, export again, and record the observed issue and resulting change. Make at
+most two revision passes.
 
 ### 11. Final Validation
 
@@ -211,6 +238,8 @@ vllm-arch validate `
 ```
 
 Do not report completion if validation fails.
+Do not report completion if Draw.io MCP was not used, the exported PNGs were not
+opened, or no visual revision was performed.
 
 ### 12. Report
 

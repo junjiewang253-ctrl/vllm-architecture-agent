@@ -54,6 +54,13 @@ portable across machines.
   regions, panels, tables, ports or badges.
 - Draw.io XML may be created by Codex through Draw.io MCP, but it must follow
   `architecture-plan.json` and `evidence.json`.
+- Draw.io MCP is mandatory for final diagram creation. Never use Python,
+  PowerShell, shell redirection or templates to manufacture `.drawio` XML, and
+  never create placeholder PNG/SVG exports.
+- If `start_session` or another required Draw.io MCP tool is unavailable, stop
+  and report the drawing stage as blocked instead of falling back.
+- A visual review requires opening each real exported PNG and making at least
+  one MCP-based revision after Draft 1.
 - Do not let Draw.io edits invent source behavior or promote external behavior
   to direct evidence.
 - Do not write developer-machine absolute paths into examples, Evidence, Plan,

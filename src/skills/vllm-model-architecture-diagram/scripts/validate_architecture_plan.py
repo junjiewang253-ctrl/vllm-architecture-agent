@@ -310,6 +310,19 @@ def validate_plan(
         pattern = page.get("view_pattern")
         if pattern not in VALID_PATTERNS:
             errors.append(f"{page_id}: invalid view_pattern {pattern!r}")
+        main_story = page.get("main_story")
+        if not isinstance(main_story, list):
+            errors.append(f"{page_id}: main_story must be a list")
+        elif pattern in {
+            "pipeline",
+            "block",
+            "branch_merge",
+            "routed_container",
+            "mapping_flow",
+            "multimodal_pipeline",
+            "state_machine",
+        } and len(main_story) < 3:
+            errors.append(f"{page_id}: flow-oriented page main_story must contain at least three ordered steps")
         page_claims = page.get("claim_ids")
         if not isinstance(page_claims, list) or not page_claims:
             errors.append(f"{page_id}: claim_ids must be non-empty")

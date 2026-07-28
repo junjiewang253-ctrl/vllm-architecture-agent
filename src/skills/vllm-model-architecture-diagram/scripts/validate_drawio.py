@@ -4,9 +4,25 @@ from __future__ import annotations
 
 import argparse
 import json
+import struct
 import xml.etree.ElementTree as ET
+import zlib
 from pathlib import Path
 from typing import Any
+
+
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+MIN_EXPORT_WIDTH = 320
+MIN_EXPORT_HEIGHT = 200
+FLOW_VIEW_PATTERNS = {
+    "pipeline",
+    "block",
+    "branch_merge",
+    "routed_container",
+    "mapping_flow",
+    "multimodal_pipeline",
+    "state_machine",
+}
 
 
 def _load_plan(path: Path | None) -> dict[str, Any] | None:
@@ -46,6 +62,14 @@ def _visible_semantic_nodes(model: ET.Element) -> list[ET.Element]:
     return nodes
 
 
+def _visible_edges(model: ET.Element) -> list[ET.Element]:
+    return [
+        cell
+        for cell in model.findall(".//mxCell")
+        if cell.attrib.get("edge") == "1" and not cell.attrib.get("id", "").startswith("decorative_")
+    ]
+
+
 def _page_text(model: ET.Element) -> str:
     values: list[str] = []
     for cell in model.findall(".//mxCell"):
@@ -53,6 +77,62 @@ def _page_text(model: ET.Element) -> str:
         if value:
             values.append(value)
     return "\n".join(values)
+
+
+def _validate_png_export(path: Path) -> list[str]:
+    errors: list[str] = []
+    if not path.exists():
+        return [f"PNG export does not exist: {path}"]
+    if not path.is_file():
+        return [f"PNG export is not a file: {path}"]
+    data = path.read_bytes()
+    if not data:
+        return [f"PNG export is empty: {path}"]
+    if not data.startswith(PNG_SIGNATURE):
+        return [f"PNG export has an invalid PNG signature: {path}"]
+
+    offset = len(PNG_SIGNATURE)
+    width: int | None = None
+    height: int | None = None
+    saw_idat = False
+    saw_iend = False
+    while offset + 12 <= len(data):
+        length = struct.unpack(">I", data[offset : offset + 4])[0]
+        chunk_end = offset + 12 + length
+        if chunk_end > len(data):
+            errors.append(f"PNG export contains a truncated chunk: {path}")
+            break
+        chunk_type = data[offset + 4 : offset + 8]
+        chunk_data = data[offset + 8 : offset + 8 + length]
+        expected_crc = struct.unpack(">I", data[offset + 8 + length : chunk_end])[0]
+        actual_crc = zlib.crc32(chunk_type + chunk_data) & 0xFFFFFFFF
+        if actual_crc != expected_crc:
+            errors.append(f"PNG export contains an invalid chunk checksum: {path}")
+            break
+        if chunk_type == b"IHDR":
+            if length != 13:
+                errors.append(f"PNG export has an invalid IHDR chunk: {path}")
+                break
+            width, height = struct.unpack(">II", chunk_data[:8])
+        elif chunk_type == b"IDAT":
+            saw_idat = saw_idat or bool(chunk_data)
+        elif chunk_type == b"IEND":
+            saw_iend = True
+            break
+        offset = chunk_end
+
+    if width is None or height is None:
+        errors.append(f"PNG export is missing image dimensions: {path}")
+    elif width < MIN_EXPORT_WIDTH or height < MIN_EXPORT_HEIGHT:
+        errors.append(
+            f"PNG export is too small for an architecture page: {path} "
+            f"({width}x{height}, minimum {MIN_EXPORT_WIDTH}x{MIN_EXPORT_HEIGHT})"
+        )
+    if not saw_idat:
+        errors.append(f"PNG export has no image data: {path}")
+    if not saw_iend:
+        errors.append(f"PNG export is incomplete: {path}")
+    return errors
 
 
 def validate_drawio(
@@ -95,13 +175,20 @@ def validate_drawio(
         for page in plan.get("pages", []):
             if not page.get("export_name"):
                 errors.append(f"{page.get('id')}: plan page is missing export_name")
-        if images_dir and images_dir.exists():
-            for page in plan.get("pages", []):
-                export_name = page.get("export_name")
-                if export_name and not (images_dir / f"{export_name}.png").exists():
-                    errors.append(f"{page.get('id')}: expected PNG export is missing: {images_dir / f'{export_name}.png'}")
+        if images_dir:
+            if not images_dir.exists():
+                errors.append(f"PNG export directory does not exist: {images_dir}")
+            elif not images_dir.is_dir():
+                errors.append(f"PNG export path is not a directory: {images_dir}")
+            else:
+                for page in plan.get("pages", []):
+                    export_name = page.get("export_name")
+                    expected_png = images_dir / f"{export_name}.png" if export_name else None
+                    if expected_png and not expected_png.exists():
+                        errors.append(f"{page.get('id')}: expected PNG export is missing: {expected_png}")
 
     all_cell_ids: set[str] = set()
+    png_exports: set[Path] = set(images or [])
     for page in pages:
         model = _graph_model(page)
         if model is None:
@@ -114,6 +201,7 @@ def validate_drawio(
         elif background.lower() not in {"#ffffff", "white"}:
             errors.append(f"{_page_name(page)}: page background must be white")
         semantic_nodes = _visible_semantic_nodes(model)
+        visible_edges = _visible_edges(model)
         if not semantic_nodes:
             errors.append(f"{_page_name(page)}: page has no visible semantic nodes")
         elif len(semantic_nodes) < 3 and plan:
@@ -124,6 +212,10 @@ def validate_drawio(
             matching = plan_pages_by_title[page_title]
             if matching.get("view_pattern") not in {"boundary_map", "component_map"} and len(semantic_nodes) < 5:
                 errors.append(f"{page_title}: full model page should contain at least five visible semantic nodes")
+            if matching.get("view_pattern") in FLOW_VIEW_PATTERNS and len(visible_edges) < 2:
+                errors.append(
+                    f"{page_title}: flow-oriented page must contain at least two visible connected edges"
+                )
             page_text = _page_text(model)
             if matching.get("title") not in page_text:
                 errors.append(f"{page_title}: page title is not present in visible cell text")
@@ -159,9 +251,18 @@ def validate_drawio(
                     continue
                 if width <= 0 or height <= 0:
                     errors.append(f"{_page_name(page)}.{cell_id}: geometry width/height must be greater than zero")
-    for image in images or []:
-        if not image.exists():
-            errors.append(f"referenced export does not exist: {image}")
+            elif cell.attrib.get("edge") == "1":
+                if not cell.attrib.get("source") or not cell.attrib.get("target"):
+                    errors.append(f"{_page_name(page)}.{cell_id}: visible edge requires source and target")
+    if plan and images_dir and images_dir.is_dir():
+        for page in plan.get("pages", []):
+            export_name = page.get("export_name")
+            if export_name:
+                expected_png = images_dir / f"{export_name}.png"
+                if expected_png.exists():
+                    png_exports.add(expected_png)
+    for image in sorted(png_exports, key=lambda item: item.as_posix()):
+        errors.extend(_validate_png_export(image))
     return errors
 
 
