@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import struct
+import xml.etree.ElementTree as ET
 import zlib
 from copy import deepcopy
 from pathlib import Path
@@ -125,7 +126,7 @@ def valid_plan(context: dict) -> dict:
             "view_pattern": "pipeline",
             "scope": ["forward"],
             "claim_ids": ["claim:model-runtime"],
-            "main_story": ["input", "model", "output"],
+            "main_story": ["input", "embedding", "model", "normalization", "output"],
             "detail_regions": [
                 {
                     "id": "runtime",
@@ -427,7 +428,28 @@ def test_flow_page_requires_ordered_main_story(tmp_path: Path) -> None:
         repo_root=repo,
     )
 
-    assert any("main_story must contain at least three ordered steps" in error for error in errors)
+    assert any("main_story must contain at least 5 concrete ordered stages" in error for error in errors)
+
+
+def test_declared_external_boundary_requires_external_evidence(tmp_path: Path) -> None:
+    repo, context = make_context(tmp_path)
+    evidence = valid_evidence(context)
+    evidence["claims"] = [
+        claim
+        for claim in evidence["claims"]
+        if claim["confidence"] != "external"
+    ]
+    plan = valid_plan(context)
+
+    validator = load_script("validate_architecture_plan")
+    errors, _ = validator.validate_plan(
+        plan,
+        evidence=evidence,
+        context=context,
+        repo_root=repo,
+    )
+
+    assert any("global_boundaries but evidence contains no external claim" in error for error in errors)
 
 
 def write_drawio(
@@ -437,12 +459,14 @@ def write_drawio(
     html: bool = False,
     background: str = "#ffffff",
     include_edges: bool = True,
+    questions: dict[str, str] | None = None,
 ) -> None:
     diagrams = []
     for index, name in enumerate(page_names, start=1):
         html_style = "html=1;" if html else "html=0;"
         values = "Model Overview Runtime Path Composition Component Tree Adapter Boundary External Boundary"
         prefix = name.lower().replace(" ", "_")
+        question = (questions or {}).get(name, "What engineering question does this page answer?")
         edges = ""
         if include_edges:
             edges = (
@@ -450,9 +474,19 @@ def write_drawio(
                 'parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>'
                 f'<mxCell id="{prefix}_edge_2" edge="1" source="{prefix}_b" target="{prefix}_c" '
                 'parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>'
+                f'<mxCell id="{prefix}_edge_3" edge="1" source="{prefix}_c" target="{prefix}_d" '
+                'parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>'
+                f'<mxCell id="{prefix}_edge_4" edge="1" source="{prefix}_d" target="{prefix}_e" '
+                'parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>'
+                f'<mxCell id="{prefix}_edge_5" edge="1" source="{prefix}_e" target="{prefix}_f" '
+                'parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>'
+                f'<mxCell id="{prefix}_edge_6" edge="1" source="{prefix}_f" target="{prefix}_g" '
+                'parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>'
+                f'<mxCell id="{prefix}_edge_7" edge="1" source="{prefix}_g" target="{prefix}_h" '
+                'parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>'
             )
         diagrams.append(
-            f'''<diagram id="page-{index}" name="{name}"><mxGraphModel background="{background}"><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="{prefix}_a" value="{name}" style="{html_style}rounded=1;" vertex="1" parent="1"><mxGeometry x="40" y="40" width="120" height="50" as="geometry"/></mxCell><mxCell id="{prefix}_b" value="{values}" style="html=0;rounded=1;" vertex="1" parent="1"><mxGeometry x="200" y="40" width="200" height="70" as="geometry"/></mxCell><mxCell id="{prefix}_c" value="C" style="html=0;rounded=1;" vertex="1" parent="1"><mxGeometry x="440" y="40" width="120" height="50" as="geometry"/></mxCell><mxCell id="{prefix}_d" value="D" style="html=0;rounded=1;" vertex="1" parent="1"><mxGeometry x="600" y="40" width="120" height="50" as="geometry"/></mxCell><mxCell id="{prefix}_e" value="E" style="html=0;rounded=1;" vertex="1" parent="1"><mxGeometry x="760" y="40" width="120" height="50" as="geometry"/></mxCell>{edges}</root></mxGraphModel></diagram>'''
+            f'''<diagram id="page-{index}" name="{name}"><mxGraphModel background="{background}"><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="{prefix}_a" value="{name}" style="{html_style}rounded=1;fillColor=#ffffff;strokeColor=#ffffff;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="180" height="40" as="geometry"/></mxCell><mxCell id="{prefix}_q" value="{question}" style="html=0;rounded=0;fillColor=#ffffff;strokeColor=#ffffff;" vertex="1" parent="1"><mxGeometry x="40" y="65" width="420" height="30" as="geometry"/></mxCell><mxCell id="{prefix}_b" value="{values}" style="html=0;rounded=1;fillColor=#e7f5ff;strokeColor=#2b7dbd;" vertex="1" parent="1"><mxGeometry x="40" y="120" width="200" height="70" as="geometry"/></mxCell><mxCell id="{prefix}_c" value="C" style="html=0;rounded=1;fillColor=#eaf7ea;strokeColor=#4b9d58;" vertex="1" parent="1"><mxGeometry x="270" y="120" width="120" height="50" as="geometry"/></mxCell><mxCell id="{prefix}_d" value="D" style="html=0;rounded=1;fillColor=#e7f5ff;strokeColor=#2b7dbd;" vertex="1" parent="1"><mxGeometry x="420" y="120" width="120" height="50" as="geometry"/></mxCell><mxCell id="{prefix}_e" value="E" style="html=0;rounded=1;fillColor=#eaf7ea;strokeColor=#4b9d58;" vertex="1" parent="1"><mxGeometry x="570" y="120" width="120" height="50" as="geometry"/></mxCell><mxCell id="{prefix}_f" value="F" style="html=0;rounded=1;fillColor=#e7f5ff;strokeColor=#2b7dbd;" vertex="1" parent="1"><mxGeometry x="720" y="120" width="120" height="50" as="geometry"/></mxCell><mxCell id="{prefix}_g" value="G" style="html=0;rounded=1;fillColor=#eaf7ea;strokeColor=#4b9d58;" vertex="1" parent="1"><mxGeometry x="870" y="120" width="120" height="50" as="geometry"/></mxCell><mxCell id="{prefix}_h" value="H" style="html=0;rounded=1;fillColor=#e7f5ff;strokeColor=#2b7dbd;" vertex="1" parent="1"><mxGeometry x="1020" y="120" width="120" height="50" as="geometry"/></mxCell><mxCell id="{prefix}_i" value="I" style="html=0;rounded=1;fillColor=#eaf7ea;strokeColor=#4b9d58;" vertex="1" parent="1"><mxGeometry x="1170" y="120" width="120" height="50" as="geometry"/></mxCell>{edges}</root></mxGraphModel></diagram>'''
         )
     path.write_text(f'<mxfile host="app.diagrams.net">{"".join(diagrams)}</mxfile>', encoding="utf-8")
 
@@ -473,20 +507,41 @@ def write_png(path: Path, width: int = 640, height: int = 360) -> None:
     path.write_bytes(png)
 
 
+def write_visual_review(path: Path, page_names: list[str]) -> None:
+    pages = "\n".join(
+        f"- {name}: Draft issue identified, revised through MCP, and accepted in final review."
+        for name in page_names
+    )
+    path.write_text(
+        "# Visual Review\n\n"
+        "## Draft 1 Findings\n"
+        f"{pages}\n\n"
+        "## Revision Round 1\n"
+        "Adjusted grouping, routes, labels and semantic styles after opening every PNG export.\n\n"
+        "## Final Review\n"
+        "All pages were re-exported and inspected. Architecture story, detail coverage, "
+        "semantic distinction, topology, readability and information density meet the rubric.\n",
+        encoding="utf-8",
+    )
+
+
 def test_drawio_validator_checks_pages_regions_and_html(tmp_path: Path) -> None:
     _, context = make_context(tmp_path)
     plan = valid_plan(context)
     drawio = tmp_path / "architecture.drawio"
-    write_drawio(drawio, [page["title"] for page in plan["pages"]])
+    page_names = [page["title"] for page in plan["pages"]]
+    questions = {page["title"]: page["question"] for page in plan["pages"]}
+    write_drawio(drawio, page_names, questions=questions)
     images = tmp_path / "images"
     images.mkdir()
     for page in plan["pages"]:
         write_png(images / f"{page['export_name']}.png")
+    write_visual_review(tmp_path / "visual-review.md", page_names)
     validator = load_script("validate_drawio")
     assert validator.validate_drawio(drawio, plan=plan, images_dir=images) == []
 
     bad = tmp_path / "bad.drawio"
-    write_drawio(bad, [page["title"] for page in plan["pages"]], html=True)
+    write_drawio(bad, page_names, html=True, questions=questions)
     assert any("html=1" in error for error in validator.validate_drawio(bad, plan=plan))
 
 
@@ -494,9 +549,12 @@ def test_drawio_validator_fails_missing_region_title_and_png(tmp_path: Path) -> 
     _, context = make_context(tmp_path)
     plan = valid_plan(context)
     drawio = tmp_path / "architecture.drawio"
-    write_drawio(drawio, [page["title"] for page in plan["pages"]])
+    page_names = [page["title"] for page in plan["pages"]]
+    questions = {page["title"]: page["question"] for page in plan["pages"]}
+    write_drawio(drawio, page_names, questions=questions)
     images = tmp_path / "images"
     images.mkdir()
+    write_visual_review(tmp_path / "visual-review.md", page_names)
     validator = load_script("validate_drawio")
     errors = validator.validate_drawio(drawio, plan=plan, images_dir=images)
     assert any("expected PNG export is missing" in error for error in errors)
@@ -507,7 +565,11 @@ def test_drawio_validator_fails_missing_detail_region_title(tmp_path: Path) -> N
     plan = valid_plan(context)
     plan["pages"][0]["detail_regions"][0]["title"] = "Not Present In Diagram"
     drawio = tmp_path / "architecture.drawio"
-    write_drawio(drawio, [page["title"] for page in plan["pages"]])
+    write_drawio(
+        drawio,
+        [page["title"] for page in plan["pages"]],
+        questions={page["title"]: page["question"] for page in plan["pages"]},
+    )
     validator = load_script("validate_drawio")
     errors = validator.validate_drawio(drawio, plan=plan)
     assert any("detail region title is missing" in error for error in errors)
@@ -517,18 +579,72 @@ def test_drawio_validator_rejects_placeholder_png_and_card_only_flow(tmp_path: P
     _, context = make_context(tmp_path)
     plan = valid_plan(context)
     drawio = tmp_path / "architecture.drawio"
+    page_names = [page["title"] for page in plan["pages"]]
     write_drawio(
         drawio,
-        [page["title"] for page in plan["pages"]],
+        page_names,
         include_edges=False,
+        questions={page["title"]: page["question"] for page in plan["pages"]},
     )
     images = tmp_path / "images"
     images.mkdir()
     for page in plan["pages"]:
         (images / f"{page['export_name']}.png").write_bytes(b"")
+    write_visual_review(tmp_path / "visual-review.md", page_names)
 
     validator = load_script("validate_drawio")
     errors = validator.validate_drawio(drawio, plan=plan, images_dir=images)
 
-    assert any("flow-oriented page must contain at least two visible connected edges" in error for error in errors)
+    assert any("flow-oriented page has" in error for error in errors)
     assert any("PNG export is empty" in error for error in errors)
+
+
+def test_drawio_validator_rejects_sparse_single_style_pages(tmp_path: Path) -> None:
+    _, context = make_context(tmp_path)
+    plan = valid_plan(context)
+    drawio = tmp_path / "architecture.drawio"
+    page_names = [page["title"] for page in plan["pages"]]
+    write_drawio(
+        drawio,
+        page_names,
+        questions={page["title"]: page["question"] for page in plan["pages"]},
+    )
+
+    tree = ET.parse(drawio)
+    for diagram in tree.getroot().findall("diagram"):
+        graph_root = diagram.find("./mxGraphModel/root")
+        assert graph_root is not None
+        for cell in list(graph_root):
+            cell_id = cell.get("id", "")
+            if cell_id.endswith(("_f", "_g", "_h", "_i")):
+                graph_root.remove(cell)
+            elif cell.get("vertex") == "1":
+                cell.set("style", "html=0;rounded=1;")
+    tree.write(drawio, encoding="utf-8")
+
+    validator = load_script("validate_drawio")
+    errors = validator.validate_drawio(drawio, plan=plan)
+
+    assert any("minimum is 8" in error for error in errors)
+    assert any("at least two visual treatments" in error for error in errors)
+
+
+def test_drawio_validator_requires_visual_review_with_exports(tmp_path: Path) -> None:
+    _, context = make_context(tmp_path)
+    plan = valid_plan(context)
+    drawio = tmp_path / "architecture.drawio"
+    page_names = [page["title"] for page in plan["pages"]]
+    write_drawio(
+        drawio,
+        page_names,
+        questions={page["title"]: page["question"] for page in plan["pages"]},
+    )
+    images = tmp_path / "images"
+    images.mkdir()
+    for page in plan["pages"]:
+        write_png(images / f"{page['export_name']}.png")
+
+    validator = load_script("validate_drawio")
+    errors = validator.validate_drawio(drawio, plan=plan, images_dir=images)
+
+    assert any("visual review does not exist" in error for error in errors)

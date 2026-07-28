@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import struct
 import xml.etree.ElementTree as ET
 import zlib
@@ -79,6 +80,30 @@ def _page_text(model: ET.Element) -> str:
     return "\n".join(values)
 
 
+def _has_similar_visible_text(model: ET.Element, expected: str, threshold: float = 0.8) -> bool:
+    expected_tokens = set(re.findall(r"[a-z0-9]+", expected.casefold()))
+    if not expected_tokens:
+        return False
+    for cell in model.findall(".//mxCell"):
+        value = cell.attrib.get("value", "")
+        value_tokens = set(re.findall(r"[a-z0-9]+", value.casefold()))
+        if len(expected_tokens & value_tokens) / len(expected_tokens) >= threshold:
+            return True
+    return False
+
+
+def _style_signature(cell: ET.Element) -> tuple[str, ...]:
+    properties: dict[str, str] = {}
+    for item in cell.attrib.get("style", "").split(";"):
+        if "=" in item:
+            key, value = item.split("=", 1)
+            properties[key] = value
+    return tuple(
+        properties.get(key, "")
+        for key in ("shape", "fillColor", "strokeColor", "fontColor", "dashed")
+    )
+
+
 def _validate_png_export(path: Path) -> list[str]:
     errors: list[str] = []
     if not path.exists():
@@ -135,11 +160,40 @@ def _validate_png_export(path: Path) -> list[str]:
     return errors
 
 
+def _validate_visual_review(path: Path, page_titles: list[str]) -> list[str]:
+    if not path.exists():
+        return [f"visual review does not exist: {path}"]
+    if not path.is_file():
+        return [f"visual review is not a file: {path}"]
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return [f"visual review must be UTF-8 text: {path}"]
+    if len(text.strip()) < 300:
+        return [f"visual review is too short to document a real review: {path}"]
+
+    lowered = text.casefold()
+    required_markers = {
+        "Draft 1 findings": ("draft", "首稿", "第一稿"),
+        "revision": ("revision", "修改", "修订"),
+        "final review": ("final", "最终"),
+    }
+    errors: list[str] = []
+    for label, markers in required_markers.items():
+        if not any(marker.casefold() in lowered for marker in markers):
+            errors.append(f"visual review is missing {label}: {path}")
+    for title in page_titles:
+        if title.casefold() not in lowered:
+            errors.append(f"visual review does not discuss page: {title}")
+    return errors
+
+
 def validate_drawio(
     drawio_path: Path,
     plan: dict[str, Any] | None = None,
     images: list[Path] | None = None,
     images_dir: Path | None = None,
+    visual_review: Path | None = None,
 ) -> list[str]:
     errors: list[str] = []
     if not drawio_path.exists():
@@ -189,12 +243,18 @@ def validate_drawio(
 
     all_cell_ids: set[str] = set()
     png_exports: set[Path] = set(images or [])
+    complete_full_model = bool(
+        plan
+        and plan.get("detail_level") == "complete"
+        and len(plan.get("pages", [])) >= 3
+    )
     for page in pages:
         model = _graph_model(page)
         if model is None:
             errors.append(f"{_page_name(page)}: missing mxGraphModel")
             continue
         page_title = _page_name(page)
+        matching = plan_pages_by_title.get(page_title, {}) if plan else {}
         background = model.attrib.get("background") or model.attrib.get("pageBackgroundColor")
         if not background:
             errors.append(f"{page_title}: page background must be explicitly white")
@@ -202,6 +262,19 @@ def validate_drawio(
             errors.append(f"{_page_name(page)}: page background must be white")
         semantic_nodes = _visible_semantic_nodes(model)
         visible_edges = _visible_edges(model)
+        excluded_labels = {
+            str(matching.get("title", "")).strip(),
+            str(matching.get("question", "")).strip(),
+            *{
+                str(region.get("title", "")).strip()
+                for region in matching.get("detail_regions", [])
+            },
+        }
+        content_nodes = [
+            node
+            for node in semantic_nodes
+            if str(node.attrib.get("value", "")).strip() not in excluded_labels
+        ]
         if not semantic_nodes:
             errors.append(f"{_page_name(page)}: page has no visible semantic nodes")
         elif len(semantic_nodes) < 3 and plan:
@@ -209,16 +282,37 @@ def validate_drawio(
             if matching.get("view_pattern") not in {"boundary_map", "component_map"}:
                 errors.append(f"{_page_name(page)}: page has fewer than three visible semantic nodes")
         if plan and page_title in plan_pages_by_title:
-            matching = plan_pages_by_title[page_title]
             if matching.get("view_pattern") not in {"boundary_map", "component_map"} and len(semantic_nodes) < 5:
                 errors.append(f"{page_title}: full model page should contain at least five visible semantic nodes")
-            if matching.get("view_pattern") in FLOW_VIEW_PATTERNS and len(visible_edges) < 2:
+            if complete_full_model and len(content_nodes) < 8:
                 errors.append(
-                    f"{page_title}: flow-oriented page must contain at least two visible connected edges"
+                    f"{page_title}: complete full-model page has only {len(content_nodes)} "
+                    "semantic elements after excluding headers; minimum is 8"
+                )
+            if complete_full_model:
+                style_signatures = {
+                    _style_signature(node)
+                    for node in content_nodes
+                }
+                if len(style_signatures) < 2:
+                    errors.append(
+                        f"{page_title}: complete full-model page must use at least two "
+                        "visual treatments for semantic distinction"
+                    )
+            minimum_edges = max(
+                4,
+                min(8, len(matching.get("main_story", [])) - 1),
+            )
+            if matching.get("view_pattern") in FLOW_VIEW_PATTERNS and len(visible_edges) < minimum_edges:
+                errors.append(
+                    f"{page_title}: flow-oriented page has {len(visible_edges)} visible edges; "
+                    f"minimum is {minimum_edges}"
                 )
             page_text = _page_text(model)
             if matching.get("title") not in page_text:
                 errors.append(f"{page_title}: page title is not present in visible cell text")
+            if not _has_similar_visible_text(model, str(matching.get("question", ""))):
+                errors.append(f"{page_title}: engineering question is not present in visible cell text")
             regions = matching.get("detail_regions", [])
             if not regions:
                 errors.append(f"{page_title}: plan page has no detail regions")
@@ -263,6 +357,9 @@ def validate_drawio(
                     png_exports.add(expected_png)
     for image in sorted(png_exports, key=lambda item: item.as_posix()):
         errors.extend(_validate_png_export(image))
+    if images_dir:
+        review_path = visual_review or images_dir.parent / "visual-review.md"
+        errors.extend(_validate_visual_review(review_path, page_names))
     return errors
 
 
@@ -272,12 +369,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--plan", type=Path)
     parser.add_argument("--image", action="append", type=Path, default=[])
     parser.add_argument("--images-dir", type=Path)
+    parser.add_argument("--visual-review", type=Path)
     args = parser.parse_args(argv)
     errors = validate_drawio(
         args.drawio,
         plan=_load_plan(args.plan),
         images=args.image,
         images_dir=args.images_dir,
+        visual_review=args.visual_review,
     )
     if errors:
         for error in errors:

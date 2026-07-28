@@ -96,7 +96,8 @@ vllm-arch validate `
   --plan examples\hy_v3\architecture-plan.json `
   --evidence examples\hy_v3\evidence.json `
   --drawio examples\hy_v3\architecture.drawio `
-  --images-dir examples\hy_v3\images
+  --images-dir examples\hy_v3\images `
+  --visual-review examples\hy_v3\visual-review.md
 ```
 
 CLI 只保留四个辅助命令：
@@ -129,6 +130,14 @@ vllm-arch scan
 Draw.io MCP 是最终绘图的必需工具。MCP 不可用时，Skill 应停止并说明阻塞，
 不得使用脚本手写 `.drawio`，也不得生成空白或零字节 PNG 作为替代。最终 PNG
 必须由 Draw.io MCP 导出，并由 Codex 实际打开检查后至少修改一轮。
+
+**图能生成，但过于简陋**
+
+Agent Skill 仍会受到所选模型推理和视觉设计能力影响。完整模型页面不应只是
+四到七张方法名卡片；默认质量契约要求具体主流程、展开的 detail regions、
+语义线型、外部边界和逐页视觉评分。面向正式交付时应使用具备充分推理能力的
+Codex 模型；偏速度的模型适合验证安装和工具连通性，不应仅凭 Validator
+通过就作为最终架构成果。
 
 **没有真实 vLLM checkout**
 

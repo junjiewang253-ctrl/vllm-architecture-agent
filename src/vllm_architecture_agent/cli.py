@@ -126,7 +126,13 @@ def cmd_validate(args: argparse.Namespace) -> int:
             print("Architecture plan validation passed")
     if args.drawio and args.drawio.exists():
         drawio_mod = _load_script("validate_drawio")
-        errors = drawio_mod.validate_drawio(args.drawio, plan=plan, images=args.image or [], images_dir=args.images_dir)
+        errors = drawio_mod.validate_drawio(
+            args.drawio,
+            plan=plan,
+            images=args.image or [],
+            images_dir=args.images_dir,
+            visual_review=args.visual_review,
+        )
         if errors:
             failed = True
             for error in errors:
@@ -177,6 +183,7 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--drawio", type=Path)
     validate.add_argument("--image", action="append", type=Path, default=[])
     validate.add_argument("--images-dir", type=Path)
+    validate.add_argument("--visual-review", type=Path)
     validate.set_defaults(func=cmd_validate)
 
     scan = subparsers.add_parser("scan", help="Scan vllm/model_executor/models compatibility")

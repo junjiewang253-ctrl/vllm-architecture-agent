@@ -15,6 +15,22 @@ Each page may contain:
 
 Every detail region should map to source item IDs and claim IDs.
 
+## Main Story Grammar
+
+For a flow-oriented page, write the main story as concrete visible stages:
+
+```text
+input data -> local transformation -> component execution -> boundary -> output
+```
+
+Use 5 to 12 stages for runtime or branch pages and at least 4 stages for mapping
+or state pages. Do not replace the sequence with three explanatory sentences.
+
+Region headers organize the page; they do not count as architecture elements.
+A region must contain at least two components/data/processes, or a structured
+panel with at least three entries. A row of region-name cards is not an
+architecture diagram.
+
 ## Detail Region Types
 
 ### component_tree
@@ -63,3 +79,16 @@ Helper/shared module: one or two pages.
 
 Do not make a page for every class or method. Aggregate details into regions
 before adding pages.
+
+## Anti-Minimality Check
+
+Before drawing, reject a page design when any of these are true:
+
+- the page can be represented by four to seven generic cards;
+- a method name is the only explanation of its behavior;
+- a runtime page has no explicit input or output;
+- a branch page does not show its split and merge;
+- a routed container does not show routing input plus contained execution;
+- a mapping flow is a serial list instead of dispatch branches;
+- a strategy page connects TP, PP and EP as if they were runtime stages;
+- imported runtime components have no boundary treatment.

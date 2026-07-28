@@ -94,6 +94,14 @@ Review every class, method and module-level function. Review all high/medium bra
 
 Do not silently omit anything. Not every item must become a node, but every item must receive a disposition in `architecture-plan.json`.
 
+Before planning, read these references rather than relying on generic diagram
+intuition:
+
+- `references/analysis-guide.md`;
+- `references/vllm-patterns.md`;
+- `references/page-playbook.md`;
+- `references/evidence-policy.md`.
+
 ### 4. Traverse Related Source
 
 Use `related_file_candidates` when additional files prove a claim or clarify an external boundary.
@@ -123,6 +131,41 @@ Each page must include:
 - detail budget.
 
 Each rendered class, method, function, branch, mapping group or capability must map to a real page and region.
+
+For flow-oriented pages, `main_story` must be a sequence of concrete visible
+architecture stages, not three prose summary sentences:
+
+- use 5 to 12 ordered stages for pipeline, block, branch/merge, routed-container
+  and multimodal pages;
+- use at least 4 stages for mapping flows and state machines;
+- name data, transformations, participating components and output boundaries;
+- keep implementation class or method names as subtitles, not as the whole
+  architecture story.
+
+For a complete full-model plan, each principal page should contain 2 to 4
+detail regions. A detail-region title is not a semantic node. Each region must
+expand into at least two visible architecture elements, or one structured panel
+with at least three meaningful entries.
+
+### 5.1 Diagram Quality Contract
+
+The default output is a small set of complete, high-density engineering
+diagrams, not a set of summary cards. For every complete full-model page:
+
+- show the engineering question visibly below the page title;
+- show at least 8 semantic elements, excluding title, question and region
+  headers; target 12 to 28 when the source supports it;
+- flow-oriented pages use at least 4 connected edges and a clear input-to-output
+  reading path;
+- use at least two visual treatments to distinguish runtime, construction,
+  loading, parallel metadata or external boundaries;
+- use containers/panels for composition and strategy, not arrows between
+  unrelated concepts;
+- do not use a method name as a substitute for the method's architectural
+  behavior;
+- do not leave a detail region as a single generic card;
+- imported runtime internals must produce external Evidence and a visible
+  boundary when they appear in the diagram.
 
 ### 6. Write Evidence
 
@@ -161,7 +204,9 @@ Before creating any diagram:
 
 1. Confirm the Draw.io MCP tools are available.
 2. Call `start_session` and wait for a successful session result.
-3. If the tools are unavailable or the session fails, stop after the validated
+3. Read `references/diagram-design-guide.md` and the style vocabulary in
+   `assets/drawio-style-template.drawio`.
+4. If the tools are unavailable or the session fails, stop after the validated
    Plan and Evidence artifacts. Report the drawing stage as blocked.
 
 Never fall back to manufacturing output files. In particular:
@@ -219,6 +264,19 @@ Check:
 - no huge empty spaces;
 - no misleading serial chain for mutually exclusive branches.
 
+Score every page from 0 to 2 on:
+
+1. architecture story;
+2. detail-region coverage;
+3. semantic distinction;
+4. topology and grouping;
+5. readability;
+6. information density.
+
+The page must score at least 10/12 with no zero. A page below the threshold must
+be revised rather than described as acceptable. Record Draft 1 observations,
+the actual MCP edits, final scores and remaining risks in `visual-review.md`.
+
 After inspecting Draft 1, make at least one actual diagram edit through Draw.io
 MCP, export again, and record the observed issue and resulting change. Make at
 most two revision passes.
@@ -234,7 +292,8 @@ vllm-arch validate `
   --plan outputs/<model>/architecture-plan.json `
   --evidence outputs/<model>/evidence.json `
   --drawio outputs/<model>/architecture.drawio `
-  --images-dir outputs/<model>/images
+  --images-dir outputs/<model>/images `
+  --visual-review outputs/<model>/visual-review.md
 ```
 
 Do not report completion if validation fails.

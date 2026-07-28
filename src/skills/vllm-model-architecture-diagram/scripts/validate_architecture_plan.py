@@ -71,6 +71,16 @@ VALID_REVIEW_STATUS = {
     "unresolved",
 }
 
+MIN_MAIN_STORY_STEPS = {
+    "pipeline": 5,
+    "block": 5,
+    "branch_merge": 5,
+    "routed_container": 5,
+    "mapping_flow": 4,
+    "multimodal_pipeline": 5,
+    "state_machine": 4,
+}
+
 VALID_CLASS_ROLES = {
     "primary_component",
     "supporting_component",
@@ -288,6 +298,14 @@ def validate_plan(
         errors.append("plans must contain 1 to 5 pages")
 
     claim_ids = {claim.get("id") for claim in evidence.get("claims", [])} if evidence else set()
+    if evidence and plan.get("global_boundaries"):
+        external_claims = [
+            claim
+            for claim in evidence.get("claims", [])
+            if claim.get("confidence") == "external"
+        ]
+        if not external_claims:
+            errors.append("plan declares global_boundaries but evidence contains no external claim")
     seen_pages: set[str] = set()
     known_source_ids = _known_source_item_ids(context or {})
     for index, page in enumerate(pages):
@@ -313,16 +331,11 @@ def validate_plan(
         main_story = page.get("main_story")
         if not isinstance(main_story, list):
             errors.append(f"{page_id}: main_story must be a list")
-        elif pattern in {
-            "pipeline",
-            "block",
-            "branch_merge",
-            "routed_container",
-            "mapping_flow",
-            "multimodal_pipeline",
-            "state_machine",
-        } and len(main_story) < 3:
-            errors.append(f"{page_id}: flow-oriented page main_story must contain at least three ordered steps")
+        elif pattern in MIN_MAIN_STORY_STEPS and len(main_story) < MIN_MAIN_STORY_STEPS[pattern]:
+            errors.append(
+                f"{page_id}: {pattern} main_story must contain at least "
+                f"{MIN_MAIN_STORY_STEPS[pattern]} concrete ordered stages"
+            )
         page_claims = page.get("claim_ids")
         if not isinstance(page_claims, list) or not page_claims:
             errors.append(f"{page_id}: claim_ids must be non-empty")
