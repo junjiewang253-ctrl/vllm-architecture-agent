@@ -13,18 +13,33 @@ def read(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
-def test_readme_starts_with_chinese_mentor_workflow() -> None:
+def test_readme_starts_with_general_quick_start() -> None:
     readme = read("README.md")
     first_50_lines = "\n".join(readme.splitlines()[:50])
 
     assert readme.startswith("# vLLM Architecture Agent")
-    assert "## 导师最快使用" in first_50_lines
-    assert ".\\tools\\setup-mentor.ps1 -ConfigureDrawioMcp" in first_50_lines
+    assert "## 快速开始" in first_50_lines
+    assert ".\\tools\\setup.ps1 -ConfigureDrawioMcp" in first_50_lines
     assert "使用 $vllm-model-architecture-diagram 分析 samples/hy_v3.py，生成默认架构图。" in first_50_lines
     assert "outputs/hy-v3/" in first_50_lines
-    assert "不依赖 HY V3 固定模板" in readme
+    assert "固定模板" in readme
     assert "分析其他模型" in readme
-    assert "常见故障排查" in readme
+    assert "## 常见问题" in readme
+    assert "导师" not in readme
+
+
+def test_readme_embeds_all_hy_v3_example_images() -> None:
+    readme = read("README.md")
+    image_names = [
+        "model-architecture-and-execution.png",
+        "decoder-and-attention.png",
+        "moe-architecture-and-routing.png",
+        "parallelism-configuration-and-weight-loading.png",
+    ]
+    for image_name in image_names:
+        relative = f"examples/hy_v3/images/{image_name}"
+        assert relative in readme
+        assert (ROOT / relative).is_file()
 
 
 def test_user_facing_docs_have_no_mojibake() -> None:
@@ -62,10 +77,18 @@ def test_setup_mentor_configures_skill_and_drawio_mcp() -> None:
     assert "使用 `$vllm-model-architecture-diagram 分析 samples/hy_v3.py，生成默认架构图。" in script
 
 
+def test_general_setup_entrypoint_wraps_installer() -> None:
+    script = read("tools/setup.ps1")
+    assert "[switch]$ConfigureDrawioMcp" in script
+    assert '"setup-mentor.ps1"' in script
+    assert "& $installer -RepoRoot $RepoRoot -ConfigureDrawioMcp" in script
+
+
 def test_mentor_package_builder_targets_v212() -> None:
     builder = read("tools/build_mentor_package.py")
     assert "v2.1.2" in builder
     assert "vllm-architecture-agent-v2.1.2-mentor.zip" in builder
+    assert "tools/setup.ps1" in builder
     assert "tools/setup-mentor.ps1" in builder
     assert "docs/development/v2.1.2-chinese-mentor-usability-report.md" in builder
     assert "legacy" not in re.findall(r'"([^"]+)"', builder)

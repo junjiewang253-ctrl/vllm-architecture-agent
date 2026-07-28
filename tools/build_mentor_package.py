@@ -24,6 +24,7 @@ INCLUDE_PATHS = (
     "tools/build_mentor_package.py",
     "tools/setup-codex-dev.ps1",
     "tools/setup-mentor.ps1",
+    "tools/setup.ps1",
     "samples/hy_v3.py",
     "samples/simple_model.py",
     "examples/hy_v3",
