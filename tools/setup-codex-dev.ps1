@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$RepoRoot = (Resolve-Path ".").Path
 )
 
@@ -15,19 +15,19 @@ $skillSource = Join-Path $repo "src\skills\vllm-model-architecture-diagram"
 $skillLink = Join-Path $repo ".agents\skills\vllm-model-architecture-diagram"
 
 if (-not (Test-Path (Join-Path $repo "pyproject.toml"))) {
-    throw "pyproject.toml not found. Run this script from the repository root or pass -RepoRoot."
+    throw "未找到 pyproject.toml。请在仓库根目录运行，或传入 -RepoRoot。"
 }
 if (-not (Test-Path (Join-Path $skillSource "SKILL.md"))) {
-    throw "Canonical Skill source not found: $skillSource"
+    throw "未找到 Skill 源目录：$skillSource"
 }
 
-Write-Step "Checking Python"
+Write-Step "检查 Python"
 python --version
 
-Write-Step "Installing package in editable dev mode"
+Write-Step "安装 editable 开发包"
 python -m pip install -e ".[dev]"
 
-Write-Step "Creating local Codex Skill link"
+Write-Step "创建本地 Codex Skill 链接"
 $linkParent = Split-Path $skillLink -Parent
 New-Item -ItemType Directory -Force -Path $linkParent | Out-Null
 
@@ -35,24 +35,24 @@ if (Test-Path $skillLink) {
     $item = Get-Item $skillLink
     if ($item.LinkType -eq "Junction" -or $item.LinkType -eq "SymbolicLink") {
         if ((Resolve-Path $item.Target).Path -eq (Resolve-Path $skillSource).Path) {
-            Write-Host "Skill link already points to canonical source."
+            Write-Host "Skill 链接已经指向当前源码。"
         } else {
-            throw "Existing skill link points elsewhere: $($item.Target)"
+            throw "已有 Skill 链接指向其他位置：$($item.Target)"
         }
     } else {
-        throw "Skill path exists and is not a link: $skillLink"
+        throw "Skill 路径已存在但不是链接：$skillLink"
     }
 } else {
     New-Item -ItemType Junction -Path $skillLink -Target $skillSource | Out-Null
-    Write-Host "Created junction: $skillLink -> $skillSource"
+    Write-Host "已创建 Junction：$skillLink -> $skillSource"
 }
 
-Write-Step "Draw.io MCP check"
-Write-Host "Run this command and confirm a drawio MCP server is configured:"
+Write-Step "Draw.io MCP 检查"
+Write-Host "请运行以下命令确认 drawio MCP server 已配置："
 Write-Host "  codex mcp list"
-Write-Host ""
-Write-Host "This setup script does not modify global Codex MCP configuration."
+Write-Host "本开发脚本不会自动修改全局 Codex MCP 配置。"
 
-Write-Step "Next step"
-Write-Host "使用 `$vllm-model-architecture-diagram 分析 samples/hy_v3.py，"
-Write-Host "生成默认架构图。"
+Write-Step "下一步"
+Write-Host "请重启 VS Code Codex，然后输入："
+Write-Host "使用 `$vllm-model-architecture-diagram 分析 samples/hy_v3.py，生成默认架构图。"
+
