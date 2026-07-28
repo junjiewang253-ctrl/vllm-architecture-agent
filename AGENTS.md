@@ -2,14 +2,14 @@
 
 ## Single source of truth
 
-- The canonical v2.1 Skill is `src/skills/vllm-model-architecture-diagram/`.
+- The canonical v2.1.1 Skill is `src/skills/vllm-model-architecture-diagram/`.
 - Do not edit `.agents/skills/` as source; it is a local Codex development link.
 - Do not edit generated packages under `dist/`.
 - The old compiler-style research pipeline is archived in
   `legacy/compiler-pipeline-v1/` and must not be imported by the default v2.x
   workflow.
 
-## v2.1 Architecture
+## v2.1.1 Architecture
 
 Keep these concerns separate:
 
@@ -24,6 +24,17 @@ Keep these concerns separate:
 
 Scripts discover and validate source structure. Codex decides architecture
 meaning, page clustering, visual design and layout.
+
+The default mentor workflow starts from one user sentence:
+
+```text
+使用 $vllm-model-architecture-diagram 分析 samples/hy_v3.py，
+生成默认架构图。
+```
+
+For local files, infer repo root and output directory automatically. Store
+repository-internal artifact paths as repo-relative paths so examples remain
+portable across machines.
 
 ## Implementation rules
 
@@ -46,6 +57,8 @@ meaning, page clustering, visual design and layout.
   `architecture-plan.json` and `evidence.json`.
 - Do not let Draw.io edits invent source behavior or promote external behavior
   to direct evidence.
+- Do not write developer-machine absolute paths into examples, Evidence, Plan,
+  reports or mentor deliverables when the file is inside the repository.
 - Put cross-Agent core behavior in the Skill directory.
 - Put Agent-specific packaging under `integrations/`.
 

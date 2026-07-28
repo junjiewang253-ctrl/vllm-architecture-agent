@@ -1,3 +1,5 @@
+# Example only. Copy this into your Codex config if Draw.io MCP is not already
+# configured, then restart Codex.
 [mcp_servers.drawio]
 command = "npx"
 args = ["-y", "@next-ai-drawio/mcp-server@latest"]

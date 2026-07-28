@@ -29,6 +29,8 @@ Claims should reference relevant source item IDs:
 - Direct claims cannot rely only on imports.
 - Derived claims need at least two evidence entries.
 - Evidence file paths must be part of `files_read`.
+- Repository-internal evidence paths must be repo-relative, such as
+  `samples/hy_v3.py`, so examples can be validated after relocation.
 - Line ranges must be valid and should include the cited symbol when possible.
 - Checkpoint loading is not runtime tensor flow.
 - Symbolic config expressions remain symbolic; do not invent concrete values.

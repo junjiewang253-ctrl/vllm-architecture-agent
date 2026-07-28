@@ -4,20 +4,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
+
+SRC_DIR = Path(__file__).resolve().parents[3]
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from vllm_architecture_agent.paths import path_is_within, resolve_repo_path  # noqa: E402
 
 
 def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _is_within(path: Path, root: Path) -> bool:
-    try:
-        path.resolve().relative_to(root.resolve())
-        return True
-    except ValueError:
-        return False
 
 
 def _line_slice(path: Path, start: int, end: int) -> list[str]:
@@ -27,10 +26,10 @@ def _line_slice(path: Path, start: int, end: int) -> list[str]:
     return lines[start - 1 : end]
 
 
-def _direct_is_import_only(entries: list[dict[str, Any]]) -> bool:
+def _direct_is_import_only(entries: list[dict[str, Any]], repo_root: Path) -> bool:
     non_import_seen = False
     for entry in entries:
-        path = Path(entry["file"])
+        path = resolve_repo_path(repo_root, entry["file"])
         for line in _line_slice(path, int(entry["start_line"]), int(entry["end_line"])):
             stripped = line.strip()
             if stripped and not stripped.startswith(("import ", "from ")):
@@ -75,11 +74,15 @@ def validate_evidence(
     *,
     context: dict[str, Any] | None = None,
     plan: dict[str, Any] | None = None,
+    repo_root: Path | None = None,
 ) -> tuple[list[str], list[str], dict[str, int]]:
     errors: list[str] = []
     warnings: list[str] = []
     repo_root_value = context.get("target", {}).get("repo_root") if context else None
-    repo_root = Path(repo_root_value).resolve() if repo_root_value else None
+    if repo_root is None:
+        repo_root = Path(repo_root_value).resolve() if repo_root_value and repo_root_value != "." else Path.cwd().resolve()
+    else:
+        repo_root = repo_root.resolve()
 
     if evidence.get("schema_version") != "2.1":
         errors.append("evidence.schema_version must be 2.1")
@@ -101,7 +104,7 @@ def validate_evidence(
         claims = []
 
     plan_page_ids = {page.get("id") for page in plan.get("pages", [])} if plan else set()
-    files_read = {str(Path(path).resolve()) for path in plan.get("files_read", [])} if plan else set()
+    files_read = {str(resolve_repo_path(repo_root, path)) for path in plan.get("files_read", [])} if plan else set()
     known_source_items = _source_item_ids(context or {})
     claim_ids: set[str] = set()
     used_by_page_or_review = _review_claim_ids(plan or {})
@@ -148,14 +151,14 @@ def validate_evidence(
             if not file_value:
                 errors.append(f"{claim_id}.evidence[{entry_index}] is missing file")
                 continue
-            path = Path(file_value)
+            path = resolve_repo_path(repo_root, file_value)
             if not path.exists():
                 errors.append(f"{claim_id}.evidence[{entry_index}] file does not exist: {path}")
                 continue
-            if repo_root and not _is_within(path, repo_root):
+            if repo_root and not path_is_within(path, repo_root):
                 errors.append(f"{claim_id}.evidence[{entry_index}] file is outside repo root: {path}")
             if plan and str(path.resolve()) not in files_read:
-                errors.append(f"{claim_id}.evidence[{entry_index}] file is not listed in plan.files_read: {path}")
+                errors.append(f"{claim_id}.evidence[{entry_index}] file is not listed in plan.files_read: {file_value}")
             try:
                 start = int(entry.get("start_line"))
                 end = int(entry.get("end_line"))
@@ -168,7 +171,7 @@ def validate_evidence(
                 warnings.append(f"{claim_id}.evidence[{entry_index}] symbol not found in cited lines: {symbol}")
         if confidence == "direct":
             try:
-                if _direct_is_import_only(entries):
+                if _direct_is_import_only(entries, repo_root):
                     errors.append(f"{claim_id}: direct claim is supported only by import lines")
             except (OSError, ValueError) as exc:
                 errors.append(f"{claim_id}: unable to check direct import-only evidence: {exc}")
@@ -205,12 +208,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("evidence", type=Path)
     parser.add_argument("--context", type=Path)
     parser.add_argument("--plan", type=Path)
+    parser.add_argument("--repo-root", type=Path)
     args = parser.parse_args(argv)
 
     evidence = _load_json(args.evidence)
     context = _load_json(args.context) if args.context else None
     plan = _load_json(args.plan) if args.plan else None
-    errors, warnings, summary = validate_evidence(evidence, context=context, plan=plan)
+    errors, warnings, summary = validate_evidence(evidence, context=context, plan=plan, repo_root=args.repo_root)
     for warning in warnings:
         print(f"WARNING: {warning}")
     if errors:

@@ -1764,25 +1764,15 @@
       "confidence": 0.6499999999999999,
       "detected": true,
       "evidence_lines": [
-        45,
+        55,
         224,
+        268,
         297,
-        304,
-        323,
-        328,
-        329,
-        343,
-        345,
-        360,
-        361,
-        362,
-        378,
-        389,
-        423
+        378
       ],
       "evidence_terms": [
-        "Attention",
-        "attn"
+        "Attention(",
+        "QKVParallelLinear"
       ],
       "reason": "matched generic source terms"
     },
@@ -1813,18 +1803,20 @@
     },
     "expert_parallel": {
       "capability_id": "capability:expert_parallel",
-      "confidence": 0.6499999999999999,
+      "confidence": 0.7999999999999999,
       "detected": true,
       "evidence_lines": [
         39,
-        47,
         136,
         137,
-        187
+        138,
+        155,
+        156
       ],
       "evidence_terms": [
         "get_ep_group",
-        "FusedMoE"
+        "ep_rank",
+        "ep_size"
       ],
       "reason": "matched generic source terms"
     },
@@ -1917,18 +1909,11 @@
     },
     "pooling": {
       "capability_id": "capability:pooling",
-      "confidence": 0.5,
-      "detected": true,
-      "evidence_lines": [
-        498,
-        540,
-        687,
-        688
-      ],
-      "evidence_terms": [
-        "embed_input_ids"
-      ],
-      "reason": "matched generic source terms"
+      "confidence": 0.0,
+      "detected": false,
+      "evidence_lines": [],
+      "evidence_terms": [],
+      "reason": "not detected"
     },
     "quantization": {
       "capability_id": "capability:quantization",
@@ -2176,7 +2161,8 @@
       "decoder_text_generation"
     ],
     "reason": "classified from class names and generic vLLM capability terms",
-    "status": "partial"
+    "repository_context": "partial",
+    "status": "full"
   },
   "control_flow_landmarks": [
     {
@@ -2820,12 +2806,6 @@
       "line": 516,
       "owner_id": "method:HYV3Model.update_physical_experts_metadata:501",
       "summary": "moe.experts.update_expert_map"
-    },
-    {
-      "kind": "module_call",
-      "line": 521,
-      "owner_id": "method:HYV3Model.get_expert_mapping:518",
-      "summary": "fused_moe_make_expert_params_mapping"
     },
     {
       "condition": "get_pp_group().is_first_rank",
@@ -3941,10 +3921,9 @@
         "call:HYV3Model.embed_input_ids:499:1"
       ],
       "end_line": 499,
-      "importance_candidate": "core",
+      "importance_candidate": "supporting",
       "importance_reasons": [
-        "embed_input_ids entrypoint",
-        "calls model components"
+        "simple delegation helper"
       ],
       "loop_ids": [],
       "method_id": "method:HYV3Model.embed_input_ids:498",
@@ -3997,10 +3976,9 @@
         "call:HYV3Model.get_expert_mapping:521:1"
       ],
       "end_line": 527,
-      "importance_candidate": "core",
+      "importance_candidate": "supporting",
       "importance_reasons": [
-        "get_expert_mapping entrypoint",
-        "handles weights or experts"
+        "simple expert mapping delegation"
       ],
       "loop_ids": [],
       "method_id": "method:HYV3Model.get_expert_mapping:518",
@@ -4166,10 +4144,9 @@
         "call:HYV3ForCausalLM.embed_input_ids:688:1"
       ],
       "end_line": 688,
-      "importance_candidate": "core",
+      "importance_candidate": "supporting",
       "importance_reasons": [
-        "embed_input_ids entrypoint",
-        "calls model components"
+        "simple delegation helper"
       ],
       "loop_ids": [],
       "method_id": "method:HYV3ForCausalLM.embed_input_ids:687",
@@ -4194,10 +4171,9 @@
         "call:HYV3ForCausalLM.forward:697:1"
       ],
       "end_line": 701,
-      "importance_candidate": "core",
+      "importance_candidate": "supporting",
       "importance_reasons": [
-        "forward entrypoint",
-        "calls model components"
+        "simple delegation helper"
       ],
       "loop_ids": [],
       "method_id": "method:HYV3ForCausalLM.forward:690",
@@ -4227,8 +4203,8 @@
       "end_line": 708,
       "importance_candidate": "core",
       "importance_reasons": [
-        "compute_logits entrypoint",
-        "calls model components"
+        "compute_logits output boundary",
+        "calls output components"
       ],
       "loop_ids": [],
       "method_id": "method:HYV3ForCausalLM.compute_logits:703",
@@ -4283,11 +4259,9 @@
         "call:HYV3ForCausalLM.get_expert_mapping:725:1"
       ],
       "end_line": 725,
-      "importance_candidate": "core",
+      "importance_candidate": "supporting",
       "importance_reasons": [
-        "get_expert_mapping entrypoint",
-        "calls model components",
-        "handles weights or experts"
+        "simple expert mapping delegation"
       ],
       "loop_ids": [],
       "method_id": "method:HYV3ForCausalLM.get_expert_mapping:724",
@@ -4954,22 +4928,22 @@
   ],
   "module_functions": [],
   "registry_info": {
-    "models_root": "D:\\projects\\vllm-architecture-agent\\vllm\\model_executor\\models",
+    "models_root": "vllm/model_executor/models",
     "registered_architectures": [],
     "registered_classes": [],
     "registry_category": null,
-    "repo_root": "D:\\projects\\vllm-architecture-agent",
+    "repo_root": ".",
     "requested_architecture": null,
     "status": "resolved",
-    "target_file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+    "target_file": "samples/hy_v3.py",
     "warnings": [
-      "registry.py not found at D:\\projects\\vllm-architecture-agent\\vllm\\model_executor\\models\\registry.py"
+      "registry.py not found at vllm/model_executor/models/registry.py"
     ]
   },
   "related_file_candidates": [
     {
       "exists": false,
-      "file": "D:\\projects\\vllm-architecture-agent\\vllm\\model_executor\\models\\interfaces.py",
+      "file": "vllm/model_executor/models/interfaces.py",
       "priority": 3,
       "reason": "model interface capabilities",
       "suggested_depth": 1,
@@ -4977,7 +4951,7 @@
     },
     {
       "exists": false,
-      "file": "D:\\projects\\vllm-architecture-agent\\vllm\\model_executor\\models\\interfaces_base.py",
+      "file": "vllm/model_executor/models/interfaces_base.py",
       "priority": 3,
       "reason": "base model interface capabilities",
       "suggested_depth": 1,
@@ -4985,7 +4959,7 @@
     },
     {
       "exists": false,
-      "file": "D:\\projects\\vllm-architecture-agent\\vllm\\model_executor\\models\\registry.py",
+      "file": "vllm/model_executor/models/registry.py",
       "priority": 3,
       "reason": "model registry metadata",
       "suggested_depth": 1,
@@ -4993,7 +4967,7 @@
     },
     {
       "exists": false,
-      "file": "D:\\projects\\vllm-architecture-agent\\samples\\interfaces.py",
+      "file": "samples/interfaces.py",
       "priority": 4,
       "reason": "imported from interfaces",
       "suggested_depth": 1,
@@ -5001,7 +4975,7 @@
     },
     {
       "exists": false,
-      "file": "D:\\projects\\vllm-architecture-agent\\samples\\utils.py",
+      "file": "samples/utils.py",
       "priority": 4,
       "reason": "imported from utils",
       "suggested_depth": 1,
@@ -5009,7 +4983,7 @@
     },
     {
       "exists": false,
-      "file": "D:\\projects\\vllm-architecture-agent\\vllm\\model_executor\\layers\\activation.py",
+      "file": "vllm/model_executor/layers/activation.py",
       "priority": 4,
       "reason": "imported from vllm.model_executor.layers.activation",
       "suggested_depth": 1,
@@ -5017,7 +4991,7 @@
     },
     {
       "exists": false,
-      "file": "D:\\projects\\vllm-architecture-agent\\vllm\\model_executor\\layers\\attention.py",
+      "file": "vllm/model_executor/layers/attention.py",
       "priority": 4,
       "reason": "imported from vllm.model_executor.layers.attention",
       "suggested_depth": 1,
@@ -5025,7 +4999,7 @@
     },
     {
       "exists": false,
-      "file": "D:\\projects\\vllm-architecture-agent\\vllm\\model_executor\\layers\\fused_moe.py",
+      "file": "vllm/model_executor/layers/fused_moe.py",
       "priority": 4,
       "reason": "imported from vllm.model_executor.layers.fused_moe",
       "suggested_depth": 1,
@@ -5033,7 +5007,7 @@
     },
     {
       "exists": false,
-      "file": "D:\\projects\\vllm-architecture-agent\\vllm\\model_executor\\layers\\hpc.py",
+      "file": "vllm/model_executor/layers/hpc.py",
       "priority": 4,
       "reason": "imported from vllm.model_executor.layers.hpc",
       "suggested_depth": 1,
@@ -5041,7 +5015,7 @@
     },
     {
       "exists": false,
-      "file": "D:\\projects\\vllm-architecture-agent\\vllm\\model_executor\\layers\\layernorm.py",
+      "file": "vllm/model_executor/layers/layernorm.py",
       "priority": 4,
       "reason": "imported from vllm.model_executor.layers.layernorm",
       "suggested_depth": 1,
@@ -5049,7 +5023,7 @@
     },
     {
       "exists": false,
-      "file": "D:\\projects\\vllm-architecture-agent\\vllm\\model_executor\\layers\\linear.py",
+      "file": "vllm/model_executor/layers/linear.py",
       "priority": 4,
       "reason": "imported from vllm.model_executor.layers.linear",
       "suggested_depth": 1,
@@ -5057,7 +5031,7 @@
     },
     {
       "exists": false,
-      "file": "D:\\projects\\vllm-architecture-agent\\vllm\\model_executor\\layers\\logits_processor.py",
+      "file": "vllm/model_executor/layers/logits_processor.py",
       "priority": 4,
       "reason": "imported from vllm.model_executor.layers.logits_processor",
       "suggested_depth": 1,
@@ -5065,7 +5039,7 @@
     },
     {
       "exists": false,
-      "file": "D:\\projects\\vllm-architecture-agent\\vllm\\model_executor\\layers\\quantization.py",
+      "file": "vllm/model_executor/layers/quantization.py",
       "priority": 4,
       "reason": "imported from vllm.model_executor.layers.quantization",
       "suggested_depth": 1,
@@ -5073,7 +5047,7 @@
     },
     {
       "exists": false,
-      "file": "D:\\projects\\vllm-architecture-agent\\vllm\\model_executor\\layers\\rotary_embedding.py",
+      "file": "vllm/model_executor/layers/rotary_embedding.py",
       "priority": 4,
       "reason": "imported from vllm.model_executor.layers.rotary_embedding",
       "suggested_depth": 1,
@@ -5081,7 +5055,7 @@
     },
     {
       "exists": false,
-      "file": "D:\\projects\\vllm-architecture-agent\\vllm\\model_executor\\layers\\vocab_parallel_embedding.py",
+      "file": "vllm/model_executor/layers/vocab_parallel_embedding.py",
       "priority": 4,
       "reason": "imported from vllm.model_executor.layers.vocab_parallel_embedding",
       "suggested_depth": 1,
@@ -5105,20 +5079,20 @@
     "source_sha256": "99be7c95901c8a778757360dcd2c28b805b3fbdc59bc5abd913cc3322fa13b48",
     "top_level_class_count": 6,
     "unindexed_nodes": [],
-    "weight_mapping_count": 69
+    "weight_mapping_count": 12
   },
   "source_sha256": "99be7c95901c8a778757360dcd2c28b805b3fbdc59bc5abd913cc3322fa13b48",
   "target": {
-    "models_root": "D:\\projects\\vllm-architecture-agent\\vllm\\model_executor\\models",
+    "models_root": "vllm/model_executor/models",
     "registered_architectures": [],
     "registered_classes": [],
     "registry_category": null,
-    "repo_root": "D:\\projects\\vllm-architecture-agent",
+    "repo_root": ".",
     "requested_architecture": null,
     "status": "resolved",
-    "target_file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+    "target_file": "samples/hy_v3.py",
     "warnings": [
-      "registry.py not found at D:\\projects\\vllm-architecture-agent\\vllm\\model_executor\\models\\registry.py"
+      "registry.py not found at vllm/model_executor/models/registry.py"
     ]
   },
   "traversal_defaults": {
@@ -5136,698 +5110,244 @@
     ]
   },
   "warnings": [
-    "registry.py not found at D:\\projects\\vllm-architecture-agent\\vllm\\model_executor\\models\\registry.py"
+    "registry.py not found at vllm/model_executor/models/registry.py"
   ],
   "weight_mappings": [
     {
       "architecture_relevance_candidate": "high",
-      "end_line": 139,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.__init__:139:1",
-      "owner_id": "method:HYV3MoEFused.__init__:127",
-      "source_summary": "self.n_routed_experts",
-      "start_line": 139,
-      "target_summary": "config.num_experts"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 144,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.__init__:141:2",
-      "owner_id": "method:HYV3MoEFused.__init__:127",
-      "source_summary": "ValueError",
-      "start_line": 141,
-      "target_summary": "f'Tensor parallel size {self.tp_size} is greater than the number of experts {config.num_experts}.'"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 145,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.__init__:145:3",
-      "owner_id": "method:HYV3MoEFused.__init__:127",
-      "source_summary": "top_k",
-      "start_line": 145,
-      "target_summary": "config.num_experts_per_tok"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 146,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.__init__:146:4",
-      "owner_id": "method:HYV3MoEFused.__init__:127",
-      "source_summary": "intermediate_size",
-      "start_line": 146,
-      "target_summary": "config.expert_hidden_dim"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 152,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.__init__:152:5",
-      "owner_id": "method:HYV3MoEFused.__init__:127",
-      "source_summary": "self.n_logical_experts",
-      "start_line": 152,
-      "target_summary": "self.n_routed_experts"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 153,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.__init__:153:6",
-      "owner_id": "method:HYV3MoEFused.__init__:127",
-      "source_summary": "self.n_redundant_experts",
-      "start_line": 153,
-      "target_summary": "eplb_config.num_redundant_experts"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 154,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.__init__:154:7",
-      "owner_id": "method:HYV3MoEFused.__init__:127",
-      "source_summary": "self.n_physical_experts",
-      "start_line": 154,
-      "target_summary": "self.n_logical_experts + self.n_redundant_experts"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 155,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.__init__:155:8",
-      "owner_id": "method:HYV3MoEFused.__init__:127",
-      "source_summary": "self.n_local_physical_experts",
-      "start_line": 155,
-      "target_summary": "self.n_physical_experts // self.ep_size"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 156,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.__init__:156:9",
-      "owner_id": "method:HYV3MoEFused.__init__:127",
-      "source_summary": "self.physical_expert_start",
-      "start_line": 156,
-      "target_summary": "self.ep_rank * self.n_local_physical_experts"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 159,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.__init__:157:10",
-      "owner_id": "method:HYV3MoEFused.__init__:127",
-      "source_summary": "self.physical_expert_end",
-      "start_line": 157,
-      "target_summary": "self.physical_expert_start + self.n_local_physical_experts"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 167,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.__init__:160:11",
-      "owner_id": "method:HYV3MoEFused.__init__:127",
-      "source_summary": "self.gate",
-      "start_line": 160,
-      "target_summary": "GateLinear(config.hidden_size, config.num_experts, bias=False, out_dtype=torch.float32, params_dtype=torch.float32, prefix=f'{prefix}.gate')"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 167,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.__init__:160:12",
-      "owner_id": "method:HYV3MoEFused.__init__:127",
-      "source_summary": "GateLinear",
-      "start_line": 160,
-      "target_summary": "config.hidden_size, config.num_experts"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 177,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.__init__:170:13",
-      "owner_id": "method:HYV3MoEFused.__init__:127",
-      "source_summary": "self.shared_mlp",
-      "start_line": 170,
-      "target_summary": "HYV3FeedForward(hidden_size=config.hidden_size, intermediate_size=config.expert_hidden_dim * config.num_shared_experts, hidden_act=config.hidden_act, quant_config=quant_config, prefix=f'{prefix}', reduce_results=False)"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 183,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.__init__:181:14",
-      "owner_id": "method:HYV3MoEFused.__init__:127",
-      "source_summary": "self.expert_bias",
-      "start_line": 181,
-      "target_summary": "nn.Parameter(torch.empty(config.num_experts, dtype=torch.float32))"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 183,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.__init__:181:15",
-      "owner_id": "method:HYV3MoEFused.__init__:127",
-      "source_summary": "nn.Parameter",
-      "start_line": 181,
-      "target_summary": "torch.empty(config.num_experts, dtype=torch.float32)"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 182,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.__init__:182:16",
-      "owner_id": "method:HYV3MoEFused.__init__:127",
-      "source_summary": "torch.empty",
-      "start_line": 182,
-      "target_summary": "config.num_experts"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 185,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.__init__:185:17",
-      "owner_id": "method:HYV3MoEFused.__init__:127",
-      "source_summary": "e_score_correction_bias",
-      "start_line": 185,
-      "target_summary": "self.expert_bias"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 205,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.__init__:187:18",
-      "owner_id": "method:HYV3MoEFused.__init__:127",
-      "source_summary": "self.experts",
-      "start_line": 187,
-      "target_summary": "FusedMoE(num_experts=self.n_routed_experts, top_k=top_k, hidden_size=config.hidden_size, intermediate_size=intermediate_size, renormalize=config.route_norm, quant_config=quant_config, prefix=f'{prefix}.experts', enable_eplb=self.enable_eplb, num_redundant_experts=self.n_redundant_experts, scoring_func=scoring_func, use_grouped_topk=True, num_expert_group=1, topk_group=1, routed_scaling_factor=router_scaling_factor, e_score_correction_bias=e_score_correction_bias, n_shared_experts=config.num_shared_experts, shared_experts=self.shared_mlp)"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 220,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.forward:218:1",
-      "owner_id": "method:HYV3MoEFused.forward:207",
-      "source_summary": "final_hidden_states",
-      "start_line": 218,
-      "target_summary": "self.experts(hidden_states=hidden_states, router_logits=router_logits)"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 220,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3MoEFused.forward:218:2",
-      "owner_id": "method:HYV3MoEFused.forward:207",
-      "source_summary": "self.experts",
-      "start_line": 218,
-      "target_summary": ""
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 446,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.__init__:446:1",
-      "owner_id": "method:HYV3Model.__init__:437",
-      "source_summary": "self.num_redundant_experts",
-      "start_line": 446,
-      "target_summary": "eplb_config.num_redundant_experts"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 473,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.__init__:473:2",
-      "owner_id": "method:HYV3Model.__init__:437",
-      "source_summary": "self.num_expert_groups",
-      "start_line": 473,
-      "target_summary": "1"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 483,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.__init__:483:3",
-      "owner_id": "method:HYV3Model.__init__:437",
-      "source_summary": "self.moe_layers.append",
-      "start_line": 483,
-      "target_summary": "layer.mlp.experts"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 490,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.__init__:490:4",
-      "owner_id": "method:HYV3Model.__init__:437",
-      "source_summary": "self.num_logical_experts",
-      "start_line": 490,
-      "target_summary": "getattr(example_layer, 'n_logical_experts', None)"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 490,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.__init__:490:5",
-      "owner_id": "method:HYV3Model.__init__:437",
-      "source_summary": "getattr",
-      "start_line": 490,
-      "target_summary": "example_layer, 'n_logical_experts', None"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 491,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.__init__:491:6",
-      "owner_id": "method:HYV3Model.__init__:437",
-      "source_summary": "self.num_physical_experts",
-      "start_line": 491,
-      "target_summary": "getattr(example_layer, 'n_physical_experts', None)"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 491,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.__init__:491:7",
-      "owner_id": "method:HYV3Model.__init__:437",
-      "source_summary": "getattr",
-      "start_line": 491,
-      "target_summary": "example_layer, 'n_physical_experts', None"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 494,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.__init__:492:8",
-      "owner_id": "method:HYV3Model.__init__:437",
-      "source_summary": "self.num_local_physical_experts",
-      "start_line": 492,
-      "target_summary": "getattr(example_layer, 'n_local_physical_experts', None)"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 494,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.__init__:492:9",
-      "owner_id": "method:HYV3Model.__init__:437",
-      "source_summary": "getattr",
-      "start_line": 492,
-      "target_summary": "example_layer, 'n_local_physical_experts', None"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 495,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.__init__:495:10",
-      "owner_id": "method:HYV3Model.__init__:437",
-      "source_summary": "self.num_routed_experts",
-      "start_line": 495,
-      "target_summary": "getattr(example_layer, 'n_routed_experts', None)"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 495,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.__init__:495:11",
-      "owner_id": "method:HYV3Model.__init__:437",
-      "source_summary": "getattr",
-      "start_line": 495,
-      "target_summary": "example_layer, 'n_routed_experts', None"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 496,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.__init__:496:12",
-      "owner_id": "method:HYV3Model.__init__:437",
-      "source_summary": "self.num_redundant_experts",
-      "start_line": 496,
-      "target_summary": "getattr(example_layer, 'n_redundant_experts', None)"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 496,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.__init__:496:13",
-      "owner_id": "method:HYV3Model.__init__:437",
-      "source_summary": "getattr",
-      "start_line": 496,
-      "target_summary": "example_layer, 'n_redundant_experts', None"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 507,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.update_physical_experts_metadata:507:1",
-      "owner_id": "method:HYV3Model.update_physical_experts_metadata:501",
-      "source_summary": "self.num_physical_experts",
-      "start_line": 507,
-      "target_summary": "num_physical_experts"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 508,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.update_physical_experts_metadata:508:2",
-      "owner_id": "method:HYV3Model.update_physical_experts_metadata:501",
-      "source_summary": "self.num_local_physical_experts",
-      "start_line": 508,
-      "target_summary": "num_local_physical_experts"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 509,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.update_physical_experts_metadata:509:3",
-      "owner_id": "method:HYV3Model.update_physical_experts_metadata:501",
-      "source_summary": "self.num_redundant_experts",
-      "start_line": 509,
-      "target_summary": "num_physical_experts - self.num_logical_experts"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 513,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.update_physical_experts_metadata:513:4",
-      "owner_id": "method:HYV3Model.update_physical_experts_metadata:501",
-      "source_summary": "moe.n_local_physical_experts",
-      "start_line": 513,
-      "target_summary": "num_local_physical_experts"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 514,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.update_physical_experts_metadata:514:5",
-      "owner_id": "method:HYV3Model.update_physical_experts_metadata:501",
-      "source_summary": "moe.n_physical_experts",
-      "start_line": 514,
-      "target_summary": "num_physical_experts"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 515,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.update_physical_experts_metadata:515:6",
-      "owner_id": "method:HYV3Model.update_physical_experts_metadata:501",
-      "source_summary": "moe.n_redundant_experts",
-      "start_line": 515,
-      "target_summary": "self.num_redundant_experts"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 516,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.update_physical_experts_metadata:516:7",
-      "owner_id": "method:HYV3Model.update_physical_experts_metadata:501",
-      "source_summary": "moe.experts.update_expert_map",
-      "start_line": 516,
-      "target_summary": ""
-    },
-    {
-      "architecture_relevance_candidate": "high",
       "end_line": 527,
+      "event_count": 1,
+      "evidence_ranges": [
+        {
+          "end_line": 527,
+          "start_line": 521
+        }
+      ],
       "kind": "expert_mapping",
       "mapping_id": "mapping:HYV3Model.get_expert_mapping:521:1",
       "owner_id": "method:HYV3Model.get_expert_mapping:518",
-      "source_summary": "fused_moe_make_expert_params_mapping",
+      "source_summary": "expert parameter names",
       "start_line": 521,
-      "target_summary": "self"
+      "target_summary": "expert_id / shard_id / FusedMoE parameters"
     },
     {
       "architecture_relevance_candidate": "high",
       "end_line": 571,
+      "event_count": 1,
+      "evidence_ranges": [
+        {
+          "end_line": 571,
+          "start_line": 564
+        }
+      ],
       "kind": "stacked_mapping",
       "mapping_id": "mapping:HYV3Model.load_weights:564:1",
       "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "stacked_params_mapping",
+      "source_summary": "q/k/v and gate/up checkpoint weights",
       "start_line": 564,
-      "target_summary": "[('.qkv_proj', '.q_proj', 'q'), ('.qkv_proj', '.k_proj', 'k'), ('.qkv_proj', '.v_proj', 'v'), ('.gate_up_proj', '.gate_proj', 0), ('.gate_up_proj', '.up_proj', 1)]"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 573,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.load_weights:573:2",
-      "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "expert_params_mapping",
-      "start_line": 573,
-      "target_summary": "self.get_expert_mapping()"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 573,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.load_weights:573:3",
-      "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "self.get_expert_mapping",
-      "start_line": 573,
-      "target_summary": ""
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 580,
-      "kind": "rename",
-      "mapping_id": "mapping:HYV3Model.load_weights:580:4",
-      "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "name",
-      "start_line": 580,
-      "target_summary": "maybe_remap_kv_scale_name(name, params_dict)"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 580,
-      "kind": "rename",
-      "mapping_id": "mapping:HYV3Model.load_weights:580:5",
-      "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "maybe_remap_kv_scale_name",
-      "start_line": 580,
-      "target_summary": "name, params_dict"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 589,
-      "kind": "rename",
-      "mapping_id": "mapping:HYV3Model.load_weights:589:6",
-      "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "name",
-      "start_line": 589,
-      "target_summary": "name.replace(weight_name, param_name)"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 589,
-      "kind": "rename",
-      "mapping_id": "mapping:HYV3Model.load_weights:589:7",
-      "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "name.replace",
-      "start_line": 589,
-      "target_summary": "weight_name, param_name"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 599,
-      "kind": "loader_dispatch",
-      "mapping_id": "mapping:HYV3Model.load_weights:599:8",
-      "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "weight_loader",
-      "start_line": 599,
-      "target_summary": "param.weight_loader"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 600,
-      "kind": "loader_dispatch",
-      "mapping_id": "mapping:HYV3Model.load_weights:600:9",
-      "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "weight_loader",
-      "start_line": 600,
-      "target_summary": "param, loaded_weight, shard_id"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 609,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.load_weights:609:10",
-      "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "is_expert_weight",
-      "start_line": 609,
-      "target_summary": "False"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 611,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.load_weights:611:11",
-      "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "(param_name, weight_name, expert_id, shard_id)",
-      "start_line": 611,
-      "target_summary": "mapping"
+      "target_summary": "qkv_proj / gate_up_proj"
     },
     {
       "architecture_relevance_candidate": "high",
       "end_line": 614,
+      "event_count": 5,
+      "evidence_ranges": [
+        {
+          "end_line": 573,
+          "start_line": 573
+        },
+        {
+          "end_line": 609,
+          "start_line": 609
+        },
+        {
+          "end_line": 611,
+          "start_line": 611
+        },
+        {
+          "end_line": 614,
+          "start_line": 614
+        }
+      ],
       "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.load_weights:614:12",
+      "mapping_id": "mapping:HYV3Model.load_weights:573:2",
       "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "is_expert_weight",
-      "start_line": 614,
-      "target_summary": "True"
+      "source_summary": "expert checkpoint weights",
+      "start_line": 573,
+      "target_summary": "expert_id / shard_id / FusedMoE parameters"
+    },
+    {
+      "architecture_relevance_candidate": "high",
+      "end_line": 580,
+      "event_count": 2,
+      "evidence_ranges": [
+        {
+          "end_line": 580,
+          "start_line": 580
+        }
+      ],
+      "kind": "rename",
+      "mapping_id": "mapping:HYV3Model.load_weights:580:3",
+      "owner_id": "method:HYV3Model.load_weights:563",
+      "source_summary": "FP8 scale checkpoint names",
+      "start_line": 580,
+      "target_summary": "normalized checkpoint parameter names"
     },
     {
       "architecture_relevance_candidate": "high",
       "end_line": 615,
+      "event_count": 3,
+      "evidence_ranges": [
+        {
+          "end_line": 589,
+          "start_line": 589
+        },
+        {
+          "end_line": 615,
+          "start_line": 615
+        }
+      ],
       "kind": "rename",
-      "mapping_id": "mapping:HYV3Model.load_weights:615:13",
+      "mapping_id": "mapping:HYV3Model.load_weights:589:4",
       "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "name_mapped",
-      "start_line": 615,
-      "target_summary": "name.replace(weight_name, param_name)"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 615,
-      "kind": "rename",
-      "mapping_id": "mapping:HYV3Model.load_weights:615:14",
-      "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "name.replace",
-      "start_line": 615,
-      "target_summary": "weight_name, param_name"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 621,
-      "kind": "loader_dispatch",
-      "mapping_id": "mapping:HYV3Model.load_weights:621:15",
-      "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "weight_loader",
-      "start_line": 621,
-      "target_summary": "typing.cast(Callable[..., bool], param.weight_loader)"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 621,
-      "kind": "loader_dispatch",
-      "mapping_id": "mapping:HYV3Model.load_weights:621:16",
-      "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "typing.cast",
-      "start_line": 621,
-      "target_summary": "Callable[..., bool], param.weight_loader"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 629,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3Model.load_weights:622:17",
-      "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "success",
-      "start_line": 622,
-      "target_summary": "weight_loader(param, loaded_weight, name_mapped, shard_id=shard_id, expert_id=expert_id, return_success=True)"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 629,
-      "kind": "loader_dispatch",
-      "mapping_id": "mapping:HYV3Model.load_weights:622:18",
-      "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "weight_loader",
-      "start_line": 622,
-      "target_summary": "param, loaded_weight, name_mapped"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 647,
-      "kind": "default_loader",
-      "mapping_id": "mapping:HYV3Model.load_weights:647:19",
-      "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "weight_loader",
-      "start_line": 647,
-      "target_summary": "getattr(param, 'weight_loader', default_weight_loader)"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 647,
-      "kind": "default_loader",
-      "mapping_id": "mapping:HYV3Model.load_weights:647:20",
-      "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "getattr",
-      "start_line": 647,
-      "target_summary": "param, 'weight_loader', default_weight_loader"
+      "source_summary": "checkpoint weights",
+      "start_line": 589,
+      "target_summary": "normalized checkpoint parameter names"
     },
     {
       "architecture_relevance_candidate": "high",
       "end_line": 648,
+      "event_count": 7,
+      "evidence_ranges": [
+        {
+          "end_line": 599,
+          "start_line": 599
+        },
+        {
+          "end_line": 600,
+          "start_line": 600
+        },
+        {
+          "end_line": 621,
+          "start_line": 621
+        },
+        {
+          "end_line": 629,
+          "start_line": 622
+        },
+        {
+          "end_line": 648,
+          "start_line": 648
+        }
+      ],
       "kind": "loader_dispatch",
-      "mapping_id": "mapping:HYV3Model.load_weights:648:21",
+      "mapping_id": "mapping:HYV3Model.load_weights:599:5",
       "owner_id": "method:HYV3Model.load_weights:563",
-      "source_summary": "weight_loader",
-      "start_line": 648,
-      "target_summary": "param, loaded_weight"
+      "source_summary": "matched parameter weights",
+      "start_line": 599,
+      "target_summary": "param.weight_loader or loader fallback"
     },
     {
       "architecture_relevance_candidate": "high",
-      "end_line": 669,
-      "kind": "expert_mapping",
-      "mapping_id": "mapping:HYV3ForCausalLM.__init__:669:1",
-      "owner_id": "method:HYV3ForCausalLM.__init__:660",
-      "source_summary": "self.num_redundant_experts",
-      "start_line": 669,
-      "target_summary": "eplb_config.num_redundant_experts"
+      "end_line": 615,
+      "event_count": 1,
+      "evidence_ranges": [
+        {
+          "end_line": 615,
+          "start_line": 615
+        }
+      ],
+      "kind": "skip",
+      "mapping_id": "mapping:HYV3Model.load_weights:615:6",
+      "owner_id": "method:HYV3Model.load_weights:563",
+      "source_summary": "pipeline-local missing parameters",
+      "start_line": 615,
+      "target_summary": "filtered loaded parameter stream"
     },
     {
-      "architecture_relevance_candidate": "medium",
-      "end_line": 681,
-      "kind": "unknown",
-      "mapping_id": "mapping:HYV3ForCausalLM.__init__:681:2",
-      "owner_id": "method:HYV3ForCausalLM.__init__:660",
-      "source_summary": "self.lm_head.weight",
-      "start_line": 681,
-      "target_summary": "self.model.embed_tokens.weight"
+      "architecture_relevance_candidate": "high",
+      "end_line": 647,
+      "event_count": 2,
+      "evidence_ranges": [
+        {
+          "end_line": 647,
+          "start_line": 647
+        }
+      ],
+      "kind": "default_loader",
+      "mapping_id": "mapping:HYV3Model.load_weights:647:7",
+      "owner_id": "method:HYV3Model.load_weights:563",
+      "source_summary": "unhandled parameter weights",
+      "start_line": 647,
+      "target_summary": "default_weight_loader fallback"
+    },
+    {
+      "architecture_relevance_candidate": "high",
+      "end_line": 658,
+      "event_count": 1,
+      "evidence_ranges": [
+        {
+          "end_line": 658,
+          "start_line": 655
+        }
+      ],
+      "kind": "packed_mapping",
+      "mapping_id": "mapping:HYV3ForCausalLM:655:1",
+      "owner_id": "class:HYV3ForCausalLM:654",
+      "source_summary": "class-level packed projection mapping",
+      "start_line": 655,
+      "target_summary": "packed vLLM module names"
     },
     {
       "architecture_relevance_candidate": "high",
       "end_line": 721,
-      "kind": "skip",
+      "event_count": 2,
+      "evidence_ranges": [
+        {
+          "end_line": 721,
+          "start_line": 718
+        }
+      ],
+      "kind": "automatic_loader",
       "mapping_id": "mapping:HYV3ForCausalLM.load_weights:718:1",
       "owner_id": "method:HYV3ForCausalLM.load_weights:710",
-      "source_summary": "loader",
+      "source_summary": "loaded checkpoint stream",
       "start_line": 718,
-      "target_summary": "AutoWeightsLoader(self, skip_prefixes=['lm_head.'] if self.config.tie_word_embeddings else None)"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 721,
-      "kind": "automatic_loader",
-      "mapping_id": "mapping:HYV3ForCausalLM.load_weights:718:2",
-      "owner_id": "method:HYV3ForCausalLM.load_weights:710",
-      "source_summary": "AutoWeightsLoader",
-      "start_line": 718,
-      "target_summary": "self"
+      "target_summary": "AutoWeightsLoader external boundary"
     },
     {
       "architecture_relevance_candidate": "high",
       "end_line": 722,
+      "event_count": 2,
+      "evidence_ranges": [
+        {
+          "end_line": 722,
+          "start_line": 722
+        }
+      ],
       "kind": "filter",
-      "mapping_id": "mapping:HYV3ForCausalLM.load_weights:722:3",
+      "mapping_id": "mapping:HYV3ForCausalLM.load_weights:722:2",
       "owner_id": "method:HYV3ForCausalLM.load_weights:710",
-      "source_summary": "loader.load_weights",
+      "source_summary": "checkpoint weight stream",
       "start_line": 722,
-      "target_summary": "_filter_weights(weights)"
-    },
-    {
-      "architecture_relevance_candidate": "high",
-      "end_line": 722,
-      "kind": "filter",
-      "mapping_id": "mapping:HYV3ForCausalLM.load_weights:722:4",
-      "owner_id": "method:HYV3ForCausalLM.load_weights:710",
-      "source_summary": "_filter_weights",
-      "start_line": 722,
-      "target_summary": "weights"
+      "target_summary": "filtered loaded parameter stream"
     },
     {
       "architecture_relevance_candidate": "high",
       "end_line": 725,
+      "event_count": 1,
+      "evidence_ranges": [
+        {
+          "end_line": 725,
+          "start_line": 725
+        }
+      ],
       "kind": "expert_mapping",
       "mapping_id": "mapping:HYV3ForCausalLM.get_expert_mapping:725:1",
       "owner_id": "method:HYV3ForCausalLM.get_expert_mapping:724",
-      "source_summary": "self.model.get_expert_mapping",
+      "source_summary": "expert parameter names",
       "start_line": 725,
-      "target_summary": ""
+      "target_summary": "expert_id / shard_id / FusedMoE parameters"
     }
   ]
 }

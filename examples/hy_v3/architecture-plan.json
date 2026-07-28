@@ -677,13 +677,6 @@
         "status": "rendered_aggregate"
       },
       {
-        "claim_ids": [],
-        "item_id": "capability:pooling",
-        "page_refs": [],
-        "reason": "embed_input_ids was detected as a generic pooling-like signal, but this causal LM example does not implement a pooling head.",
-        "status": "excluded_with_reason"
-      },
-      {
         "claim_ids": [
           "claim:configuration-capability-boundaries"
         ],
@@ -773,584 +766,6 @@
     "weight_mappings": [
       {
         "claim_ids": [
-          "claim:moe-construction-config",
-          "claim:moe-fused-composition"
-        ],
-        "item_id": "mapping:HYV3MoEFused.__init__:139:1",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-configuration"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:moe-construction-config",
-          "claim:moe-fused-composition"
-        ],
-        "item_id": "mapping:HYV3MoEFused.__init__:141:2",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-configuration"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:moe-construction-config",
-          "claim:moe-fused-composition"
-        ],
-        "item_id": "mapping:HYV3MoEFused.__init__:145:3",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-configuration"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:moe-construction-config",
-          "claim:moe-fused-composition"
-        ],
-        "item_id": "mapping:HYV3MoEFused.__init__:146:4",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-configuration"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:moe-construction-config",
-          "claim:moe-fused-composition"
-        ],
-        "item_id": "mapping:HYV3MoEFused.__init__:152:5",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-configuration"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:moe-construction-config",
-          "claim:moe-fused-composition"
-        ],
-        "item_id": "mapping:HYV3MoEFused.__init__:153:6",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-configuration"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:moe-construction-config",
-          "claim:moe-fused-composition"
-        ],
-        "item_id": "mapping:HYV3MoEFused.__init__:154:7",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-configuration"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:moe-construction-config",
-          "claim:moe-fused-composition"
-        ],
-        "item_id": "mapping:HYV3MoEFused.__init__:155:8",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-configuration"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:moe-construction-config",
-          "claim:moe-fused-composition"
-        ],
-        "item_id": "mapping:HYV3MoEFused.__init__:156:9",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-configuration"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:moe-construction-config",
-          "claim:moe-fused-composition"
-        ],
-        "item_id": "mapping:HYV3MoEFused.__init__:157:10",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-configuration"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:moe-construction-config",
-          "claim:moe-fused-composition"
-        ],
-        "item_id": "mapping:HYV3MoEFused.__init__:160:11",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-configuration"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:moe-construction-config",
-          "claim:moe-fused-composition"
-        ],
-        "item_id": "mapping:HYV3MoEFused.__init__:160:12",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-configuration"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:moe-construction-config",
-          "claim:moe-fused-composition"
-        ],
-        "item_id": "mapping:HYV3MoEFused.__init__:170:13",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-configuration"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:moe-construction-config",
-          "claim:moe-fused-composition"
-        ],
-        "item_id": "mapping:HYV3MoEFused.__init__:181:14",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-configuration"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:moe-construction-config",
-          "claim:moe-fused-composition"
-        ],
-        "item_id": "mapping:HYV3MoEFused.__init__:181:15",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-configuration"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:moe-construction-config",
-          "claim:moe-fused-composition"
-        ],
-        "item_id": "mapping:HYV3MoEFused.__init__:182:16",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-configuration"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:moe-construction-config",
-          "claim:moe-fused-composition"
-        ],
-        "item_id": "mapping:HYV3MoEFused.__init__:185:17",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-configuration"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:moe-construction-config",
-          "claim:moe-fused-composition"
-        ],
-        "item_id": "mapping:HYV3MoEFused.__init__:187:18",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-configuration"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:moe-runtime-routing"
-        ],
-        "item_id": "mapping:HYV3MoEFused.forward:218:1",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-runtime-routing"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:moe-runtime-routing"
-        ],
-        "item_id": "mapping:HYV3MoEFused.forward:218:2",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "moe-runtime-routing"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-composition"
-        ],
-        "item_id": "mapping:HYV3Model.__init__:446:1",
-        "page_refs": [
-          {
-            "page_id": "model-architecture-and-execution",
-            "region_id": "composition-tree"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-composition"
-        ],
-        "item_id": "mapping:HYV3Model.__init__:473:2",
-        "page_refs": [
-          {
-            "page_id": "model-architecture-and-execution",
-            "region_id": "composition-tree"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-composition"
-        ],
-        "item_id": "mapping:HYV3Model.__init__:483:3",
-        "page_refs": [
-          {
-            "page_id": "model-architecture-and-execution",
-            "region_id": "composition-tree"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-composition"
-        ],
-        "item_id": "mapping:HYV3Model.__init__:490:4",
-        "page_refs": [
-          {
-            "page_id": "model-architecture-and-execution",
-            "region_id": "composition-tree"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-composition"
-        ],
-        "item_id": "mapping:HYV3Model.__init__:490:5",
-        "page_refs": [
-          {
-            "page_id": "model-architecture-and-execution",
-            "region_id": "composition-tree"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-composition"
-        ],
-        "item_id": "mapping:HYV3Model.__init__:491:6",
-        "page_refs": [
-          {
-            "page_id": "model-architecture-and-execution",
-            "region_id": "composition-tree"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-composition"
-        ],
-        "item_id": "mapping:HYV3Model.__init__:491:7",
-        "page_refs": [
-          {
-            "page_id": "model-architecture-and-execution",
-            "region_id": "composition-tree"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-composition"
-        ],
-        "item_id": "mapping:HYV3Model.__init__:492:8",
-        "page_refs": [
-          {
-            "page_id": "model-architecture-and-execution",
-            "region_id": "composition-tree"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-composition"
-        ],
-        "item_id": "mapping:HYV3Model.__init__:492:9",
-        "page_refs": [
-          {
-            "page_id": "model-architecture-and-execution",
-            "region_id": "composition-tree"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-composition"
-        ],
-        "item_id": "mapping:HYV3Model.__init__:495:10",
-        "page_refs": [
-          {
-            "page_id": "model-architecture-and-execution",
-            "region_id": "composition-tree"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-composition"
-        ],
-        "item_id": "mapping:HYV3Model.__init__:495:11",
-        "page_refs": [
-          {
-            "page_id": "model-architecture-and-execution",
-            "region_id": "composition-tree"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-composition"
-        ],
-        "item_id": "mapping:HYV3Model.__init__:496:12",
-        "page_refs": [
-          {
-            "page_id": "model-architecture-and-execution",
-            "region_id": "composition-tree"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-composition"
-        ],
-        "item_id": "mapping:HYV3Model.__init__:496:13",
-        "page_refs": [
-          {
-            "page_id": "model-architecture-and-execution",
-            "region_id": "composition-tree"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:expert-parallel-metadata"
-        ],
-        "item_id": "mapping:HYV3Model.update_physical_experts_metadata:507:1",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "expert-parallel-metadata"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:expert-parallel-metadata"
-        ],
-        "item_id": "mapping:HYV3Model.update_physical_experts_metadata:508:2",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "expert-parallel-metadata"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:expert-parallel-metadata"
-        ],
-        "item_id": "mapping:HYV3Model.update_physical_experts_metadata:509:3",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "expert-parallel-metadata"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:expert-parallel-metadata"
-        ],
-        "item_id": "mapping:HYV3Model.update_physical_experts_metadata:513:4",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "expert-parallel-metadata"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:expert-parallel-metadata"
-        ],
-        "item_id": "mapping:HYV3Model.update_physical_experts_metadata:514:5",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "expert-parallel-metadata"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:expert-parallel-metadata"
-        ],
-        "item_id": "mapping:HYV3Model.update_physical_experts_metadata:515:6",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "expert-parallel-metadata"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:expert-parallel-metadata"
-        ],
-        "item_id": "mapping:HYV3Model.update_physical_experts_metadata:516:7",
-        "page_refs": [
-          {
-            "page_id": "moe-architecture-and-routing",
-            "region_id": "expert-parallel-metadata"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
           "claim:model-weight-dispatch"
         ],
         "item_id": "mapping:HYV3Model.get_expert_mapping:521:1",
@@ -1360,12 +775,13 @@
             "region_id": "model-weight-dispatch"
           }
         ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
+        "reason": "Reviewed as architecture-level mapping group with 1 source event(s).",
         "status": "rendered_aggregate"
       },
       {
         "claim_ids": [
-          "claim:model-weight-dispatch"
+          "claim:model-weight-dispatch",
+          "claim:weight-loading-policies"
         ],
         "item_id": "mapping:HYV3Model.load_weights:564:1",
         "page_refs": [
@@ -1374,12 +790,13 @@
             "region_id": "model-weight-dispatch"
           }
         ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
+        "reason": "Reviewed as architecture-level mapping group with 1 source event(s).",
         "status": "rendered_aggregate"
       },
       {
         "claim_ids": [
-          "claim:model-weight-dispatch"
+          "claim:model-weight-dispatch",
+          "claim:weight-loading-policies"
         ],
         "item_id": "mapping:HYV3Model.load_weights:573:2",
         "page_refs": [
@@ -1388,21 +805,35 @@
             "region_id": "model-weight-dispatch"
           }
         ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
+        "reason": "Reviewed as architecture-level mapping group with 5 source event(s).",
         "status": "rendered_aggregate"
       },
       {
         "claim_ids": [
-          "claim:model-weight-dispatch"
+          "claim:weight-loading-policies"
         ],
-        "item_id": "mapping:HYV3Model.load_weights:573:3",
+        "item_id": "mapping:HYV3Model.load_weights:580:3",
         "page_refs": [
           {
             "page_id": "parallelism-configuration-and-weight-loading",
             "region_id": "model-weight-dispatch"
           }
         ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
+        "reason": "Reviewed as architecture-level mapping group with 2 source event(s).",
+        "status": "rendered_aggregate"
+      },
+      {
+        "claim_ids": [
+          "claim:weight-loading-policies"
+        ],
+        "item_id": "mapping:HYV3Model.load_weights:589:4",
+        "page_refs": [
+          {
+            "page_id": "parallelism-configuration-and-weight-loading",
+            "region_id": "model-weight-dispatch"
+          }
+        ],
+        "reason": "Reviewed as architecture-level mapping group with 3 source event(s).",
         "status": "rendered_aggregate"
       },
       {
@@ -1410,14 +841,28 @@
           "claim:model-weight-dispatch",
           "claim:weight-loading-policies"
         ],
-        "item_id": "mapping:HYV3Model.load_weights:580:4",
+        "item_id": "mapping:HYV3Model.load_weights:599:5",
         "page_refs": [
           {
             "page_id": "parallelism-configuration-and-weight-loading",
             "region_id": "model-weight-dispatch"
           }
         ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
+        "reason": "Reviewed as architecture-level mapping group with 7 source event(s).",
+        "status": "rendered_aggregate"
+      },
+      {
+        "claim_ids": [
+          "claim:weight-loading-policies"
+        ],
+        "item_id": "mapping:HYV3Model.load_weights:615:6",
+        "page_refs": [
+          {
+            "page_id": "parallelism-configuration-and-weight-loading",
+            "region_id": "model-weight-dispatch"
+          }
+        ],
+        "reason": "Reviewed as architecture-level mapping group with 1 source event(s).",
         "status": "rendered_aggregate"
       },
       {
@@ -1425,272 +870,28 @@
           "claim:model-weight-dispatch",
           "claim:weight-loading-policies"
         ],
-        "item_id": "mapping:HYV3Model.load_weights:580:5",
+        "item_id": "mapping:HYV3Model.load_weights:647:7",
         "page_refs": [
           {
             "page_id": "parallelism-configuration-and-weight-loading",
             "region_id": "model-weight-dispatch"
           }
         ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-weight-dispatch",
-          "claim:weight-loading-policies"
-        ],
-        "item_id": "mapping:HYV3Model.load_weights:589:6",
-        "page_refs": [
-          {
-            "page_id": "parallelism-configuration-and-weight-loading",
-            "region_id": "model-weight-dispatch"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-weight-dispatch",
-          "claim:weight-loading-policies"
-        ],
-        "item_id": "mapping:HYV3Model.load_weights:589:7",
-        "page_refs": [
-          {
-            "page_id": "parallelism-configuration-and-weight-loading",
-            "region_id": "model-weight-dispatch"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
+        "reason": "Reviewed as architecture-level mapping group with 2 source event(s).",
         "status": "rendered_aggregate"
       },
       {
         "claim_ids": [
           "claim:model-weight-dispatch"
         ],
-        "item_id": "mapping:HYV3Model.load_weights:599:8",
+        "item_id": "mapping:HYV3ForCausalLM:655:1",
         "page_refs": [
           {
             "page_id": "parallelism-configuration-and-weight-loading",
             "region_id": "model-weight-dispatch"
           }
         ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-weight-dispatch"
-        ],
-        "item_id": "mapping:HYV3Model.load_weights:600:9",
-        "page_refs": [
-          {
-            "page_id": "parallelism-configuration-and-weight-loading",
-            "region_id": "model-weight-dispatch"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-weight-dispatch"
-        ],
-        "item_id": "mapping:HYV3Model.load_weights:609:10",
-        "page_refs": [
-          {
-            "page_id": "parallelism-configuration-and-weight-loading",
-            "region_id": "model-weight-dispatch"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-weight-dispatch"
-        ],
-        "item_id": "mapping:HYV3Model.load_weights:611:11",
-        "page_refs": [
-          {
-            "page_id": "parallelism-configuration-and-weight-loading",
-            "region_id": "model-weight-dispatch"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-weight-dispatch"
-        ],
-        "item_id": "mapping:HYV3Model.load_weights:614:12",
-        "page_refs": [
-          {
-            "page_id": "parallelism-configuration-and-weight-loading",
-            "region_id": "model-weight-dispatch"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-weight-dispatch",
-          "claim:weight-loading-policies"
-        ],
-        "item_id": "mapping:HYV3Model.load_weights:615:13",
-        "page_refs": [
-          {
-            "page_id": "parallelism-configuration-and-weight-loading",
-            "region_id": "model-weight-dispatch"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-weight-dispatch",
-          "claim:weight-loading-policies"
-        ],
-        "item_id": "mapping:HYV3Model.load_weights:615:14",
-        "page_refs": [
-          {
-            "page_id": "parallelism-configuration-and-weight-loading",
-            "region_id": "model-weight-dispatch"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-weight-dispatch"
-        ],
-        "item_id": "mapping:HYV3Model.load_weights:621:15",
-        "page_refs": [
-          {
-            "page_id": "parallelism-configuration-and-weight-loading",
-            "region_id": "model-weight-dispatch"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-weight-dispatch"
-        ],
-        "item_id": "mapping:HYV3Model.load_weights:621:16",
-        "page_refs": [
-          {
-            "page_id": "parallelism-configuration-and-weight-loading",
-            "region_id": "model-weight-dispatch"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-weight-dispatch"
-        ],
-        "item_id": "mapping:HYV3Model.load_weights:622:17",
-        "page_refs": [
-          {
-            "page_id": "parallelism-configuration-and-weight-loading",
-            "region_id": "model-weight-dispatch"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-weight-dispatch"
-        ],
-        "item_id": "mapping:HYV3Model.load_weights:622:18",
-        "page_refs": [
-          {
-            "page_id": "parallelism-configuration-and-weight-loading",
-            "region_id": "model-weight-dispatch"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-weight-dispatch",
-          "claim:weight-loading-policies"
-        ],
-        "item_id": "mapping:HYV3Model.load_weights:647:19",
-        "page_refs": [
-          {
-            "page_id": "parallelism-configuration-and-weight-loading",
-            "region_id": "model-weight-dispatch"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-weight-dispatch",
-          "claim:weight-loading-policies"
-        ],
-        "item_id": "mapping:HYV3Model.load_weights:647:20",
-        "page_refs": [
-          {
-            "page_id": "parallelism-configuration-and-weight-loading",
-            "region_id": "model-weight-dispatch"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-weight-dispatch"
-        ],
-        "item_id": "mapping:HYV3Model.load_weights:648:21",
-        "page_refs": [
-          {
-            "page_id": "parallelism-configuration-and-weight-loading",
-            "region_id": "model-weight-dispatch"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-composition"
-        ],
-        "item_id": "mapping:HYV3ForCausalLM.__init__:669:1",
-        "page_refs": [
-          {
-            "page_id": "model-architecture-and-execution",
-            "region_id": "composition-tree"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-composition"
-        ],
-        "item_id": "mapping:HYV3ForCausalLM.__init__:681:2",
-        "page_refs": [
-          {
-            "page_id": "model-architecture-and-execution",
-            "region_id": "composition-tree"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
+        "reason": "Reviewed as architecture-level mapping group with 1 source event(s).",
         "status": "rendered_aggregate"
       },
       {
@@ -1704,54 +905,27 @@
             "region_id": "wrapper-weight-loading"
           }
         ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
+        "reason": "Reviewed as architecture-level mapping group with 2 source event(s).",
         "status": "rendered_aggregate"
       },
       {
         "claim_ids": [
-          "claim:wrapper-weight-loading"
+          "claim:weight-loading-policies"
         ],
-        "item_id": "mapping:HYV3ForCausalLM.load_weights:718:2",
+        "item_id": "mapping:HYV3ForCausalLM.load_weights:722:2",
         "page_refs": [
           {
             "page_id": "parallelism-configuration-and-weight-loading",
             "region_id": "wrapper-weight-loading"
           }
         ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
+        "reason": "Reviewed as architecture-level mapping group with 2 source event(s).",
         "status": "rendered_aggregate"
       },
       {
         "claim_ids": [
-          "claim:wrapper-weight-loading"
-        ],
-        "item_id": "mapping:HYV3ForCausalLM.load_weights:722:3",
-        "page_refs": [
-          {
-            "page_id": "parallelism-configuration-and-weight-loading",
-            "region_id": "wrapper-weight-loading"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:wrapper-weight-loading"
-        ],
-        "item_id": "mapping:HYV3ForCausalLM.load_weights:722:4",
-        "page_refs": [
-          {
-            "page_id": "parallelism-configuration-and-weight-loading",
-            "region_id": "wrapper-weight-loading"
-          }
-        ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
-        "status": "rendered_aggregate"
-      },
-      {
-        "claim_ids": [
-          "claim:model-weight-dispatch"
+          "claim:model-weight-dispatch",
+          "claim:weight-loading-policies"
         ],
         "item_id": "mapping:HYV3ForCausalLM.get_expert_mapping:725:1",
         "page_refs": [
@@ -1760,14 +934,14 @@
             "region_id": "model-weight-dispatch"
           }
         ],
-        "reason": "Reviewed and aggregated into the mapped loading/configuration/detail region.",
+        "reason": "Reviewed as architecture-level mapping group with 1 source event(s).",
         "status": "rendered_aggregate"
       }
     ]
   },
   "detail_level": "complete",
   "files_read": [
-    "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py"
+    "samples/hy_v3.py"
   ],
   "function_review": [],
   "global_boundaries": [
@@ -1919,7 +1093,7 @@
       "claim_ids": [
         "claim:model-runtime-pipeline"
       ],
-      "importance": "core",
+      "importance": "supporting",
       "method_id": "method:HYV3Model.embed_input_ids:498",
       "page_refs": [
         {
@@ -1927,8 +1101,8 @@
           "region_id": "end-to-end-runtime"
         }
       ],
-      "reason": "Reviewed and mapped to the listed detail region.",
-      "status": "rendered_detail"
+      "reason": "Reviewed as a supporting delegation/helper and aggregated into the relevant detail region.",
+      "status": "rendered_aggregate"
     },
     {
       "claim_ids": [
@@ -1949,7 +1123,7 @@
       "claim_ids": [
         "claim:model-weight-dispatch"
       ],
-      "importance": "core",
+      "importance": "supporting",
       "method_id": "method:HYV3Model.get_expert_mapping:518",
       "page_refs": [
         {
@@ -1957,8 +1131,8 @@
           "region_id": "model-weight-dispatch"
         }
       ],
-      "reason": "Reviewed and mapped to the listed detail region.",
-      "status": "rendered_detail"
+      "reason": "Reviewed as a supporting delegation/helper and aggregated into the relevant detail region.",
+      "status": "rendered_aggregate"
     },
     {
       "claim_ids": [
@@ -2011,7 +1185,7 @@
       "claim_ids": [
         "claim:model-runtime-pipeline"
       ],
-      "importance": "core",
+      "importance": "supporting",
       "method_id": "method:HYV3ForCausalLM.embed_input_ids:687",
       "page_refs": [
         {
@@ -2019,14 +1193,14 @@
           "region_id": "end-to-end-runtime"
         }
       ],
-      "reason": "Reviewed and mapped to the listed detail region.",
-      "status": "rendered_detail"
+      "reason": "Reviewed as a supporting delegation/helper and aggregated into the relevant detail region.",
+      "status": "rendered_aggregate"
     },
     {
       "claim_ids": [
         "claim:model-runtime-pipeline"
       ],
-      "importance": "core",
+      "importance": "supporting",
       "method_id": "method:HYV3ForCausalLM.forward:690",
       "page_refs": [
         {
@@ -2034,8 +1208,8 @@
           "region_id": "end-to-end-runtime"
         }
       ],
-      "reason": "Reviewed and mapped to the listed detail region.",
-      "status": "rendered_detail"
+      "reason": "Reviewed as a supporting delegation/helper and aggregated into the relevant detail region.",
+      "status": "rendered_aggregate"
     },
     {
       "claim_ids": [
@@ -2071,7 +1245,7 @@
       "claim_ids": [
         "claim:model-weight-dispatch"
       ],
-      "importance": "core",
+      "importance": "supporting",
       "method_id": "method:HYV3ForCausalLM.get_expert_mapping:724",
       "page_refs": [
         {
@@ -2079,8 +1253,8 @@
           "region_id": "model-weight-dispatch"
         }
       ],
-      "reason": "Reviewed and mapped to the listed detail region.",
-      "status": "rendered_detail"
+      "reason": "Reviewed as a supporting delegation/helper and aggregated into the relevant detail region.",
+      "status": "rendered_aggregate"
     }
   ],
   "model_category": [
@@ -2369,8 +1543,9 @@
           "id": "fused-moe-composition",
           "question": "Which expert components are contained by FusedMoE?",
           "source_item_ids": [
+            "method:HYV3MoEFused.__init__:127",
             "branch:HYV3MoEFused.__init__:169:2",
-            "mapping:HYV3MoEFused.__init__:187:18"
+            "capability:moe"
           ],
           "title": "FusedMoE Composition",
           "type": "nested_container",
@@ -2521,7 +1696,8 @@
           "source_item_ids": [
             "method:HYV3Model.load_weights:563",
             "mapping:HYV3Model.load_weights:564:1",
-            "mapping:HYV3Model.load_weights:573:2"
+            "mapping:HYV3Model.load_weights:573:2",
+            "mapping:HYV3Model.load_weights:599:5"
           ],
           "title": "Model Weight Dispatch",
           "type": "mapping_tree",
@@ -2567,15 +1743,12 @@
   ],
   "schema_version": "2.1",
   "source_sha256": "99be7c95901c8a778757360dcd2c28b805b3fbdc59bc5abd913cc3322fa13b48",
-  "target_file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
+  "target_file": "samples/hy_v3.py",
   "traversal_notes": [
     {
-      "file": "D:\\projects\\vllm-architecture-agent\\samples\\hy_v3.py",
-      "reason": "Read complete target file and used Source Context coverage to review every class, method, branch, mapping and detected capability."
-    },
-    {
-      "file": "external vLLM components",
-      "reason": "Stopped at imported Attention, FusedMoE, AutoWeightsLoader and weight_loader boundaries; local code proves delegation but not internals."
+      "file": "samples/hy_v3.py",
+      "reason": "Complete target file reviewed via class, method, branch, mapping and capability catalogs.",
+      "stop_reason": "Imported vLLM runtime internals were treated as documented external boundaries for this sample."
     }
   ],
   "unresolved": []

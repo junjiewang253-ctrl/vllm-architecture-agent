@@ -23,6 +23,11 @@ from vllm_architecture_agent.patterns import (  # noqa: E402
     classify_model_source,
     detect_capabilities,
 )
+from vllm_architecture_agent.paths import (  # noqa: E402
+    portable_resolution,
+    scrub_repo_absolute_strings,
+    to_artifact_path,
+)
 
 CORE_METHOD_NAMES = {
     "__init__",
@@ -32,7 +37,6 @@ CORE_METHOD_NAMES = {
     "get_expert_mapping",
     "update_physical_experts_metadata",
     "pooling",
-    "embed_input_ids",
     "encode",
     "encoder",
 }
@@ -168,6 +172,133 @@ def _mapping_relevance(kind: str) -> str:
     return "high" if kind != "unknown" else "medium"
 
 
+def _owner_qualified_name(owner_id: str) -> str:
+    if owner_id.startswith("method:") or owner_id.startswith("function:") or owner_id.startswith("class:"):
+        return owner_id.split(":", 1)[1].rsplit(":", 1)[0]
+    return owner_id
+
+
+def _mapping_group(item: dict[str, Any]) -> tuple[str, str, str]:
+    """Return a stable architecture-level group for raw mapping events."""
+
+    owner = _owner_qualified_name(str(item.get("owner_id", "")))
+    owner_lower = owner.lower()
+    lowered = f"{item.get('source_summary', '')} {item.get('target_summary', '')}".lower()
+    if item.get("kind") == "packed_mapping":
+        return "packed_mapping", "packed modules mapping", "class-level packed projection mapping"
+    if "load_weights" in owner_lower:
+        if "autoweightsloader" in lowered:
+            return "automatic_loader", "automatic loader delegation", "loaded checkpoint stream"
+        if "default_weight_loader" in lowered:
+            return "default_loader", "default loader fallback", "unhandled parameter weights"
+        if "weight_loader" in lowered:
+            return "loader_dispatch", "parameter loader dispatch", "matched parameter weights"
+        if "packed_modules_mapping" in lowered:
+            return "packed_mapping", "packed modules mapping", "checkpoint projection families"
+        if any(term in lowered for term in ("qkv_proj", "gate_up_proj", "stacked_params_mapping", "q_proj", "k_proj", "v_proj", "gate_proj", "up_proj")):
+            return "stacked_mapping", "stacked parameter dispatch", "q/k/v and gate/up checkpoint weights"
+        if "expert" in lowered or "experts" in lowered:
+            return "expert_mapping", "expert parameter dispatch", "expert checkpoint weights"
+        if "scale" in lowered or "remap" in lowered:
+            return "rename", "scale-name remap", "FP8 scale checkpoint names"
+        if "router.gate" in lowered or ("router" in lowered and "replace" in lowered):
+            return "rename", "router gate rename", "router checkpoint names"
+        if "bias" in lowered:
+            return "skip", "missing bias skip policy", "bias checkpoint weights"
+        if "pp" in lowered or "missing" in lowered:
+            return "skip", "pipeline missing parameter skip", "pipeline-local missing parameters"
+        if "filter" in lowered or "skip" in lowered or "continue" in lowered:
+            return "filter", "weight filtering policy", "checkpoint weight stream"
+        return str(item.get("kind", "unknown")), "weight loading group", "checkpoint weights"
+    if "get_expert_mapping" in owner_lower:
+        return "expert_mapping", "expert mapping factory", "expert parameter names"
+    if "update" in owner_lower and "expert" in owner_lower:
+        return "unknown", "__ignore__", ""
+    kind = str(item.get("kind", "unknown"))
+    if kind == "packed_mapping":
+        return kind, "packed modules mapping", "checkpoint projection families"
+    if kind == "stacked_mapping":
+        return kind, "stacked parameter mapping", "checkpoint projection families"
+    if kind == "expert_mapping":
+        return "unknown", "__ignore__", ""
+    if kind in {"filter", "skip"}:
+        return kind, "loading filter or skip policy", "checkpoint weights"
+    if kind in {"loader_dispatch", "default_loader", "automatic_loader"}:
+        return kind, "loader dispatch", "checkpoint weights"
+    return "unknown", "__ignore__", ""
+
+
+def _mapping_target_summary(kind: str, label: str) -> str:
+    if kind == "automatic_loader":
+        return "AutoWeightsLoader external boundary"
+    if kind == "default_loader":
+        return "default_weight_loader fallback"
+    if kind == "loader_dispatch":
+        return "param.weight_loader or loader fallback"
+    if kind == "packed_mapping":
+        return "packed vLLM module names"
+    if kind == "stacked_mapping":
+        return "qkv_proj / gate_up_proj"
+    if kind == "expert_mapping":
+        return "expert_id / shard_id / FusedMoE parameters"
+    if kind == "rename":
+        return "normalized checkpoint parameter names"
+    if kind in {"filter", "skip"}:
+        return "filtered loaded parameter stream"
+    return label
+
+
+def _group_weight_mappings(raw_mappings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    labels: dict[tuple[str, str], tuple[str, str, str]] = {}
+    for item in raw_mappings:
+        kind, label, source_summary = _mapping_group(item)
+        if label == "__ignore__":
+            continue
+        key = (str(item.get("owner_id", "")), label)
+        groups.setdefault(key, []).append(item)
+        labels[key] = (kind, label, source_summary)
+
+    grouped: list[dict[str, Any]] = []
+    owner_counts: dict[str, int] = {}
+    for key, items in sorted(groups.items(), key=lambda pair: (min(item["start_line"] for item in pair[1]), pair[0])):
+        owner_id, label = key
+        kind, _, source_summary = labels[key]
+        owner_name = _owner_qualified_name(owner_id)
+        owner_counts[owner_name] = owner_counts.get(owner_name, 0) + 1
+        start_line = min(int(item["start_line"]) for item in items)
+        end_line = max(int(item["end_line"]) for item in items)
+        evidence_ranges = sorted(
+            {
+                (int(item["start_line"]), int(item["end_line"]))
+                for item in items
+            }
+        )
+        relevance_order = {"low": 0, "medium": 1, "high": 2}
+        relevance = max(
+            (str(item.get("architecture_relevance_candidate", "medium")) for item in items),
+            key=lambda value: relevance_order.get(value, 1),
+        )
+        grouped.append(
+            {
+                "mapping_id": f"mapping:{owner_name}:{start_line}:{owner_counts[owner_name]}",
+                "owner_id": owner_id,
+                "kind": kind,
+                "source_summary": source_summary,
+                "target_summary": _mapping_target_summary(kind, label),
+                "start_line": start_line,
+                "end_line": end_line,
+                "architecture_relevance_candidate": relevance,
+                "event_count": len(items),
+                "evidence_ranges": [
+                    {"start_line": start, "end_line": end}
+                    for start, end in evidence_ranges
+                ],
+            }
+        )
+    return grouped
+
+
 def _parameters(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
     params = [arg.arg for arg in node.args.posonlyargs + node.args.args]
     if node.args.vararg:
@@ -176,6 +307,37 @@ def _parameters(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
     if node.args.kwarg:
         params.append("**" + node.args.kwarg.arg)
     return params
+
+
+def _is_simple_delegate_method(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    calls: list[dict[str, Any]],
+    branches: list[dict[str, Any]],
+    assignments: list[dict[str, Any]],
+) -> bool:
+    if assignments or any(item["architecture_relevance_candidate"] in {"high", "medium"} for item in branches):
+        return False
+    statements = [stmt for stmt in node.body if not isinstance(stmt, ast.Expr) or not isinstance(getattr(stmt, "value", None), ast.Constant)]
+    if len(statements) != 1:
+        if len(statements) == 2 and isinstance(statements[0], ast.Assign) and isinstance(statements[1], ast.Return):
+            assign = statements[0]
+            returned = statements[1].value
+            if (
+                isinstance(assign.value, ast.Call)
+                and len(assign.targets) == 1
+                and isinstance(assign.targets[0], ast.Name)
+                and isinstance(returned, ast.Name)
+                and assign.targets[0].id == returned.id
+            ):
+                return True
+        return False
+    stmt = statements[0]
+    if isinstance(stmt, ast.Return):
+        value = stmt.value
+        return isinstance(value, ast.Call) or isinstance(value, ast.Attribute) or isinstance(value, ast.Subscript)
+    if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+        return True
+    return len(calls) == 1 and _end_line(node) - node.lineno <= 5
 
 
 def _importance(
@@ -187,6 +349,17 @@ def _importance(
     reasons: list[str] = []
     name = node.name
     lowered = name.lower()
+    if name == "compute_logits":
+        reasons.append("compute_logits output boundary")
+        if calls:
+            reasons.append("calls output components")
+        return "core", reasons
+    if _is_simple_delegate_method(node, calls, branches, assignments):
+        if name == "get_expert_mapping":
+            return "supporting", ["simple expert mapping delegation"]
+        if name.startswith("get_") or name.endswith("size"):
+            return "trivial", ["simple property-like delegate"]
+        return "supporting", ["simple delegation helper"]
     if name in CORE_METHOD_NAMES:
         reasons.append(f"{name} entrypoint")
     if name == "__init__" and assignments:
@@ -439,6 +612,11 @@ class CatalogVisitor(ast.NodeVisitor):
         )
         self.class_stack.append((qualified_name, class_id))
         for child in node.body:
+            if isinstance(child, ast.Assign):
+                self._capture_class_assignment(class_id, qualified_name, child.targets, child.value, child.lineno, _end_line(child))
+            elif isinstance(child, ast.AnnAssign) and child.value is not None:
+                self._capture_class_assignment(class_id, qualified_name, [child.target], child.value, child.lineno, _end_line(child))
+        for child in node.body:
             if isinstance(child, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
                 self.visit(child)
         self.class_stack.pop()
@@ -513,6 +691,34 @@ class CatalogVisitor(ast.NodeVisitor):
         self.loops.extend(inspector.loops)
         self.module_assignments.extend(inspector.module_assignments)
         self.weight_mappings.extend(inspector.weight_mappings)
+
+    def _capture_class_assignment(
+        self,
+        class_id: str,
+        qualified_name: str,
+        targets: list[ast.AST],
+        value: ast.AST,
+        start: int,
+        end: int,
+    ) -> None:
+        target_names = [_unparse(target) for target in targets]
+        expression = _unparse(value)
+        lowered = " ".join(target_names + [expression]).lower()
+        if not any(term in lowered for term in ("mapping", "weight", "loader", "shard", "expert", "remap", "filter")):
+            return
+        kind = _mapping_kind(lowered)
+        self.weight_mappings.append(
+            {
+                "mapping_id": f"mapping:{qualified_name}:{start}:{len(self.weight_mappings) + 1}",
+                "owner_id": class_id,
+                "kind": kind,
+                "source_summary": ", ".join(target_names),
+                "target_summary": expression,
+                "start_line": start,
+                "end_line": end,
+                "architecture_relevance_candidate": _mapping_relevance(kind),
+            }
+        )
 
 
 def _extract_imports(tree: ast.Module) -> list[dict[str, Any]]:
@@ -621,6 +827,7 @@ def _classification(classes: list[dict[str, Any]], source_text: str) -> dict[str
         "category_candidates": category_candidates,
         "status": status,
         "reason": "classified from class names and generic vLLM capability terms",
+        "repository_context": "unknown",
     }
 
 
@@ -699,10 +906,11 @@ def _source_coverage(
     return coverage, warnings
 
 
-def _empty_context(resolution: dict[str, Any], warnings: list[str]) -> dict[str, Any]:
+def _empty_context(resolution: dict[str, Any], warnings: list[str], repo_root: Path | None = None) -> dict[str, Any]:
+    portable_target = portable_resolution(resolution, repo_root.resolve()) if repo_root else resolution
     return {
         "schema_version": "2.1",
-        "target": resolution,
+        "target": portable_target,
         "source_sha256": "",
         "source_coverage": {
             "source_sha256": "",
@@ -722,7 +930,7 @@ def _empty_context(resolution: dict[str, Any], warnings: list[str]) -> dict[str,
             "all_module_functions_indexed": True,
             "unindexed_nodes": [],
         },
-        "classification": {"status": "unsupported", "category_candidates": []},
+        "classification": {"status": "unsupported", "category_candidates": [], "repository_context": "unknown"},
         "classes": [],
         "methods": [],
         "module_functions": [],
@@ -733,11 +941,11 @@ def _empty_context(resolution: dict[str, Any], warnings: list[str]) -> dict[str,
         "module_assignments": [],
         "control_flow_landmarks": [],
         "weight_mappings": [],
-        "registry_info": resolution,
+        "registry_info": portable_target,
         "capability_signals": {},
         "related_file_candidates": [],
         "traversal_defaults": {"max_depth": 3, "default_related_file_count": 20, "max_related_file_count": 30},
-        "warnings": warnings,
+        "warnings": scrub_repo_absolute_strings(warnings, repo_root.resolve()) if repo_root else warnings,
     }
 
 
@@ -779,16 +987,19 @@ def _control_flow_landmarks(catalog: CatalogVisitor) -> list[dict[str, Any]]:
 
 
 def collect_source_context(repo_root: Path, resolution: dict[str, Any]) -> dict[str, Any]:
+    repo_root = repo_root.resolve()
     target_file_value = resolution.get("target_file")
     if not target_file_value:
-        return _empty_context(resolution, ["target could not be resolved"])
+        return _empty_context(resolution, ["target could not be resolved"], repo_root)
     target_file = Path(target_file_value)
+    if not target_file.is_absolute():
+        target_file = repo_root / target_file
     warnings = list(resolution.get("warnings", []))
     try:
         source_text = target_file.read_text(encoding="utf-8-sig")
         tree = ast.parse(source_text, filename=str(target_file))
     except (OSError, SyntaxError) as exc:
-        return _empty_context(resolution, warnings + [f"failed to parse target file: {exc}"])
+        return _empty_context(resolution, warnings + [f"failed to parse target file: {exc}"], repo_root)
 
     lines = source_text.splitlines()
     source_sha256 = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
@@ -796,6 +1007,7 @@ def collect_source_context(repo_root: Path, resolution: dict[str, Any]) -> dict[
     for node in tree.body:
         if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
             catalog.visit(node)
+    catalog.weight_mappings = _group_weight_mappings(catalog.weight_mappings)
     coverage, coverage_warnings = _source_coverage(source_sha256, tree, catalog)
     warnings.extend(coverage_warnings)
 
@@ -805,11 +1017,16 @@ def collect_source_context(repo_root: Path, resolution: dict[str, Any]) -> dict[
         signal["capability_id"] = f"capability:{name}"
         signal["evidence_lines"] = _line_evidence(source_text, list(signal["evidence_terms"]))
     classification = _classification(catalog.classes, source_text)
-    if warnings and classification["status"] == "full":
+    classification["repository_context"] = "partial" if warnings else "full"
+    if coverage_warnings and classification["status"] == "full":
         classification["status"] = "partial"
+    portable_target = portable_resolution(resolution, repo_root)
+    related_candidates = _related_file_candidates(repo_root, target_file.resolve(), imports)
+    for candidate in related_candidates:
+        candidate["file"] = to_artifact_path(candidate["file"], repo_root)
     context = {
         "schema_version": "2.1",
-        "target": resolution,
+        "target": portable_target,
         "source_sha256": source_sha256,
         "source_coverage": coverage,
         "classification": classification,
@@ -823,9 +1040,9 @@ def collect_source_context(repo_root: Path, resolution: dict[str, Any]) -> dict[
         "module_assignments": sorted(catalog.module_assignments, key=lambda item: (item["line"], item["assignment_id"])),
         "control_flow_landmarks": _control_flow_landmarks(catalog),
         "weight_mappings": sorted(catalog.weight_mappings, key=lambda item: (item["start_line"], item["mapping_id"])),
-        "registry_info": resolution,
+        "registry_info": portable_target,
         "capability_signals": capabilities,
-        "related_file_candidates": _related_file_candidates(repo_root.resolve(), target_file.resolve(), imports),
+        "related_file_candidates": related_candidates,
         "traversal_defaults": {
             "max_depth": 3,
             "default_related_file_count": 20,
@@ -840,7 +1057,7 @@ def collect_source_context(repo_root: Path, resolution: dict[str, Any]) -> dict[
                 "external runtime components",
             ],
         },
-        "warnings": warnings,
+        "warnings": scrub_repo_absolute_strings(warnings, repo_root),
     }
     if not catalog.classes:
         context["classification"]["status"] = "helper"

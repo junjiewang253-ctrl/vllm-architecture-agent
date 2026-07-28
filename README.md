@@ -1,97 +1,99 @@
 # vLLM Architecture Agent
 
-Agent-native Skill for source-grounded vLLM model adapter architecture diagrams.
+Agent-native Codex Skill for source-grounded vLLM model adapter architecture diagrams.
 
-Version 2.1 generates a small set of complete, high-density architecture
-diagrams. The default is not a simple overview and not a pile of one-page-per
-method details. Codex reviews the complete target file, chooses 3 to 5 composite
-pages for full models, and draws with Draw.io MCP.
-
-## Short Instruction
+Recommended mentor demo command:
 
 ```text
-使用 $vllm-model-architecture-diagram 以 complete 模式分析 <模型文件或 Architecture 名称>，
-生成 3～5 张少页、高密度、包含关键实现细节的架构图。
+使用 $vllm-model-architecture-diagram 分析 samples/hy_v3.py，
+生成默认架构图。
 ```
 
-## What Scripts Do
+By default, the Skill runs in complete mode, reviews every indexed class and method in the target file, writes Architecture Plan and Evidence artifacts, draws with Draw.io MCP, performs at least one visual review pass, validates the result, and writes outputs to `outputs/hy-v3/`.
 
-Scripts keep the workflow grounded:
+## What v2.1.1 Produces
 
-- resolve a model file or registry architecture;
-- index every class, method, module-level function, branch, mapping and
-  capability candidate in the target file;
-- generate a review checklist;
-- validate the Agent-authored plan and evidence;
-- validate Draw.io structure and exported images;
-- scan model directories without importing vLLM.
+For the HY V3 example, the default deliverable is four high-density composite diagrams:
 
-Scripts do not choose final pages, semantic nodes, edges or layout.
+1. `Model Architecture and Execution`
+2. `Decoder and Attention`
+3. `MoE Architecture and Routing`
+4. `Parallelism, Configuration and Weight Loading`
 
-## What Codex Does
+The diagrams are not a simple overview and not a one-page-per-method dump. Codex decides the page clustering and visual design, while scripts only index source structure and validate evidence.
 
-Codex reads the source, completes class/method/function review, decides page
-clustering, writes `architecture-plan.json` and `evidence.json`, draws with
-Draw.io MCP, reviews the first PNG draft, and writes `report.md`.
-
-Content that does not enter a diagram must still have a reason in the plan. No
-silent omission is allowed.
-
-## CLI
-
-The default `vllm-arch` command exposes only four commands:
-
-```powershell
-vllm-arch list-models --repo-root D:\path\to\vllm
-vllm-arch prepare --repo-root D:\path\to\vllm --input D:\path\to\vllm\vllm\model_executor\models\model_file.py --outputs-dir outputs\model
-vllm-arch prepare --repo-root D:\path\to\vllm --architecture SomeForCausalLM --outputs-dir outputs\some-model
-vllm-arch validate --context outputs\model\source-context.json --plan outputs\model\architecture-plan.json --evidence outputs\model\evidence.json --drawio outputs\model\architecture.drawio --images-dir outputs\model\images
-vllm-arch scan --repo-root D:\path\to\vllm --output outputs\compatibility-report.json
-```
-
-The CLI never imports vLLM, torch, transformers or CUDA-dependent modules.
-
-## Outputs
-
-Default per-model output:
+Default outputs:
 
 ```text
 outputs/<model>/
-├── source-context.json
-├── architecture-plan.json
-├── evidence.json
-├── architecture.drawio
-├── report.md
-├── visual-review.md
-└── images/
+  source-context.json
+  architecture-plan.json
+  evidence.json
+  architecture.drawio
+  report.md
+  visual-review.md
+  images/
 ```
 
-`prepare` creates `architecture-plan.template.json` and
-`evidence.template.json`. Codex fills the final Plan and Evidence after reading
-source.
+The portable golden example lives in `examples/hy_v3/` and contains the same artifact types plus four PNG exports.
 
-## Compatibility
+## Responsibilities
 
-v2.1 targets `vllm/model_executor/models/*.py` and supports file input or
-registry architecture names. It handles decoder-only, MoE, embedding/pooling,
-classification, multimodal, speculative, hybrid/recurrent, attention-free,
-custom loading and helper/shared modules by producing different Source Context
-and letting Codex choose different page sets.
+Scripts:
 
-## External Boundaries
+- resolve model files or registry architecture names;
+- statically index classes, methods, functions, branches, mapping groups and capabilities;
+- generate empty Plan/Evidence checklists;
+- validate Architecture Plan, Evidence, Draw.io structure and PNG exports;
+- scan model directories without importing vLLM, torch, transformers or CUDA.
 
-External runtime internals are not direct claims unless Codex actually reads the
-relevant local file. Imported attention backends, fused expert runtimes,
-automatic loaders, schedulers, workers, engine internals and kernels must be
-documented as external boundaries when not analyzed.
+Codex:
+
+- reads the complete target file and any needed related files;
+- decides the architecture interpretation and page set;
+- fills `architecture-plan.json` and `evidence.json`;
+- draws and edits Draw.io pages through MCP;
+- performs visual review and writes `report.md`.
+
+## Installation For Codex Development
+
+On Windows PowerShell:
+
+```powershell
+.\tools\setup-codex-dev.ps1
+```
+
+The script installs the package in editable mode and creates `.agents/skills/vllm-model-architecture-diagram` as a local link to the canonical Skill source.
+
+Check Draw.io MCP separately:
+
+```powershell
+codex mcp list
+```
+
+## Advanced Reproduction
+
+The default CLI intentionally has only four commands:
+
+```powershell
+vllm-arch list-models --repo-root <vllm-root>
+vllm-arch prepare --input samples\hy_v3.py --outputs-dir outputs\hy-v3 --model-name hy-v3
+vllm-arch validate --repo-root . --context examples\hy_v3\source-context.json --plan examples\hy_v3\architecture-plan.json --evidence examples\hy_v3\evidence.json --drawio examples\hy_v3\architecture.drawio --images-dir examples\hy_v3\images
+vllm-arch scan --repo-root <vllm-root> --output outputs\compatibility-report.json
+```
+
+`prepare` creates `architecture-plan.template.json` and `evidence.template.json`. Codex fills the final Plan and Evidence after source review.
+
+## Validation
+
+Run:
+
+```powershell
+pytest
+```
+
+Current v2.1.1 tests include portable paths, relocatable HY V3 example validation, method importance precision, mapping group aggregation, capability precision and Draw.io validation.
 
 ## Legacy
 
-The v0.4 through v1.2 compiler-style pipeline is preserved under:
-
-```text
-legacy/compiler-pipeline-v1/
-```
-
-It is retained for history and comparison only. It is not the default Skill,
-not the default CLI, and not part of default pytest.
+The old compiler-style pipeline is archived under `legacy/compiler-pipeline-v1/`. It is retained for history only and is not imported by the default v2.x Skill, CLI or tests.

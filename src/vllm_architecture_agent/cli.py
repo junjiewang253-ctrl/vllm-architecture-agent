@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from vllm_architecture_agent import __version__
+from vllm_architecture_agent.paths import infer_repo_root
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -42,7 +43,8 @@ def _print_table(entries: list[dict[str, Any]]) -> None:
 
 def cmd_list_models(args: argparse.Namespace) -> int:
     resolver = _load_script("resolve_model_target")
-    entries, warnings = resolver.list_registry_models(args.repo_root)
+    repo_root = infer_repo_root(explicit=args.repo_root)
+    entries, warnings = resolver.list_registry_models(repo_root)
     if args.filter:
         needle = args.filter.lower()
         entries = [
@@ -67,12 +69,16 @@ def cmd_list_models(args: argparse.Namespace) -> int:
 def cmd_prepare(args: argparse.Namespace) -> int:
     resolver = _load_script("resolve_model_target")
     collector = _load_script("collect_source_context")
+    if args.repo_root is None and args.architecture:
+        print("--repo-root is required when resolving by architecture name", file=sys.stderr)
+        return 2
+    repo_root = infer_repo_root(explicit=args.repo_root, start=args.input)
     resolution = resolver.resolve_model_target(
-        args.repo_root,
+        repo_root,
         input_path=args.input,
         architecture=args.architecture,
     )
-    context = collector.collect_source_context(args.repo_root, resolution)
+    context = collector.collect_source_context(repo_root, resolution)
     args.outputs_dir.mkdir(parents=True, exist_ok=True)
     model_name = args.model_name or args.architecture
     if not model_name:
@@ -90,6 +96,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
     context = None
     plan = None
     evidence = None
+    repo_root = infer_repo_root(explicit=args.repo_root, context_path=args.context or args.plan or args.evidence or args.drawio)
     if args.context and args.context.exists():
         context = json.loads(args.context.read_text(encoding="utf-8"))
     if args.plan and args.plan.exists():
@@ -97,7 +104,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
     if args.evidence and args.evidence.exists():
         evidence = json.loads(args.evidence.read_text(encoding="utf-8"))
         evidence_mod = _load_script("validate_evidence")
-        errors, warnings, summary = evidence_mod.validate_evidence(evidence, context=context, plan=plan)
+        errors, warnings, summary = evidence_mod.validate_evidence(evidence, context=context, plan=plan, repo_root=repo_root)
         for warning in warnings:
             print(f"WARNING: {warning}")
         if errors:
@@ -108,7 +115,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
             print(f"Evidence validation passed: {json.dumps(summary, sort_keys=True)}")
     if args.plan and args.plan.exists():
         plan_mod = _load_script("validate_architecture_plan")
-        errors, warnings = plan_mod.validate_plan(plan, evidence=evidence, context=context)
+        errors, warnings = plan_mod.validate_plan(plan, evidence=evidence, context=context, repo_root=repo_root)
         for warning in warnings:
             print(f"WARNING: {warning}")
         if errors:
@@ -134,7 +141,8 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 def cmd_scan(args: argparse.Namespace) -> int:
     scanner = _load_script("scan_models_directory")
-    report = scanner.scan_models_directory(args.repo_root)
+    repo_root = infer_repo_root(explicit=args.repo_root)
+    report = scanner.scan_models_directory(repo_root)
     _write_json(args.output, report)
     print(f"Compatibility report written to {args.output}")
     return 0 if report["summary"]["failures"] == 0 else 1
@@ -153,7 +161,7 @@ def build_parser() -> argparse.ArgumentParser:
     list_models.set_defaults(func=cmd_list_models)
 
     prepare = subparsers.add_parser("prepare", help="Resolve a target and collect Source Context")
-    prepare.add_argument("--repo-root", required=True, type=Path)
+    prepare.add_argument("--repo-root", type=Path)
     target = prepare.add_mutually_exclusive_group(required=True)
     target.add_argument("--input", type=Path)
     target.add_argument("--architecture")
@@ -162,6 +170,7 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.set_defaults(func=cmd_prepare)
 
     validate = subparsers.add_parser("validate", help="Validate context, plan, evidence, and Draw.io outputs")
+    validate.add_argument("--repo-root", type=Path)
     validate.add_argument("--context", type=Path)
     validate.add_argument("--plan", type=Path)
     validate.add_argument("--evidence", type=Path)

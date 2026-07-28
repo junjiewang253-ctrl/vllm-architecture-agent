@@ -6,13 +6,11 @@ import argparse
 import ast
 import json
 import sys
-from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 
-@dataclass(frozen=True)
-class RegistryEntry:
+class RegistryEntry(NamedTuple):
     architecture: str
     module: str
     class_name: str
@@ -158,7 +156,7 @@ def parse_registry(registry_path: Path) -> tuple[list[RegistryEntry], list[str]]
 
 def list_registry_models(repo_root: Path) -> tuple[list[dict[str, str]], list[str]]:
     entries, warnings = parse_registry(_registry_path(repo_root))
-    return [asdict(entry) for entry in sorted(entries, key=lambda item: item.architecture)], warnings
+    return [dict(entry._asdict()) for entry in sorted(entries, key=lambda item: item.architecture)], warnings
 
 
 def _candidate_matches(architecture: str, entries: list[RegistryEntry]) -> list[str]:

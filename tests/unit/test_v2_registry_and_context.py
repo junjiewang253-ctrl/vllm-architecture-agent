@@ -5,6 +5,8 @@ import json
 import shutil
 from pathlib import Path
 
+from vllm_architecture_agent.patterns import detect_capabilities
+
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "src" / "skills" / "vllm-model-architecture-diagram" / "scripts"
@@ -99,6 +101,7 @@ def test_context_collector_detects_distinct_model_categories(tmp_path: Path) -> 
     assert dense["source_coverage"]["all_classes_indexed"] is True
     assert dense["source_coverage"]["all_methods_indexed"] is True
     assert dense["source_coverage"]["unindexed_nodes"] == []
+    assert dense["capability_signals"]["pooling"]["detected"] is False
     assert "pages" not in dense
 
     moe = collector.collect_source_context(repo, resolver.resolve_model_target(repo, architecture="MoeForCausalLM"))
@@ -202,3 +205,36 @@ def test_branch_and_weight_mapping_catalog(tmp_path: Path) -> None:
     mapping_kinds = {item["kind"] for item in context["weight_mappings"]}
     assert "rename" in mapping_kinds
     assert "default_loader" in mapping_kinds or "loader_dispatch" in mapping_kinds
+    assert len(context["weight_mappings"]) <= 6
+    assert all(item["event_count"] >= 1 for item in context["weight_mappings"])
+    assert all(item["evidence_ranges"] for item in context["weight_mappings"])
+
+
+def test_method_importance_distinguishes_delegates_and_output_boundary(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    resolver = load_script("resolve_model_target")
+    collector = load_script("collect_source_context")
+    context = collector.collect_source_context(repo, resolver.resolve_model_target(repo, architecture="DenseForCausalLM"))
+
+    methods = {item["qualified_name"]: item["importance_candidate"] for item in context["methods"]}
+    assert methods["DenseModel.forward"] == "core"
+    assert methods["DenseForCausalLM.forward"] == "supporting"
+    assert methods["DenseForCausalLM.compute_logits"] == "core"
+
+
+def test_capability_detection_precision() -> None:
+    embedding_only = detect_capabilities("def embed_input_ids(self, input_ids): return self.embed_tokens(input_ids)")
+    assert embedding_only["pooling"]["detected"] is False
+
+    explicit_pooling = detect_capabilities("self.pooler = PoolingHead(config.hidden_size)\ndef pooling(self, hidden_states): pass")
+    assert explicit_pooling["pooling"]["detected"] is True
+
+    fused_moe_only = detect_capabilities("self.experts = FusedMoE(num_experts=config.num_experts)")
+    assert fused_moe_only["moe"]["detected"] is True
+    assert fused_moe_only["expert_parallel"]["detected"] is False
+
+    ep_group = detect_capabilities("self.ep_group = get_ep_group(); self.ep_rank = self.ep_group.rank")
+    assert ep_group["expert_parallel"]["detected"] is True
+
+    variable_name_only = detect_capabilities("attn_mask = mask")
+    assert variable_name_only["custom_attention"]["detected"] is False

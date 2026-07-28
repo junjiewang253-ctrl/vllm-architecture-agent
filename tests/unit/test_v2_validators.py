@@ -262,16 +262,16 @@ def valid_plan(context: dict) -> dict:
 
 
 def test_plan_and_evidence_validators_pass(tmp_path: Path) -> None:
-    _, context = make_context(tmp_path)
+    repo, context = make_context(tmp_path)
     evidence = valid_evidence(context)
     plan = valid_plan(context)
 
     evidence_mod = load_script("validate_evidence")
     plan_mod = load_script("validate_architecture_plan")
-    errors, _, summary = evidence_mod.validate_evidence(evidence, context=context, plan=plan)
+    errors, _, summary = evidence_mod.validate_evidence(evidence, context=context, plan=plan, repo_root=repo)
     assert errors == []
     assert summary == {"direct": 1, "derived": 1, "external": 1}
-    plan_errors, _ = plan_mod.validate_plan(plan, evidence=evidence, context=context)
+    plan_errors, _ = plan_mod.validate_plan(plan, evidence=evidence, context=context, repo_root=repo)
     assert plan_errors == []
     coverage = plan_mod.summarize_coverage(plan, context)
     assert coverage["classes"]["unreviewed"] == 0
@@ -279,7 +279,7 @@ def test_plan_and_evidence_validators_pass(tmp_path: Path) -> None:
 
 
 def test_direct_import_only_evidence_fails(tmp_path: Path) -> None:
-    _, context = make_context(tmp_path)
+    repo, context = make_context(tmp_path)
     evidence = valid_evidence(context)
     evidence["claims"][0]["evidence"] = [
         {
@@ -292,55 +292,55 @@ def test_direct_import_only_evidence_fails(tmp_path: Path) -> None:
     ]
 
     evidence_mod = load_script("validate_evidence")
-    errors, _, _ = evidence_mod.validate_evidence(evidence, context=context, plan=valid_plan(context))
+    errors, _, _ = evidence_mod.validate_evidence(evidence, context=context, plan=valid_plan(context), repo_root=repo)
     assert any("import lines" in error for error in errors)
 
 
 def test_completeness_validator_catches_missing_method_review(tmp_path: Path) -> None:
-    _, context = make_context(tmp_path)
+    repo, context = make_context(tmp_path)
     evidence = valid_evidence(context)
     plan = valid_plan(context)
     plan["method_review"] = plan["method_review"][:-1]
 
     plan_mod = load_script("validate_architecture_plan")
-    errors, _ = plan_mod.validate_plan(plan, evidence=evidence, context=context)
+    errors, _ = plan_mod.validate_plan(plan, evidence=evidence, context=context, repo_root=repo)
     assert any("missing method review" in error for error in errors)
 
 
 def test_core_method_cannot_be_excluded(tmp_path: Path) -> None:
-    _, context = make_context(tmp_path)
+    repo, context = make_context(tmp_path)
     evidence = valid_evidence(context)
     plan = valid_plan(context)
     plan["method_review"][0]["status"] = "excluded_with_reason"
     plan["method_review"][0]["reason"] = "bad idea"
 
     plan_mod = load_script("validate_architecture_plan")
-    errors, _ = plan_mod.validate_plan(plan, evidence=evidence, context=context)
+    errors, _ = plan_mod.validate_plan(plan, evidence=evidence, context=context, repo_root=repo)
     assert any("core methods must be rendered" in error for error in errors)
 
 
 def test_bad_page_ref_fails(tmp_path: Path) -> None:
-    _, context = make_context(tmp_path)
+    repo, context = make_context(tmp_path)
     evidence = valid_evidence(context)
     plan = valid_plan(context)
     plan["class_review"][0]["page_refs"] = _ref("overview", "missing")
 
     plan_mod = load_script("validate_architecture_plan")
-    errors, _ = plan_mod.validate_plan(plan, evidence=evidence, context=context)
+    errors, _ = plan_mod.validate_plan(plan, evidence=evidence, context=context, repo_root=repo)
     assert any("unknown page/region" in error for error in errors)
 
 
 def test_source_hash_mismatch_fails(tmp_path: Path) -> None:
-    _, context = make_context(tmp_path)
+    repo, context = make_context(tmp_path)
     evidence = valid_evidence(context)
     plan = valid_plan(context)
     plan["source_sha256"] = "not-the-source"
 
     plan_mod = load_script("validate_architecture_plan")
     evidence_mod = load_script("validate_evidence")
-    errors, _ = plan_mod.validate_plan(plan, evidence=evidence, context=context)
+    errors, _ = plan_mod.validate_plan(plan, evidence=evidence, context=context, repo_root=repo)
     assert any("source_sha256" in error for error in errors)
-    evidence_errors, _, _ = evidence_mod.validate_evidence(evidence, context=context, plan=plan)
+    evidence_errors, _, _ = evidence_mod.validate_evidence(evidence, context=context, plan=plan, repo_root=repo)
     assert any("source_sha256" in error for error in evidence_errors)
 
 
@@ -406,7 +406,7 @@ def test_branch_mapping_capability_manifest_required(tmp_path: Path) -> None:
     ]
     plan["coverage_manifest"] = {"branches": [], "weight_mappings": [], "capabilities": [], "external_boundaries": []}
     plan_mod = load_script("validate_architecture_plan")
-    errors, _ = plan_mod.validate_plan(plan, evidence=evidence, context=context)
+    errors, _ = plan_mod.validate_plan(plan, evidence=evidence, context=context, repo_root=repo)
     assert any("coverage_manifest.branches missing" in error for error in errors)
     assert any("coverage_manifest.weight_mappings missing" in error for error in errors)
 

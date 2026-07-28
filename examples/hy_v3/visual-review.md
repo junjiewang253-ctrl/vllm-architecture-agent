@@ -2,26 +2,37 @@
 
 ## Draft 1 Findings
 
-- Page 2, `Decoder and Attention`: the residual initialization note overlapped the `Decoder Output` node, and the HPC/fallback edge labels crowded the attention branch nodes.
-- Page 3, `MoE Architecture and Routing`: container helper edges crossed the FusedMoE composition panel, and the GateLinear to Router Logits route initially crossed node text.
-- Page headers used a combined title/question line that was too visually heavy.
+- Page 1, `Model Architecture and Execution`: first-rank input preparation and non-first-rank `IntermediateTensors` were visually stacked, which could be read as a serial PP path.
+- Page 1, `Class and Component Composition`: the component list did not make containment clear enough, and the optional embedding/LM-head tied weight was not visible.
+- Page 2, `Decoder and Attention`: residual handling was only described by a note instead of a visible residual lane.
+- Page 2, `Attention Forward Detail`: the HPC path reached the backend, but KV cache write/read boundary was not explicit enough; the first visual fix also produced a crowded edge label.
+- Page 3, `MoE Architecture and Routing`: `GateLinear` appeared in both construction and runtime areas, which could imply two instances.
+- Page 3, `MoE Architecture and Routing`: runtime `FusedMoE` and the composition/external runtime boundary needed an explicit relationship, and EP metadata needed to point to expert placement or the FusedMoE boundary.
+- Page 4, `Parallelism, Configuration and Weight Loading`: the configuration panel included development wording about a missing LoRA-to-checkpoint edge; TP/PP/EP panels were too sentence-like.
 
-## Revision Applied
+## Revision Round 1
 
-- Split page titles and engineering questions into separate header lines.
-- Moved the Decoder residual note below the main decoder lane and increased the Decoder Output node height.
-- Removed visible branch labels from the crowded attention edges and kept the branch meaning inside the nodes.
-- Removed redundant containment edges inside the FusedMoE composition boundary.
-- Re-routed the GateLinear to Router Logits connection as a short local arrow that no longer cuts through the main label.
+- Reworked Page 1 so first PP rank and non-first PP rank are side-by-side mutually exclusive entry modes that merge before the local decoder slice.
+- Added dashed containment lines in the composition region and a dashed optional tied-weight relationship from embedding to the LM head.
+- Added a residual bus on Page 2: residual initialization, input RMSNorm handoff, post-attention RMSNorm handoff and residual output.
+- Added explicit KV cache write and external KV cache read boundary markers in the attention detail.
+- Changed Page 3 construction text to `Router configuration / GateLinear(num_experts)` and connected it by a dashed configuration edge to the single runtime `GateLinear`.
+- Added dashed delegation from runtime `FusedMoE` to the external fused runtime boundary, plus metadata edges from EP placement/update to the expert placement boundary.
+- Removed the development note from Page 4 and rewrote TP/PP/EP panels as compact structured strategy summaries.
+
+## Revision Round 2
+
+- Removed the crowded `external read boundary` edge label on Page 2 and shortened the backend label to keep the fallback path readable.
+- Shortened Page 4 strategy and capability panel text to avoid long wrapped paragraphs while preserving the same evidence-backed content.
 
 ## Final Review
 
-- All four plan pages are present and exported as PNG.
-- Every planned detail region title is visible in the corresponding page.
-- The diagrams distinguish runtime tensor flow, construction/configuration dependency, loading flow and external boundaries.
-- No large concept-card-only page remains; each page has a main story plus detail regions.
-- Residual, Q/K/V fallback, V bypass, FusedMoE containment, independent TP/PP/EP panels and two separate weight-loading entrypoints are represented.
+- All four planned pages are present and exported as PNG with white backgrounds.
+- Every planned detail region title appears in the corresponding Draw.io page.
+- Runtime tensor flow, loading flow, construction/configuration dependency, parallel metadata and external delegation use distinct visual treatments.
+- The final diagrams show PP entry alternatives, residual handoff, HPC/fallback attention, V bypass, KV cache boundary, FusedMoE containment, EP metadata, independent TP/PP/EP panels and two separate weight-loading entrypoints.
+- No page is a concept-card-only summary; each page has a main story plus detail regions.
 
-## Residual Risk
+## Remaining Risk
 
-- The MoE runtime region is intentionally dense; the GateLinear, Router Logits and FusedMoE inputs are readable after routing cleanup, but this area is the tightest part of the example.
+- Pages 2 and 4 are intentionally dense. The high-density layout favors completeness, so small screens should use zoom rather than reading the exported PNG at thumbnail size.

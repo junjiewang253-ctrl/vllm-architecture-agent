@@ -4,9 +4,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
+
+SRC_DIR = Path(__file__).resolve().parents[3]
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from vllm_architecture_agent.paths import resolve_repo_path  # noqa: E402
 
 VALID_PATTERNS = {
     "pipeline",
@@ -232,9 +239,11 @@ def validate_plan(
     plan: dict[str, Any],
     evidence: dict[str, Any] | None = None,
     context: dict[str, Any] | None = None,
+    repo_root: Path | None = None,
 ) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
+    repo_root = repo_root.resolve() if repo_root else Path.cwd().resolve()
     if plan.get("schema_version") != "2.1":
         errors.append("plan.schema_version must be 2.1")
     if plan.get("detail_level") not in {"overview", "standard", "complete"}:
@@ -463,10 +472,10 @@ def validate_plan(
             errors.append(f"coverage_manifest.capabilities {item_id}: reason required")
 
     if evidence and files_read:
-        files_read_resolved = {str(Path(path).resolve()) for path in files_read}
+        files_read_resolved = {str(resolve_repo_path(repo_root, path).resolve()) for path in files_read}
         for claim in evidence.get("claims", []):
             for entry in claim.get("evidence", []):
-                if str(Path(entry.get("file", "")).resolve()) not in files_read_resolved:
+                if str(resolve_repo_path(repo_root, entry.get("file", "")).resolve()) not in files_read_resolved:
                     errors.append(f"claim {claim.get('id')} evidence file is not listed in plan.files_read: {entry.get('file')}")
     if len({page.get("purpose") for page in pages}) < len(pages):
         warnings.append("some page purposes are duplicated")
@@ -478,12 +487,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("plan", type=Path)
     parser.add_argument("--evidence", type=Path)
     parser.add_argument("--context", type=Path)
+    parser.add_argument("--repo-root", type=Path)
     args = parser.parse_args(argv)
 
     plan = _load_json(args.plan)
     evidence = _load_json(args.evidence) if args.evidence else None
     context = _load_json(args.context) if args.context else None
-    errors, warnings = validate_plan(plan, evidence=evidence, context=context)
+    errors, warnings = validate_plan(plan, evidence=evidence, context=context, repo_root=args.repo_root)
     for warning in warnings:
         print(f"WARNING: {warning}")
     if errors:

@@ -16,7 +16,7 @@ The sample is outside a real vLLM repository checkout, so registry lookup is par
 - Methods indexed: 20 / 20
 - Module functions indexed: 0 / 0
 - Branches catalogued: 37
-- Weight mappings catalogued: 69
+- Weight mapping groups catalogued: 12
 - Unindexed nodes: 0
 
 ## Review Coverage
@@ -25,8 +25,9 @@ The sample is outside a real vLLM repository checkout, so registry lookup is par
 - Method reviews: 20 total, 0 unreviewed
 - Function reviews: 0 total, 0 unreviewed
 - Required high/medium branches: 30, covered: 37 manifest entries
-- Weight mappings: 69 total, covered: 69
-- Detected capabilities: 10, covered: 10
+- Method importance candidates: 15 core, 5 supporting, 0 trivial
+- Weight mapping groups: 12 total, covered: 12
+- Detected capabilities: 9, covered: 9
 - Unresolved items: 0
 
 ## Evidence Summary
@@ -41,19 +42,19 @@ External claims are used for imported vLLM runtime internals. The local file pro
 
 1. `Model Architecture and Execution`
    - Regions: `Class and Component Composition`, `End-to-End Runtime`, `Output Boundary`
-   - Shows wrapper/body composition, PP rank variants, local decoder execution, final add/norm, and logits processing.
+   - Shows wrapper/body containment, mutually exclusive PP input modes, local decoder execution, final add/norm, optional tied embedding weight, and logits processing.
 
 2. `Decoder and Attention`
    - Regions: `Decoder Runtime`, `FFN Construction Variant`, `Dense FFN Internal Flow`, `Attention Construction Panel`, `Attention Forward Detail`
-   - Shows hidden/residual lanes, construction-time Dense-vs-MoE selection, Dense FFN internals, attention configuration, HPC/fallback paths, V bypass and vLLM Attention boundary.
+   - Shows hidden/residual lanes, two fused RMSNorm residual handoffs, construction-time Dense-vs-MoE selection, Dense FFN internals, attention configuration, HPC/fallback paths, V bypass, KV cache boundary and vLLM Attention boundary.
 
 3. `MoE Architecture and Routing`
    - Regions: `Construction and Configuration`, `Runtime Routing`, `FusedMoE Composition`, `Expert Parallel Metadata`
-   - Shows routing parameters, flatten/gate/router logits, FusedMoE as a container with routed and optional shared experts, and EP metadata.
+   - Shows routing parameters, flatten/gate/router logits, a single runtime GateLinear, FusedMoE as a container with routed and optional shared experts, and EP metadata linked to expert placement.
 
 4. `Parallelism, Configuration and Weight Loading`
    - Regions: `Tensor Parallel Strategy`, `Pipeline Parallel Strategy`, `Expert Parallel Strategy`, `Configuration and Capabilities`, `Wrapper Weight Loading`, `Model Weight Dispatch`
-   - Shows independent TP/PP/EP panels, quantization and capability markers, wrapper AutoWeightsLoader lane, and model dispatch tree for stacked/expert/regular parameter paths.
+   - Shows independent structured TP/PP/EP panels, quantization and capability markers, wrapper AutoWeightsLoader lane, and model dispatch tree for stacked/expert/regular parameter paths.
 
 ## Correctness Notes
 
@@ -71,8 +72,8 @@ External claims are used for imported vLLM runtime internals. The local file pro
 Commands run:
 
 ```powershell
-python -m vllm_architecture_agent.cli validate --context examples\hy_v3\source-context.json --plan examples\hy_v3\architecture-plan.json --evidence examples\hy_v3\evidence.json
-python -m vllm_architecture_agent.cli validate --context examples\hy_v3\source-context.json --plan examples\hy_v3\architecture-plan.json --evidence examples\hy_v3\evidence.json --drawio examples\hy_v3\architecture.drawio --images-dir examples\hy_v3\images
+python -m vllm_architecture_agent.cli validate --repo-root . --context examples\hy_v3\source-context.json --plan examples\hy_v3\architecture-plan.json --evidence examples\hy_v3\evidence.json
+python -m vllm_architecture_agent.cli validate --repo-root . --context examples\hy_v3\source-context.json --plan examples\hy_v3\architecture-plan.json --evidence examples\hy_v3\evidence.json --drawio examples\hy_v3\architecture.drawio --images-dir examples\hy_v3\images
 ```
 
 Results:
@@ -80,6 +81,7 @@ Results:
 - Evidence validation: passed
 - Architecture plan validation: passed
 - Draw.io validation: passed
+- Visual review rounds: 2
 
 ## Outputs
 
