@@ -9,17 +9,91 @@
 
 ## 快速开始
 
-在仓库根目录打开 PowerShell：
+### 1. 准备前置环境
+
+| 依赖 | 要求 | 用途 |
+| --- | --- | --- |
+| Windows PowerShell | Windows PowerShell 5.1+ 或 PowerShell 7+ | 运行一键安装脚本 |
+| Python | **3.10 或更高版本**，并带有 `pip` | 安装 `vllm-arch` 和运行静态分析、Validator |
+| Node.js | **必须安装**，建议 Node.js 20 LTS 或更高版本 | 提供 Draw.io MCP 所需的 `npm` 和 `npx` |
+| VS Code Codex | 已安装扩展并完成 ChatGPT 登录 | 读取 Skill、分析源码并调用 MCP |
+| Git | 任意近期版本 | 获取和更新仓库 |
+| 浏览器与网络 | 首次运行必须可访问 npm；默认还需访问 `embed.diagrams.net` | 下载 MCP Server 并显示 Draw.io 实时画布 |
+
+先在 PowerShell 中确认命令可用：
+
+```powershell
+python --version
+python -m pip --version
+node --version
+npm --version
+npx --version
+```
+
+其中 `python --version` 必须不低于 `3.10`。Node.js 安装包会同时提供
+`npm` 和 `npx`；如果后两条命令不存在，请重新安装
+[Node.js LTS](https://nodejs.org/) 并重启终端。
+
+不需要单独安装 Draw.io Desktop，也不需要安装 `vllm`、PyTorch、
+Transformers 或 CUDA。Draw.io MCP 通过
+[`@next-ai-drawio/mcp-server`](https://github.com/DayuanJiang/next-ai-draw-io)
+在浏览器中打开可编辑画布。
+
+### 2. 获取仓库并运行安装脚本
+
+还没有仓库时：
+
+```powershell
+git clone https://github.com/junjiewang253-ctrl/vllm-architecture-agent.git
+cd vllm-architecture-agent
+```
+
+然后在仓库根目录运行：
 
 ```powershell
 .\tools\setup.ps1 -ConfigureDrawioMcp
 ```
 
-安装完成后重启 VS Code Codex，然后输入：
+脚本会：
+
+- 检查 Python、Node.js、npm 和 npx；
+- 执行 `python -m pip install -e ".[dev]"`；
+- 将 canonical Skill 链接到 `.agents/skills/vllm-model-architecture-diagram`；
+- 将 Draw.io MCP 配置写入 `$CODEX_HOME/config.toml`，未设置
+  `CODEX_HOME` 时写入 `$HOME/.codex/config.toml`；
+- 保留已有 Codex 配置，不重复写入已有的 `[mcp_servers.drawio]`。
+
+如果 PowerShell 阻止脚本执行，只对当前终端临时放行：
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\tools\setup.ps1 -ConfigureDrawioMcp
+```
+
+### 3. 重启 Codex 并运行
+
+安装后**完整重启 VS Code**，打开仓库，再在 Codex 中输入：
 
 ```text
 使用 $vllm-model-architecture-diagram 分析 samples/hy_v3.py，生成默认架构图。
 ```
+
+目标文件存在时，Codex 不应再询问 repo root、输出目录或页面数量。
+
+### 4. 确认 Draw.io MCP
+
+安装了 Codex CLI 时，可以在终端检查：
+
+```powershell
+codex mcp list
+```
+
+输出中应出现已启用的 `drawio`。没有 Codex CLI 也不影响 VS Code Codex
+使用 Skill，此时在 VS Code Codex 的 MCP 管理面板确认 `drawio` 已启用。
+首次绘图时，Codex 必须调用 `start_session`，浏览器随后会打开 Draw.io
+实时画布。
+
+### 5. 查看结果
 
 结果写入：
 
@@ -36,6 +110,47 @@ outputs/hy-v3/
 
 `architecture.drawio` 可继续编辑，`images/` 用于直接查看，`report.md`
 说明架构结论、证据边界和验证结果。
+
+## 手动安装与 MCP 配置
+
+一键脚本失败或需要手工配置时，在仓库根目录依次执行：
+
+```powershell
+python -m pip install -e ".[dev]"
+New-Item -ItemType Directory -Force .agents\skills
+New-Item -ItemType Junction `
+  -Path .agents\skills\vllm-model-architecture-diagram `
+  -Target src\skills\vllm-model-architecture-diagram
+```
+
+然后把以下内容加入 `$HOME/.codex/config.toml`：
+
+```toml
+[mcp_servers.drawio]
+command = "npx"
+args = ["-y", "@next-ai-drawio/mcp-server@latest"]
+startup_timeout_sec = 30
+tool_timeout_sec = 120
+enabled = true
+```
+
+保存后必须重启 VS Code Codex。默认 MCP Server 会启动本地 HTTP 服务并在
+浏览器中加载 Draw.io；首次运行需要从 npm 下载包。端口冲突时，Server 会在
+默认端口附近尝试其他端口。内网环境可在 MCP 配置中通过
+`DRAWIO_BASE_URL` 指向自建 Draw.io：
+
+```toml
+[mcp_servers.drawio]
+command = "npx"
+args = ["-y", "@next-ai-drawio/mcp-server@latest"]
+env = { DRAWIO_BASE_URL = "http://localhost:8080" }
+enabled = true
+```
+
+非 Windows 系统可以执行同一条 `pip install`，再把 canonical Skill 目录
+软链接到 `.agents/skills/vllm-model-architecture-diagram`，并使用相同的
+Codex TOML 配置。Windows 一键脚本不会替代系统级 Python、Node.js 或 Codex
+安装。
 
 ## 默认成品标准
 
@@ -189,8 +304,26 @@ vllm-arch scan
 
 **Draw.io MCP 不可用**
 
-运行 `codex mcp list`。应能看到 `drawio`。若没有，重新运行安装脚本并重启
-VS Code Codex。
+先运行 `node --version` 和 `npx --version`。两者都可用后，再运行
+`codex mcp list`；应能看到 `drawio`。若没有，检查
+`$HOME/.codex/config.toml` 是否包含 `[mcp_servers.drawio]`，重新运行安装脚本
+并完整重启 VS Code。
+
+**提示 `npx` 不是内部或外部命令**
+
+安装 [Node.js LTS](https://nodejs.org/)，关闭并重新打开 PowerShell，再确认
+`node --version`、`npm --version` 和 `npx --version` 都有输出。
+
+**Draw.io 浏览器没有打开**
+
+确认 Codex 确实调用了 `start_session`，而不是用 Python 或模板生成文件。
+检查防火墙、本地端口和对 `embed.diagrams.net` 的访问；内网环境使用上面的
+`DRAWIO_BASE_URL` 配置。
+
+**安装脚本提示 Python 版本过低**
+
+安装 [Python 3.10+](https://www.python.org/downloads/)，安装时启用
+“Add Python to PATH”，然后重新打开 PowerShell。
 
 **图仍然很简陋**
 

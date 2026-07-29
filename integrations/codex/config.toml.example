@@ -1,6 +1,8 @@
 # Codex Draw.io MCP 配置示例。
-# 如果 `.\tools\setup-mentor.ps1 -ConfigureDrawioMcp` 已成功执行，通常不需要手工复制。
+# 前置条件：Node.js 20 LTS+，且 node/npm/npx 已加入 PATH。
+# 如果 `.\tools\setup.ps1 -ConfigureDrawioMcp` 已成功执行，通常不需要手工复制。
 # 手工配置时，把下面片段加入 Codex 的 config.toml，然后重启 VS Code Codex。
+# 默认路径为 $HOME/.codex/config.toml；设置 CODEX_HOME 时使用 $CODEX_HOME/config.toml。
 
 [mcp_servers.drawio]
 command = "npx"

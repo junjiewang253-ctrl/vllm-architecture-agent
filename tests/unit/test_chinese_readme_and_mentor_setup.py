@@ -15,13 +15,22 @@ def read(relative: str) -> str:
 
 def test_readme_starts_with_general_quick_start() -> None:
     readme = read("README.md")
-    first_50_lines = "\n".join(readme.splitlines()[:50])
+    first_100_lines = "\n".join(readme.splitlines()[:100])
 
     assert readme.startswith("# vLLM Architecture Agent")
-    assert "## 快速开始" in first_50_lines
-    assert ".\\tools\\setup.ps1 -ConfigureDrawioMcp" in first_50_lines
-    assert "使用 $vllm-model-architecture-diagram 分析 samples/hy_v3.py，生成默认架构图。" in first_50_lines
-    assert "outputs/hy-v3/" in first_50_lines
+    assert "## 快速开始" in first_100_lines
+    assert "Python" in first_100_lines
+    assert "3.10" in first_100_lines
+    assert "Node.js" in first_100_lines
+    assert "npm" in first_100_lines
+    assert "npx" in first_100_lines
+    assert "VS Code Codex" in first_100_lines
+    assert ".\\tools\\setup.ps1 -ConfigureDrawioMcp" in first_100_lines
+    assert "使用 $vllm-model-architecture-diagram 分析 samples/hy_v3.py，生成默认架构图。" in first_100_lines
+    assert "outputs/hy-v3/" in readme
+    assert "[mcp_servers.drawio]" in readme
+    assert "@next-ai-drawio/mcp-server@latest" in readme
+    assert "codex mcp list" in readme
     assert "固定模板" in readme
     assert "分析其他模型" in readme
     assert "## 常见问题" in readme
@@ -76,6 +85,12 @@ def test_setup_mentor_configures_skill_and_drawio_mcp() -> None:
     script = read("tools/setup-mentor.ps1")
     assert "param(" in script
     assert "[switch]$ConfigureDrawioMcp" in script
+    assert 'Assert-Command -Name "python"' in script
+    assert 'Assert-Command -Name "node"' in script
+    assert 'Assert-Command -Name "npm"' in script
+    assert 'Assert-Command -Name "npx"' in script
+    assert '[version]"3.10"' in script
+    assert '[version]"20.0"' in script
     assert 'python -m pip install -e ".[dev]"' in script
     assert ".agents\\skills\\vllm-model-architecture-diagram" in script
     assert "[mcp_servers.drawio]" in script

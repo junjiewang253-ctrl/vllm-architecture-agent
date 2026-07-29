@@ -11,6 +11,30 @@ function Write-Step {
     Write-Host "==> $Message"
 }
 
+function Assert-Command {
+    param(
+        [string]$Name,
+        [string]$InstallHint
+    )
+
+    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
+        throw "未找到命令 '$Name'。$InstallHint"
+    }
+}
+
+function Assert-MinimumVersion {
+    param(
+        [string]$Name,
+        [version]$Current,
+        [version]$Minimum,
+        [string]$InstallHint
+    )
+
+    if ($Current -lt $Minimum) {
+        throw "$Name 版本过低：$Current；最低要求：$Minimum。$InstallHint"
+    }
+}
+
 function Get-CodexConfigPath {
     if ($env:CODEX_HOME) {
         return Join-Path $env:CODEX_HOME "config.toml"
@@ -86,11 +110,45 @@ if (-not (Test-Path (Join-Path $skillSource "SKILL.md"))) {
     throw "未找到 Skill 源目录：$skillSource"
 }
 
-Write-Step "检查 Python"
+Write-Step "检查前置依赖"
+if ($PSVersionTable.PSVersion -lt [version]"5.1") {
+    throw "PowerShell 版本过低：$($PSVersionTable.PSVersion)。最低要求为 5.1。"
+}
+
+Assert-Command -Name "python" -InstallHint "请安装 Python 3.10+ 并加入 PATH。"
+Assert-Command -Name "node" -InstallHint "请安装 Node.js 20 LTS+ 并加入 PATH。"
+Assert-Command -Name "npm" -InstallHint "npm 随 Node.js 安装，请重新安装 Node.js LTS。"
+Assert-Command -Name "npx" -InstallHint "npx 随 Node.js 安装，请重新安装 Node.js LTS。"
+
+$pythonVersionText = (& python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')").Trim()
+if ($LASTEXITCODE -ne 0) {
+    throw "无法读取 Python 版本。"
+}
+$nodeVersionText = (& node --version).Trim().TrimStart("v")
+
+Assert-MinimumVersion -Name "Python" -Current ([version]$pythonVersionText) `
+    -Minimum ([version]"3.10") -InstallHint "请安装 Python 3.10+。"
+Assert-MinimumVersion -Name "Node.js" -Current ([version]$nodeVersionText) `
+    -Minimum ([version]"20.0") -InstallHint "请安装 Node.js 20 LTS+。"
+
 python --version
+node --version
+npm --version
+npx --version
+
+if (Get-Command "codex" -ErrorAction SilentlyContinue) {
+    codex --version
+} else {
+    Write-Warning "未找到 codex CLI。VS Code Codex 仍可使用；请在扩展的 MCP 面板检查 drawio。"
+}
 
 Write-Step "安装项目和测试依赖"
-python -m pip install -e ".[dev]"
+Push-Location $repo
+try {
+    python -m pip install -e ".[dev]"
+} finally {
+    Pop-Location
+}
 
 Write-Step "创建 VS Code Codex 本地 Skill 链接"
 Ensure-SkillLink -Repo $repo -SkillSource $skillSource -SkillLink $skillLink
@@ -111,4 +169,6 @@ Write-Host "使用 `$vllm-model-architecture-diagram 分析 samples/hy_v3.py，�
 Write-Host ""
 Write-Host "可选检查命令："
 Write-Host "  codex mcp list"
+Write-Host "  node --version"
+Write-Host "  npx --version"
 
