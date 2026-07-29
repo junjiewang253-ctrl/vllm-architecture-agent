@@ -37,9 +37,10 @@
 
 5. **编写 Architecture Plan**
    - 默认 complete detail level。
-   - 默认 4 张复合图，最多 5 张。
-   - 每页回答一个工程问题。
-   - 每页包含 detail regions。
+   - 默认 1 张主动放大的 integrated single canvas。
+   - 主运行链、inline expansion、loading plane 和 external boundary 形成一个连续系统。
+   - 每个 detail region 必须挂载到主流程 visual anchor。
+   - Plan 2.2 定义 required anchors、relationships 和质量门槛，但不定义坐标。
    - 所有 rendered class/method/branch/mapping/capability 映射到 page + region。
 
 6. **编写 Evidence**
@@ -53,8 +54,9 @@
    - 验证失败时停止，不开始绘图。
 
 8. **Draw.io MCP 绘图**
-   - Codex 使用 Draw.io MCP 创建多页图。
+   - Codex 使用 Draw.io MCP 创建大尺寸横向画布。
    - 页面名必须与 Plan 一致。
+   - required anchor/relationship 通过 `dataAnchor` 写入真实 `mxCell`。
    - 图中使用 component、container、panel、badge、boundary、port 等表达。
 
 9. **PNG 导出和视觉复查**

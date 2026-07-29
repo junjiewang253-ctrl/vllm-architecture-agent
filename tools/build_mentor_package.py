@@ -1,4 +1,4 @@
-"""Build the v2.1.2 mentor delivery zip.
+"""Build the v2.2.0 delivery zip.
 
 The package intentionally excludes the archived legacy compiler pipeline and
 local generated output directories. It contains enough source, tests, examples
@@ -12,7 +12,7 @@ import zipfile
 from pathlib import Path
 
 
-DEFAULT_ZIP = Path("dist/vllm-architecture-agent-v2.1.2-mentor.zip")
+DEFAULT_ZIP = Path("dist/vllm-architecture-agent-v2.2.0.zip")
 
 INCLUDE_PATHS = (
     "README.md",
@@ -28,8 +28,9 @@ INCLUDE_PATHS = (
     "samples/hy_v3.py",
     "samples/simple_model.py",
     "examples/hy_v3",
+    "examples/integrated-flow",
     "docs/mentor",
-    "docs/development/v2.1.2-chinese-mentor-usability-report.md",
+    "docs/development/v2.2-integrated-visual-contract-report.md",
     "tests/fixtures",
     "tests/unit",
 )

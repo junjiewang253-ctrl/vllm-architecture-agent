@@ -1,81 +1,72 @@
-# 01. HY V3 架构图讲解
+# 01. 一体化架构图讲解
 
-HY V3 示例最终生成 4 张复合架构图。每张图都回答一个工程问题，并把源码证据分成 `direct`、`derived` 和 `external`。
+v2.2 的默认目标是一张连续、可缩放的大画布。HY V3 与 Qwen3 MoE baseline
+位于 `examples/integrated-flow/`。它们不是模型模板，而是信息组织和视觉质量
+标准。
 
-## 1. Model Architecture and Execution
+## 如何阅读整张图
 
-这页回答：`HYV3ForCausalLM`、`HYV3Model`、pipeline rank 和 logits 输出路径如何组合在一起？
+上半部分是一条从输入到输出的 runtime spine。重复 Decoder Layer 在它的执行
+位置原位展开，Attention、FFN、MoE、residual 和 cache 等细节嵌套其中。
 
-主要区域：
+下半部分是 checkpoint/loading plane。过滤、重命名和 dispatch 使用紫色，
+映射线向上连接到真正接收权重的 QKV、Dense FFN、FusedMoE、LM Head 或其他
+组件。
 
-- `Class and Component Composition`：展示 `HYV3ForCausalLM` 包含 `HYV3Model`，base model 内包含 embedding、local decoder layers、attention、Dense FFN / MoE 和 final RMSNorm；wrapper 侧包含 `ParallelLMHead` 与 `LogitsProcessor`。
-- `End-to-End Runtime`：展示输入如何进入 local decoder slice，再根据 PP rank 决定返回 `IntermediateTensors` 或执行 final residual add + norm。
-- `Output Boundary`：展示 hidden states 与 `ParallelLMHead` 进入 `LogitsProcessor` 并产生 logits。
+侧边或顶部的 TP、PP、EP、quantization 和 capability 使用 badge、parameter
+panel 或虚线 dependency，不会伪装成 runtime tensor flow。
 
-重要修正：
+## 输入和 Pipeline Parallel
 
-- First PP rank input 和 non-first PP rank `IntermediateTensors` 是互斥入口，不是串行步骤。
-- Embedding 与 LM Head 的 tied weight 是 optional dependency，不是 runtime tensor flow。
-- `LogitsProcessor` 内部属于 external boundary。
+First PP rank 的 token/embedding 输入与 non-first rank 的
+`IntermediateTensors` 是互斥入口。两条路径在 local decoder slice 前汇合，
+而不是按顺序执行。
 
-## 2. Decoder and Attention
+Decoder Stack 只表示本 rank 的 local layer range。Non-last rank 返回
+`IntermediateTensors`，last rank 执行 final residual add 和 RMSNorm。
 
-这页回答：一个 decoder block 如何运行，HY V3 attention 如何适配 vLLM Attention backend？
+## 展开的 Decoder
 
-主要区域：
+代表性 Decoder Layer 保留主 hidden-state 路径和 residual lane。两次 fused
+RMSNorm handoff 使用不同颜色，避免把 residual 只写成注释。
 
-- `Decoder Runtime`：hidden states 和 residual 两条通道并行穿过 input fused RMSNorm、self attention、post-attention fused RMSNorm 和 FFN。
-- `FFN Construction Variant`：前 K 层使用 Dense FFN，后续层使用 MoE。这是 construction-time variant，不是一次 forward 中同时执行。
-- `Attention Construction Panel`：展示 TP head partition、QKV projection、output projection、optional Q/K RMSNorm、RoPE、HpcRopeNorm 和 quantization。
-- `Attention Forward Detail`：展示 QKV projection 后的 HPC configured path 与 fallback Q/K/V path。
+Dense 与 MoE 变体属于 construction-time 选择；图中用 variant/container 表达，
+不会画成每个 token 都同时经过两条路径。
 
-重要修正：
+## Attention 边界
 
-- HPC path 输入是完整 `qkv`，不是 Q stream。
-- V bypass Q/K RMSNorm 和 Q/K RoPE 处理路径。
-- KV cache write 有本地调用证据；KV cache read 是 vLLM Attention backend 内部行为，标为 external。
-- Attention 输出经过 `RowParallelLinear`。
+本地源码证明 projection、split、optional norm、RoPE 调用和 output projection。
+导入的 vLLM Attention 使用暖色虚线 external boundary。
 
-## 3. MoE Architecture and Routing
+HY V3 baseline 还区分 configured HPC path 与 fallback Q/K/V path；Qwen3 baseline
+则依据自己的源码表达 Q/K Norm、RoPE 和 V bypass。两个模型不会共享一个固定
+Attention 模板。
 
-这页回答：`HYV3MoEFused` 如何路由 token、配置 experts，并暴露 EP metadata？
+KV Cache 使用独立 storage 形状。本地能证明的 write 与 external backend 的
+read/scheduling 分开标注。
 
-主要区域：
+## MoE 组织
 
-- `Construction and Configuration`：用 parameter panel 表示 `num_experts`、`top_k`、scoring、grouped top-k、scaling、shared expert 和 expert bias。
-- `Runtime Routing`：hidden states flatten 后进入 GateLinear 生成 router logits；hidden states 与 router logits 一起进入 FusedMoE；输出恢复原 shape。
-- `FusedMoE Composition`：FusedMoE 作为 external runtime boundary，内部包含 routed experts 和 optional shared experts。
-- `Expert Parallel Metadata`：展示 EP group/rank/size、physical/local experts、redundant experts 和 EPLB。
+Runtime route 显示 hidden states、router logits 和 FusedMoE 的实际输入关系。
+Experts 是 FusedMoE 容器内部组成，不是它之后的串行阶段。
 
-重要修正：
+EP/EPLB、expert placement 和 routing configuration 使用 metadata/config
+dependency；它们不会作为 tensor input。
 
-- GateLinear 只作为一个 runtime component 出现，construction 区只记录配置依赖。
-- Experts 是 FusedMoE 内部组成，不是 FusedMoE 之后的串行阶段。
-- EP metadata 通过虚线影响 FusedMoE/expert placement，不画成 runtime tensor input。
+## 输出边界
 
-## 4. Parallelism, Configuration and Weight Loading
+模型 `forward` 返回的 hidden states 与 wrapper 的 `compute_logits` 保持独立。
+只有当源码定义对应入口时，图才继续连接 `ParallelLMHead` 和
+`LogitsProcessor`。外部 logits processing 内部逻辑不伪装成本地 direct。
 
-这页回答：TP、PP、EP、配置能力和两套 weight loading 路径如何组织？
-
-主要区域：
-
-- `Tensor Parallel Strategy`：展示 Embedding、QKV、MergedColumn、Row、LM Head，以及 head partition。
-- `Pipeline Parallel Strategy`：展示 `make_layers`、local layer range、`PPMissingLayer`、first/non-first input、last/non-last output 和 PP missing filter。
-- `Expert Parallel Strategy`：展示 EP group、rank/size、physical/local experts、FusedMoE placement、redundant experts 和 EPLB。
-- `Configuration and Capabilities`：展示 `quant_config`、SupportsLoRA 和 `torch.compile`，不把它们画成 runtime flow。
-- `Weight Loading`：分成 wrapper lane 和 model lane。
-
-重要修正：
-
-- TP、PP、EP 是独立策略面板，不互相串联。
-- `HYV3ForCausalLM.load_weights` 通过 `AutoWeightsLoader` external boundary 处理。
-- `HYV3Model.load_weights` 是 dispatch tree：stacked mapping、expert mapping、regular path。
-- LoRA capability 不再连接到 checkpoint loading。
-
-## 如何阅读 evidence
+## Evidence 含义
 
 `evidence.json` 中：
 
-- `direct` 表示本地源码直接证明；
-- `derived` 表示多个本地事实组合推导；
-- `external` 表示本地源码只能证明边界调用或导入，外部组件内部行为没有在本文件中展开。
+- `direct`：本地源码直接证明；
+- `derived`：多个本地事实组合推导，并记录 derivation；
+- `external`：本地源码证明调用或边界，但没有假装已分析外部实现。
+
+Plan 2.2 的每个 required visual anchor 和 relationship 都引用这些 Claim，并在
+Draw.io `mxCell` 中使用相同 `dataAnchor`，使“证据里写了”和“图里真的画了”
+可以被 Validator 对照检查。

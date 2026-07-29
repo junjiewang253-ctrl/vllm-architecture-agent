@@ -517,7 +517,9 @@ def write_visual_review(path: Path, page_names: list[str]) -> None:
         "## Draft 1 Findings\n"
         f"{pages}\n\n"
         "## Revision Round 1\n"
-        "Adjusted grouping, routes, labels and semantic styles after opening every PNG export.\n\n"
+        "Geometry changes: moved and resized groups, rerouted long edges, and "
+        "adjusted spacing after opening every PNG export. Labels and semantic "
+        "styles were then refined without changing evidence-backed semantics.\n\n"
         "## Final Review\n"
         "All pages were re-exported and inspected. Architecture story, detail coverage, "
         "semantic distinction, topology, readability and information density meet the rubric.\n",

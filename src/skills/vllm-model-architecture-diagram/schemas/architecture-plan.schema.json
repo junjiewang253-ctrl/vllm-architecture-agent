@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.local/vllm-architecture-agent/architecture-plan.schema.json",
-  "title": "vLLM Architecture Plan",
+  "title": "vLLM Architecture Plan 2.2",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -13,6 +13,8 @@
     "model_category",
     "files_read",
     "traversal_notes",
+    "diagram_strategy",
+    "integration_rationale",
     "page_budget",
     "pages",
     "class_review",
@@ -29,8 +31,8 @@
       "additionalProperties": false,
       "required": ["page_id", "region_id"],
       "properties": {
-        "page_id": { "type": "string" },
-        "region_id": { "type": "string" }
+        "page_id": { "type": "string", "minLength": 1 },
+        "region_id": { "type": "string", "minLength": 1 }
       }
     },
     "manifestItem": {
@@ -38,7 +40,7 @@
       "additionalProperties": false,
       "required": ["item_id", "status", "page_refs", "claim_ids", "reason"],
       "properties": {
-        "item_id": { "type": "string" },
+        "item_id": { "type": "string", "minLength": 1 },
         "status": {
           "enum": [
             "rendered_detail",
@@ -53,17 +55,267 @@
         "claim_ids": { "type": "array", "items": { "type": "string" } },
         "reason": { "type": "string" }
       }
+    },
+    "detailRegion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "type",
+        "question",
+        "source_item_ids",
+        "claim_ids",
+        "visual_form",
+        "integration"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "type": {
+          "enum": [
+            "embedded_subgraph",
+            "component_tree",
+            "nested_container",
+            "parameter_panel",
+            "capability_panel",
+            "strategy_panel",
+            "variant_table",
+            "mapping_tree",
+            "boundary_panel",
+            "callout"
+          ]
+        },
+        "question": { "type": "string", "minLength": 1 },
+        "source_item_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "claim_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "visual_form": { "type": "string", "minLength": 1 },
+        "integration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "attach_to_anchor_id", "anchor_ids"],
+          "properties": {
+            "mode": {
+              "enum": [
+                "inline_expansion",
+                "nested_container",
+                "branch_merge",
+                "side_dependency",
+                "loading_injection",
+                "boundary_crossing"
+              ]
+            },
+            "attach_to_anchor_id": {
+              "type": "string",
+              "pattern": "^visual:"
+            },
+            "anchor_ids": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "type": "string", "pattern": "^visual:" }
+            }
+          }
+        }
+      }
+    },
+    "visualAnchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "representation",
+        "role",
+        "phase",
+        "style_role",
+        "claim_ids",
+        "source_item_ids",
+        "parent_anchor_id"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^visual:" },
+        "label": { "type": "string", "minLength": 1 },
+        "representation": {
+          "enum": ["node", "container", "storage", "badge", "merge", "annotation"]
+        },
+        "role": {
+          "enum": [
+            "input",
+            "runtime_stage",
+            "branch",
+            "merge",
+            "detail",
+            "output",
+            "loading_stage",
+            "strategy",
+            "capability",
+            "external_boundary",
+            "annotation"
+          ]
+        },
+        "phase": {
+          "enum": ["construction", "runtime", "loading", "parallel", "capability", "external"]
+        },
+        "style_role": {
+          "enum": [
+            "runtime",
+            "residual",
+            "loading",
+            "construction",
+            "metadata",
+            "external",
+            "containment",
+            "capability"
+          ]
+        },
+        "claim_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "source_item_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "parent_anchor_id": {
+          "type": ["string", "null"],
+          "pattern": "^visual:"
+        }
+      }
+    },
+    "visualRelationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "source_anchor_id",
+        "target_anchor_id",
+        "kind",
+        "claim_ids"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^visual-rel:" },
+        "source_anchor_id": { "type": "string", "pattern": "^visual:" },
+        "target_anchor_id": { "type": "string", "pattern": "^visual:" },
+        "kind": {
+          "enum": [
+            "runtime_flow",
+            "residual_flow",
+            "loading_mapping",
+            "construction_dependency",
+            "metadata_dependency",
+            "external_delegation"
+          ]
+        },
+        "claim_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "visualContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "canvas",
+        "main_story_anchor_ids",
+        "required_anchors",
+        "required_relationships",
+        "quality_gates"
+      ],
+      "properties": {
+        "canvas": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "min_width",
+            "min_height",
+            "orientation",
+            "min_export_width",
+            "min_export_height",
+            "min_font_size",
+            "min_content_fill_ratio"
+          ],
+          "properties": {
+            "min_width": { "type": "integer", "minimum": 3200, "maximum": 8000 },
+            "min_height": { "type": "integer", "minimum": 1600, "maximum": 5000 },
+            "orientation": { "const": "landscape" },
+            "min_export_width": { "type": "integer", "minimum": 2400 },
+            "min_export_height": { "type": "integer", "minimum": 1200 },
+            "min_font_size": { "type": "integer", "minimum": 10, "maximum": 16 },
+            "min_content_fill_ratio": {
+              "type": "number",
+              "minimum": 0.30,
+              "maximum": 0.80
+            }
+          }
+        },
+        "main_story_anchor_ids": {
+          "type": "array",
+          "minItems": 7,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^visual:" }
+        },
+        "required_anchors": {
+          "type": "array",
+          "minItems": 18,
+          "items": { "$ref": "#/$defs/visualAnchor" }
+        },
+        "required_relationships": {
+          "type": "array",
+          "minItems": 14,
+          "items": { "$ref": "#/$defs/visualRelationship" }
+        },
+        "quality_gates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "min_semantic_nodes",
+            "min_visible_edges",
+            "min_visual_styles",
+            "require_nested_container",
+            "require_external_boundary",
+            "require_loading_plane"
+          ],
+          "properties": {
+            "min_semantic_nodes": { "type": "integer", "minimum": 18, "maximum": 100 },
+            "min_visible_edges": { "type": "integer", "minimum": 14, "maximum": 140 },
+            "min_visual_styles": { "type": "integer", "minimum": 4, "maximum": 8 },
+            "require_nested_container": { "type": "boolean" },
+            "require_external_boundary": { "type": "boolean" },
+            "require_loading_plane": { "type": "boolean" }
+          }
+        }
+      }
     }
   },
   "properties": {
-    "schema_version": { "const": "2.1" },
-    "model_name": { "type": "string" },
-    "target_file": { "type": "string" },
-    "source_sha256": { "type": "string" },
+    "schema_version": { "const": "2.2" },
+    "model_name": { "type": "string", "minLength": 1 },
+    "target_file": { "type": "string", "minLength": 1 },
+    "source_sha256": { "type": "string", "minLength": 1 },
     "detail_level": { "enum": ["overview", "standard", "complete"] },
     "model_category": { "type": "array", "items": { "type": "string" } },
     "files_read": { "type": "array", "items": { "type": "string" } },
     "traversal_notes": { "type": "array", "items": { "type": "object" } },
+    "diagram_strategy": {
+      "enum": ["integrated_single_canvas", "composite_pages", "compact_boundary"]
+    },
+    "integration_rationale": { "type": "string" },
     "page_budget": {
       "type": "object",
       "additionalProperties": false,
@@ -95,36 +347,37 @@
           "secondary_topics",
           "external_boundaries",
           "visual_decisions",
-          "detail_budget"
+          "detail_budget",
+          "visual_contract"
         ],
         "properties": {
-          "id": { "type": "string" },
-          "title": { "type": "string" },
-          "export_name": { "type": "string" },
-          "question": { "type": "string" },
-          "purpose": { "type": "string" },
-          "topics": { "type": "array", "items": { "type": "string" } },
-          "view_pattern": { "type": "string" },
-          "scope": { "type": "array", "items": { "type": "string" } },
-          "claim_ids": { "type": "array", "items": { "type": "string" } },
-          "main_story": { "type": "array", "items": { "type": "string" } },
-          "detail_regions": {
+          "id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "export_name": { "type": "string", "minLength": 1 },
+          "question": { "type": "string", "minLength": 1 },
+          "purpose": { "type": "string", "minLength": 1 },
+          "topics": {
             "type": "array",
             "minItems": 1,
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["id", "title", "type", "question", "source_item_ids", "claim_ids", "visual_form"],
-              "properties": {
-                "id": { "type": "string" },
-                "title": { "type": "string" },
-                "type": { "type": "string" },
-                "question": { "type": "string" },
-                "source_item_ids": { "type": "array", "items": { "type": "string" } },
-                "claim_ids": { "type": "array", "items": { "type": "string" } },
-                "visual_form": { "type": "string" }
-              }
-            }
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "view_pattern": { "type": "string", "minLength": 1 },
+          "scope": { "type": "array", "items": { "type": "string" } },
+          "claim_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "main_story": {
+            "type": "array",
+            "minItems": 7,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "detail_regions": {
+            "type": "array",
+            "minItems": 3,
+            "items": { "$ref": "#/$defs/detailRegion" }
           },
           "secondary_topics": { "type": "array", "items": { "type": "string" } },
           "external_boundaries": { "type": "array", "items": { "type": "string" } },
@@ -134,11 +387,12 @@
             "additionalProperties": false,
             "required": ["max_primary_nodes", "max_total_nodes", "max_visible_edges"],
             "properties": {
-              "max_primary_nodes": { "type": "integer", "minimum": 1 },
-              "max_total_nodes": { "type": "integer", "minimum": 1 },
-              "max_visible_edges": { "type": "integer", "minimum": 1 }
+              "max_primary_nodes": { "type": "integer", "minimum": 1, "maximum": 24 },
+              "max_total_nodes": { "type": "integer", "minimum": 18, "maximum": 100 },
+              "max_visible_edges": { "type": "integer", "minimum": 14, "maximum": 140 }
             }
-          }
+          },
+          "visual_contract": { "$ref": "#/$defs/visualContract" }
         }
       }
     },

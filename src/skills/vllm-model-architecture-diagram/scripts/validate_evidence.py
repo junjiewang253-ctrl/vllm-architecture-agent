@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+import re
 from typing import Any
 
 SRC_DIR = Path(__file__).resolve().parents[3]
@@ -24,6 +25,15 @@ def _line_slice(path: Path, start: int, end: int) -> list[str]:
     if start < 1 or end < start or end > len(lines):
         raise ValueError(f"invalid line range {start}-{end} for {path}")
     return lines[start - 1 : end]
+
+
+def _symbol_matches_lines(symbol: str, source_lines: list[str]) -> bool:
+    if any(symbol in line for line in source_lines):
+        return True
+    leaf = symbol.rsplit(".", 1)[-1]
+    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", leaf):
+        return any(re.search(rf"\b{re.escape(leaf)}\b", line) for line in source_lines)
+    return False
 
 
 def _direct_is_import_only(entries: list[dict[str, Any]], repo_root: Path) -> bool:
@@ -109,6 +119,11 @@ def validate_evidence(
     claim_ids: set[str] = set()
     used_by_page_or_review = _review_claim_ids(plan or {})
     summary = {"direct": 0, "derived": 0, "external": 0}
+    strict_symbol_evidence = bool(
+        plan
+        and plan.get("schema_version") == "2.2"
+        and plan.get("detail_level") == "complete"
+    )
 
     for index, claim in enumerate(claims):
         claim_id = claim.get("id")
@@ -167,8 +182,15 @@ def validate_evidence(
                 errors.append(f"{claim_id}.evidence[{entry_index}] {exc}")
                 continue
             symbol = str(entry.get("symbol", "")).strip()
-            if symbol and not any(symbol in line for line in source_lines):
-                warnings.append(f"{claim_id}.evidence[{entry_index}] symbol not found in cited lines: {symbol}")
+            if symbol and not _symbol_matches_lines(symbol, source_lines):
+                message = (
+                    f"{claim_id}.evidence[{entry_index}] symbol not found in "
+                    f"cited lines: {symbol}"
+                )
+                if strict_symbol_evidence:
+                    errors.append(message)
+                else:
+                    warnings.append(message)
         if confidence == "direct":
             try:
                 if _direct_is_import_only(entries, repo_root):

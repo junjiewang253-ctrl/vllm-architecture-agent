@@ -161,7 +161,9 @@ def test_prepare_templates_are_empty_skeletons(tmp_path: Path) -> None:
     assert len(plan["class_review"]) > 0
     assert len(plan["method_review"]) > 0
     assert "coverage_manifest" in plan
-    assert plan["schema_version"] == "2.1"
+    assert plan["schema_version"] == "2.2"
+    assert plan["diagram_strategy"] == "integrated_single_canvas"
+    assert plan["page_budget"] == {"target_pages": 1, "max_pages": 1}
     assert evidence["claims"] == []
     assert evidence["schema_version"] == "2.1"
 

@@ -61,7 +61,7 @@ HY V3 `architecture-plan.json`：
 - Unresolved：0
 - Silent omission：0
 
-Method 重要性不等于审阅完整性。v2.1.2 中，简单委托方法可以是 supporting；完整性由是否 reviewed 和是否有合理处置状态决定。
+Method 重要性不等于审阅完整性。简单委托方法可以是 supporting；完整性由是否 reviewed 和是否有合理处置状态决定。
 
 ## Evidence Summary
 
@@ -92,6 +92,25 @@ Draw.io validator 检查：
 - 无 `html=1`；
 - 节点尺寸合法；
 - 背景为白色。
+
+## Plan 2.2 一体化契约
+
+`examples/integrated-flow/` 保存新的视觉 baseline。默认新 Plan 使用
+`integrated_single_canvas`，Validator 进一步检查：
+
+- Draw.io 页面至少 `4200 x 2000`；
+- required `visual:` anchors 唯一且真实存在；
+- required `visual-rel:` edges 的 source/target 与 Plan 一致；
+- main story anchors 之间存在连续有向路径；
+- detail region anchors 与主故事挂载点连通；
+- nested child 位于声明的 container 内；
+- runtime、residual、loading、construction、metadata、external 使用对应线型；
+- external boundary 使用暖色虚线；
+- PNG 满足 Plan 规定的最小分辨率；
+- content fill、字体、语义节点和边达到契约门槛。
+
+旧 Architecture Plan 2.1 仍可验证，用于已有 Golden Example 的兼容性；新生成
+任务默认使用 Plan 2.2。
 
 ## Pytest
 

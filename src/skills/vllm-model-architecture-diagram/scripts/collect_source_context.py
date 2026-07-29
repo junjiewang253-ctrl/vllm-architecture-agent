@@ -1070,7 +1070,7 @@ def _manifest_item(item_id: str) -> dict[str, Any]:
 
 
 def plan_template(context: dict[str, Any], model_name: str) -> dict[str, Any]:
-    """Return a v2.1 checklist template for Codex to complete."""
+    """Return a v2.2 checklist template for Codex to complete."""
 
     capabilities = [
         _manifest_item(value["capability_id"])
@@ -1078,7 +1078,7 @@ def plan_template(context: dict[str, Any], model_name: str) -> dict[str, Any]:
         if value.get("detected")
     ]
     return {
-        "schema_version": "2.1",
+        "schema_version": "2.2",
         "model_name": model_name,
         "target_file": context["target"].get("target_file"),
         "source_sha256": context.get("source_sha256", ""),
@@ -1086,7 +1086,9 @@ def plan_template(context: dict[str, Any], model_name: str) -> dict[str, Any]:
         "model_category": context.get("classification", {}).get("category_candidates", []),
         "files_read": [],
         "traversal_notes": [],
-        "page_budget": {"target_pages": 4, "max_pages": 5},
+        "diagram_strategy": "integrated_single_canvas",
+        "integration_rationale": "",
+        "page_budget": {"target_pages": 1, "max_pages": 1},
         "pages": [],
         "class_review": [
             {

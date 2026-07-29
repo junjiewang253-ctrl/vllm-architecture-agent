@@ -1,11 +1,13 @@
 ---
 name: vllm-model-architecture-diagram
-description: Analyze vLLM model adapter Python files or registered architecture names, review source-grounded model structure and execution behavior, and use Draw.io MCP to create editable, high-density architecture diagrams with evidence and validation. Use when the user asks to analyze a model under vllm/model_executor/models, inspect a vLLM adapter, explain its architecture, or generate Draw.io architecture diagrams from model source code.
+description: Analyze a vLLM model adapter Python file or registered architecture, review all indexed source structures, author evidence-backed architecture claims, and use Draw.io MCP to create one editable integrated architecture canvas with an expanded runtime path, loading mappings, external boundaries, PNG review, and structural validation. Use for vllm/model_executor/models source analysis or source-grounded architecture diagrams.
 ---
 
 # vLLM Model Architecture Diagram
 
-Use this Skill when the user asks to analyze a vLLM model adapter file or a registered architecture name and generate architecture diagrams.
+Analyze a vLLM adapter and produce a source-grounded engineering diagram. The
+default deliverable is one large, connected, zoomable architecture canvas, not
+a dashboard of concept cards and not one page per subsystem.
 
 Default user instruction:
 
@@ -14,172 +16,252 @@ Default user instruction:
 生成默认架构图。
 ```
 
-For a valid target file, do not ask for repo root, output directory, page count or validation paths. Infer sensible defaults and execute the full workflow.
+For an unambiguous local target, infer the workspace root, model slug and output
+directory. Do not ask the user for page count, Plan paths or Evidence paths.
 
-## Default Parameters
+## Defaults
 
 - `detail_level`: `complete`
-- `target_pages`: 4
-- `max_pages`: 5
-- `visual_review_rounds_min`: 1
-- `visual_review_rounds_max`: 2
-- default HY V3 output: `outputs/hy-v3/`
+- `diagram_strategy`: `integrated_single_canvas`
+- `target_pages`: `1`
+- `max_pages`: `1`
+- logical canvas: at least `4200 x 2000`, usually about `5200 x 2500`
+- maximum integrated aspect ratio: `2.5:1`
+- PNG export: at least `2400 x 1200`
+- visual review rounds: one required, two maximum
+- output: `outputs/<model>/`
 
-## Scope
+Use `composite_pages` only when one canvas remains unreadable after two genuine
+MCP layout revisions. Record the reason in `integration_rationale`. A helper or
+boundary-only file may use `compact_boundary`.
 
-Default targets are vLLM model adapter files under:
+## Non-Negotiable Boundary
 
-```text
-vllm/model_executor/models/*.py
-```
+Scripts discover and validate source structure. You decide architecture
+meaning, visual hierarchy and layout.
 
-Samples such as `samples/hy_v3.py` are also valid. The user may provide a Python path or a registry architecture name. Registry resolution must be static and must not import vLLM, torch, transformers or CUDA-dependent modules.
+Never:
 
-## Workspace Root
+- generate final model semantics from a fixed model template;
+- treat construction, configuration, loading or parallel metadata as runtime
+  tensor flow;
+- infer imported implementation internals without reading them;
+- mark external behavior as direct local behavior;
+- edit model source to make a diagram easier;
+- manufacture `.drawio`, PNG or SVG files with Python, shell, templates or
+  placeholder bytes;
+- fall back when Draw.io MCP is unavailable.
 
-Infer the workspace root in this order:
+## Required References
 
-1. nearest ancestor with `pyproject.toml` and `src/skills/vllm-model-architecture-diagram/SKILL.md`;
-2. nearest ancestor of the target file;
-3. current working directory.
+Read these before planning:
 
-For `samples/hy_v3.py`, the default is equivalent to:
+- `references/analysis-guide.md`
+- `references/vllm-patterns.md`
+- `references/evidence-policy.md`
+- `references/page-playbook.md`
+- `references/diagram-design-guide.md`
+- `references/integrated-flow-standard.md`
+
+When the repository examples are available, open both reference PNGs:
+
+- `examples/integrated-flow/hy_v3/architecture.png`
+- `examples/integrated-flow/qwen3_moe/architecture.png`
+
+They define the expected integration and information density, not fixed model
+content. Do not copy their model-specific nodes into another model.
+
+## Workflow
+
+### 1. Resolve and Prepare
+
+Infer the workspace root from the nearest ancestor containing `pyproject.toml`
+and this Skill. Resolve a file path directly or resolve an architecture name
+statically through `registry.py`.
+
+Run:
 
 ```powershell
 vllm-arch prepare `
   --repo-root <workspace-root> `
-  --input samples/hy_v3.py `
-  --outputs-dir outputs/hy-v3 `
-  --model-name hy-v3
+  --input <target.py> `
+  --outputs-dir outputs/<model> `
+  --model-name <model>
 ```
 
-Do not require the user to type this command.
+Preparation creates:
 
-## Workflow
+- `source-context.json`
+- `architecture-plan.template.json`
+- `evidence.template.json`
 
-### 1. Parse Request
+The templates are checklists. They contain no final pages, nodes, edges or
+coordinates.
 
-- Identify the target file or architecture name.
-- Confirm the target exists or can be resolved.
-- Generate a stable model slug.
-- Create `outputs/<model>/`.
-- Overwrite only known artifacts for this model; do not delete unrelated user files.
+### 2. Review the Complete Target File
 
-### 2. Prepare Source Context
+Read the full Python file, then use `source-context.json` as a no-omission
+checklist:
 
-Run `vllm-arch prepare` with inferred defaults.
+- every class, including nested classes;
+- every method and module function;
+- high and medium branches;
+- architecture-level weight mapping groups;
+- detected capabilities;
+- related-file candidates.
 
-This creates:
+Assign every indexed item a Plan disposition. A trivial item may be excluded
+with a concrete reason. Aggregation is not a blanket escape hatch:
 
-- `source-context.json`;
-- `architecture-plan.template.json`;
-- `evidence.template.json`.
+- render representative primary classes in detail;
+- render at least 20% of Agent-reviewed core methods in detail, capped by the
+  Validator;
+- render representative high-relevance branches and mapping groups in detail;
+- never map a large collection of core methods to one summary box.
 
-The templates are checklists only. They must not contain final pages, model-specific answers, nodes, edges or layout.
+Completeness means explicit review plus visible architectural depth, not one
+node per method and not one region containing every source ID.
 
-### 3. Complete Target-File Review
+### 3. Traverse Only Useful Related Source
 
-Read the full target Python file. Then use `source-context.json` as a checklist:
-
-- `source_coverage`;
-- `classes`;
-- `methods`;
-- `module_functions`;
-- `branches`;
-- `weight_mappings`;
-- `capability_signals`;
-- `related_file_candidates`.
-
-Review every class, method and module-level function. Review all high/medium branches, all architecture-level mapping groups and all detected capabilities.
-
-Do not silently omit anything. Not every item must become a node, but every item must receive a disposition in `architecture-plan.json`.
-
-Before planning, read these references rather than relying on generic diagram
-intuition:
-
-- `references/analysis-guide.md`;
-- `references/vllm-patterns.md`;
-- `references/page-playbook.md`;
-- `references/evidence-policy.md`.
-
-### 4. Traverse Related Source
-
-Use `related_file_candidates` when additional files prove a claim or clarify an external boundary.
+Open related files when they prove a major claim or clarify an external
+boundary.
 
 Default budget:
 
-- max depth: 3;
-- default related files: 20;
-- suggested max: 30.
+- depth: 3;
+- normal limit: 20 files;
+- suggested hard limit: 30 files.
 
-Stop when the local source reaches a stable imported component boundary, more recursion will not change the diagram, or the budget is reached. Record files read in `files_read` and stopping reasons in `traversal_notes`.
+Stop at a stable imported API boundary or when more traversal will not change
+the architecture. Record every file read and the stop reason.
 
-### 5. Write Architecture Plan
+### 4. Write Evidence
 
-Write `architecture-plan.json` before drawing.
+Write `evidence.json` before the Plan is finalized. Keep repository files
+repo-relative.
 
-For full models, design 3 to 5 composite pages, usually 4. Do not create one page per class or method. Use detail regions, component trees, embedded subgraphs, parameter panels, variant tables, mapping trees, boundary panels, ports and badges.
+- `direct`: a local source range directly proves the statement;
+- `derived`: at least two evidence entries plus an explicit derivation;
+- `external`: local code proves delegation, while the unreviewed implementation
+  remains outside the claim.
 
-Each page must include:
+Direct claims cannot rely only on imports. Weight loading claims use phase
+`loading`, not `runtime`. In complete mode, every Evidence `symbol` must match
+the cited lines exactly or by its final Python identifier. Do not use wildcard
+names, slash-separated summaries or prose as `symbol`.
 
-- engineering question;
-- purpose;
-- topics;
-- view pattern;
-- claim IDs;
-- at least one detail region;
-- detail budget.
+### 5. Design the Integrated Story
 
-Each rendered class, method, function, branch, mapping group or capability must map to a real page and region.
+Do not begin with pages or cards. First write one sentence:
 
-For flow-oriented pages, `main_story` must be a sequence of concrete visible
-architecture stages, not three prose summary sentences:
+> From which input, through which local transformations and imported
+> boundaries, to which output does this adapter operate?
 
-- use 5 to 12 ordered stages for pipeline, block, branch/merge, routed-container
-  and multimodal pages;
-- use at least 4 stages for mapping flows and state machines;
-- name data, transformations, participating components and output boundaries;
-- keep implementation class or method names as subtitles, not as the whole
-  architecture story.
+Then identify:
 
-For a complete full-model plan, each principal page should contain 2 to 4
-detail regions. A detail-region title is not a semantic node. Each region must
-expand into at least two visible architecture elements, or one structured panel
-with at least three meaningful entries.
+1. the runtime spine from input to returned model output;
+2. mutually exclusive PP or input branches and their merge;
+3. a representative repeated block expanded at its position in that spine;
+4. compute details nested inside that block;
+5. residual or bypass lanes;
+6. the separate logits or pooling entrypoint when source defines one;
+7. external runtime boundaries at the actual delegation points;
+8. construction/configuration dependencies attached to affected components;
+9. a lower loading plane whose mapping edges terminate at the components that
+   receive those weights;
+10. capability and parallel metadata as badges or compact side panels.
 
-### 5.1 Diagram Quality Contract
+The result must read as one system. Do not draw four independent quadrants
+called Overview, Attention, MoE and Loading.
 
-The default output is a small set of complete, high-density engineering
-diagrams, not a set of summary cards. For every complete full-model page:
+An anchor with role `branch` must visibly split into at least two alternatives.
+An anchor with role `merge` must visibly receive at least two alternatives.
+Never use one box named "PP branch" or "output gate" to hide both paths.
 
-- show the engineering question visibly below the page title;
-- show at least 8 semantic elements, excluding title, question and region
-  headers; target 12 to 28 when the source supports it;
-- flow-oriented pages use at least 4 connected edges and a clear input-to-output
-  reading path;
-- use at least two visual treatments to distinguish runtime, construction,
-  loading, parallel metadata or external boundaries;
-- use containers/panels for composition and strategy, not arrows between
-  unrelated concepts;
-- do not use a method name as a substitute for the method's architectural
-  behavior;
-- do not leave a detail region as a single generic card;
-- imported runtime internals must produce external Evidence and a visible
-  boundary when they appear in the diagram.
+#### Capability-Driven Depth
 
-### 6. Write Evidence
+Use source categories, not model names:
 
-Write `evidence.json` with schema version `2.1`.
+- **Dense/repeated compute:** expand one local repeated block with its main
+  compute path, residual/bypass lane and dense FFN when source proves them.
+- **MoE:** show router inputs and logits, routed execution, FusedMoE as a
+  container or external boundary, experts as contained members, EP metadata as
+  dependency, and expert mappings in the loading plane.
+- **Multimodal:** show modality-specific input branches, processor/placeholder
+  handling, encoder entry, one expanded encoder block, feature
+  merge/injection, local language-model orchestration and external decoder
+  internals. Do not collapse EVS/MRoPE, DeepStack, eager/CUDA-graph selection
+  or equivalent proven branches into one prose note.
 
-Use repo-relative paths for repository files, for example `samples/hy_v3.py`.
+An imported decoder, attention kernel or fused runtime may remain external.
+Local orchestration around that boundary must still be expanded.
 
-Evidence confidence:
+### 6. Write Architecture Plan 2.2
 
-- `direct`: local source directly proves the behavior;
-- `derived`: multiple evidence entries support a higher-level claim;
-- `external`: local source proves delegation or dependency, but implementation is outside the reviewed boundary.
+Write `architecture-plan.json` from the template:
 
-Direct claims cannot rely only on imports. Derived claims require a derivation. External claims require an explicit boundary.
+- keep `schema_version` as `2.2`;
+- keep the default `integrated_single_canvas` unless a documented exception is
+  necessary;
+- use one page with a concrete `main_story` of at least seven stages;
+- use at least three evidence-backed detail regions;
+- attach every region to a main-story anchor;
+- map every rendered item to a real region;
+- give structural regions at least four semantic anchors and three internal
+  relationships;
+- split a region when each visible anchor would otherwise stand for more than
+  eight indexed source items;
+- give each core-heavy region representative detailed methods instead of one
+  detailed method surrounded by aggregate reviews.
+
+#### Visual Contract
+
+The page `visual_contract` is a drawing acceptance contract, not a second IR and
+not a coordinate plan.
+
+For each required visible element define a `required_anchor`:
+
+- ID beginning with `visual:`;
+- architecture label;
+- representation such as node, container, storage, badge or merge;
+- role and phase;
+- semantic style role;
+- claim IDs and source item IDs;
+- optional parent container anchor.
+
+For every required visible relation define a `required_relationship`:
+
+- ID beginning with `visual-rel:`;
+- source and target anchor IDs;
+- kind;
+- claim IDs.
+
+Required relationship kinds:
+
+- `runtime_flow`
+- `residual_flow`
+- `loading_mapping`
+- `construction_dependency`
+- `metadata_dependency`
+- `external_delegation`
+
+Use at least 18 anchors and 14 relationships for a complete full model. List
+the ordered runtime spine in `main_story_anchor_ids`. Do not add an anchor for
+every variable; anchors represent architecture-visible information.
+
+Every detail region includes:
+
+- an integration mode;
+- `attach_to_anchor_id`;
+- the visual anchors that realize the region.
+
+The final canvas must use its space. Spread architecture anchors across the
+runtime and loading bands instead of placing a few distant boxes around a large
+blank center. Put loading dispatch below its receiving components so purple
+mapping edges remain local. Keep the loading plane within about 20% of canvas
+height below the runtime band, and keep ordinary loading destinations within
+about 32% of canvas width from their dispatch stage.
 
 ### 7. Validate Before Drawing
 
@@ -193,95 +275,112 @@ vllm-arch validate `
   --evidence outputs/<model>/evidence.json
 ```
 
-If validation fails, fix Plan or Evidence before opening Draw.io.
+Fix all errors before opening Draw.io.
 
-### 8. Draw With Draw.io MCP
+## Draw.io MCP Protocol
 
-Use Draw.io MCP. This is a hard requirement, not a preferred implementation.
-Do not use the legacy deterministic renderer.
+### 8. Start the Session
 
-Before creating any diagram:
+Confirm Draw.io MCP tools are available, then call `start_session`. If it fails,
+stop and report the drawing stage as blocked. Do not synthesize replacement
+files.
 
-1. Confirm the Draw.io MCP tools are available.
-2. Call `start_session` and wait for a successful session result.
-3. Read `references/diagram-design-guide.md` and the style vocabulary in
-   `assets/drawio-style-template.drawio`.
-4. If the tools are unavailable or the session fails, stop after the validated
-   Plan and Evidence artifacts. Report the drawing stage as blocked.
+### 9. Create a Large Canvas
 
-Never fall back to manufacturing output files. In particular:
+Use `create_new_diagram` and explicitly set:
 
-- do not write or edit `.drawio` XML with Python, PowerShell, shell redirection,
-  here-strings, templates or text replacement;
-- do not create `.png` or `.svg` files with `touch`, `New-Item`, copied bytes,
-  image-generation tools or placeholder content;
-- do not claim a visual review without opening every exported page image;
-- do not report completion merely because an XML file passes structural
-  validation.
+- white background;
+- landscape `pageWidth` and `pageHeight` satisfying the Plan canvas;
+- no HTML labels;
+- a title and one engineering question in separate text cells;
+- enough spacing for labels at 12 px or larger.
 
-Rules:
+For every required visual anchor, set the corresponding `mxCell` attribute:
 
-- call `start_session`;
-- create the first draft with `create_new_diagram`;
-- make subsequent diagram changes with `edit_diagram` and page tools;
-- create or edit pages matching Plan titles exactly;
-- use one page per planned page, no unrelated extra pages;
-- include every detail region title visibly on its page;
-- runtime tensor flow uses primary arrows;
-- construction/config dependencies use dashed or secondary lines;
-- checkpoint loading is not runtime tensor flow;
-- TP/PP/EP are independent panels or badges, not a serial flow;
-- external components sit behind explicit boundaries;
-- implementation names are subtitles or compact labels;
-- long expressions and line numbers stay in Evidence/report;
-- background is white and opaque.
+```text
+dataAnchor="visual:<id>"
+```
 
-### 9. Export Draft PNGs
+For every required relationship edge, set:
 
-Use Draw.io MCP `export_diagram` to save the editable `.drawio` file and one
-PNG per page into `outputs/<model>/images/`.
+```text
+dataAnchor="visual-rel:<id>"
+```
 
-Every PNG must be a real, non-empty PNG export with meaningful page dimensions.
-Zero-byte files, renamed text files and placeholder images are invalid. PNG
-exports must not show the Draw.io editor grid and should use clear readable
-fonts.
+The Validator checks uniqueness, endpoints, topology and semantic line style.
+Place every detail-region title immediately above or inside its actual
+subgraph. A title at the opposite edge of the canvas does not realize a region.
 
-### 10. Visual Review
+### 10. Compose, Do Not Tile
 
-Open every exported PNG with the available image-viewing tool and write
-`visual-review.md`. A file-existence check is not a visual review.
+Prefer a continuous left-to-right runtime spine. When a single row would exceed
+the aspect-ratio limit or make labels unreadable, fold the same connected spine
+once into a second runtime row at a semantic handoff such as feature merge or
+decoder entry. Make the U-turn explicit with arrow direction; do not turn the
+second row into a detached panel. Keep `main_story_anchor_ids` in execution
+order even when the second row reads right-to-left. Expand the representative
+decoder or repeated block in place with nested containers. Put optional branches
+above or below their split and merge points. Use a distinct residual lane.
 
-Check:
+Place checkpoint loading below the runtime system as a mapping plane. Mapping
+edges must point upward to actual projection, FFN, expert, embedding, head or
+other destination components.
 
-- every detail region appears;
-- pages are not only overview cards;
-- core methods appear in diagram regions, not only in report;
-- construction/runtime/loading/parallel are visually distinct;
-- config and capabilities are not shown as tensor flow;
-- external behavior is not shown as local direct behavior;
-- no obvious text overlap;
-- no obvious edge-through-node problems;
-- no huge empty spaces;
-- no misleading serial chain for mutually exclusive branches.
+Avoid giant routing buses. If an edge requires a long detour, move or regroup
+the source and target. Do not use far-away notes or mapping boxes to inflate
+the content bounding box.
 
-Score every page from 0 to 2 on:
+Use:
 
-1. architecture story;
-2. detail-region coverage;
-3. semantic distinction;
-4. topology and grouping;
-5. readability;
-6. information density.
+- blue solid arrows for runtime tensors;
+- cyan solid arrows for residual/bypass paths;
+- purple solid arrows for loading and mapping;
+- warm dashed lines for construction/configuration;
+- gray dashed lines for metadata/parallel effects;
+- warm dashed nodes and edges for external boundaries;
+- containers for ownership;
+- badges for capabilities.
 
-The page must score at least 10/12 with no zero. A page below the threshold must
-be revised rather than described as acceptable. Record Draft 1 observations,
-the actual MCP edits, final scores and remaining risks in `visual-review.md`.
+Ordinary tensor edges need no repeated labels. Implementation classes belong
+in subtitles, not as the whole architecture story.
 
-After inspecting Draft 1, make at least one actual diagram edit through Draw.io
-MCP, export again, and record the observed issue and resulting change. Make at
-most two revision passes.
+### 11. Export and Inspect Draft 1
 
-### 11. Final Validation
+Use Draw.io MCP `export_diagram` for:
+
+- `outputs/<model>/architecture-draft1.drawio`;
+- `outputs/<model>/architecture.drawio`;
+- `outputs/<model>/images/<export_name>.png`;
+- optional SVG for zoomable review.
+
+Open the real PNG with the image viewer. A file check is not visual review.
+
+Write `visual-review.md` with:
+
+- Draft 1 findings;
+- a `Geometry changes` section naming nodes/groups moved or resized and edges
+  rerouted;
+- the MCP edits actually made;
+- final review;
+- remaining risks.
+
+Inspect at 100% and zoomed:
+
+- can one trace input to output without jumping between disconnected panels?
+- is the repeated block visibly expanded at its runtime location?
+- are PP alternatives branches rather than serial steps?
+- are detail regions connected to their declared anchors?
+- do weight mappings terminate at real runtime components?
+- are external boundaries at real delegation points?
+- are construction/runtime/loading/parallel visually distinct?
+- are labels readable, edges routed around nodes and blank areas intentional?
+
+Make a region-level MCP revision after Draft 1 and export again. Move or resize
+at least 15% of required anchors, with a minimum of four, and reroute at least
+two required relationships. Adding notes, changing labels or moving one small
+box does not count. Use at most two revision rounds.
+
+### 12. Final Validation and Report
 
 Run:
 
@@ -296,42 +395,19 @@ vllm-arch validate `
   --visual-review outputs/<model>/visual-review.md
 ```
 
-Do not report completion if validation fails.
-Do not report completion if Draw.io MCP was not used, the exported PNGs were not
-opened, or no visual revision was performed.
+Do not report completion if Draw.io MCP was not used, a required anchor or
+relationship is missing, PNGs were not opened, no revision occurred, or final
+validation fails.
 
-### 12. Report
+Write `report.md` only after validation. Include source coverage, review counts,
+main architecture claims, external boundaries, omissions, visual review rounds,
+exact validation result and output paths.
 
-Write `report.md` after final validation succeeds.
+## Graceful Degradation
 
-The report must include:
-
-- target model and registry status;
-- files read and stop reasons;
-- source coverage;
-- class/method/function review summary;
-- branch/mapping/capability coverage;
-- page-by-page walkthrough;
-- direct/derived/external distinctions;
-- external boundaries;
-- unresolved or omitted content and reasons;
-- exact validation commands and results;
-- output paths.
-
-Do not hand-write “passed” before validators actually pass.
-
-## Degradation
-
-For partial targets, produce 1 to 5 pages and clearly state missing context.
-
-For helper/shared utility files, produce 1 or 2 utility/boundary pages. Do not force a full model flow onto helper code.
-
-## References
-
-Read as needed:
-
-- `references/analysis-guide.md`
-- `references/vllm-patterns.md`
-- `references/page-playbook.md`
-- `references/diagram-design-guide.md`
-- `references/evidence-policy.md`
+- Partial model: keep one integrated canvas, mark missing context, and reduce
+  only unsupported detail.
+- Helper/shared file: use `compact_boundary` with one or two focused pages.
+- Exceptionally large model: attempt two integrated-layout revisions first;
+  then use `composite_pages` only with a clear rationale and explicit
+  cross-page reading order.

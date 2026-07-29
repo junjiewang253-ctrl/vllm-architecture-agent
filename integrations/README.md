@@ -38,4 +38,4 @@ codex mcp list
 
 如果 Draw.io MCP 还没有配置，可参考 `integrations/codex/config.toml.example`。
 
-Claude Code 插件打包是后续工作，不属于当前 v2.1.2 导师交付范围。
+Claude Code 插件打包是后续工作，不属于当前 v2.2 默认交付范围。

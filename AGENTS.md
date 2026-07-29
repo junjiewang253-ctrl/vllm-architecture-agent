@@ -2,14 +2,14 @@
 
 ## Single source of truth
 
-- The canonical v2.1.2 Skill is `src/skills/vllm-model-architecture-diagram/`.
+- The canonical v2.2 Skill is `src/skills/vllm-model-architecture-diagram/`.
 - Do not edit `.agents/skills/` as source; it is a local Codex development link.
 - Do not edit generated packages under `dist/` except for the requested mentor zip.
 - The old compiler-style research pipeline is archived in
   `legacy/compiler-pipeline-v1/` and must not be imported by the default v2.x
   workflow.
 
-## v2.1.2 Architecture
+## v2.2 Architecture
 
 Keep these concerns separate:
 
@@ -48,10 +48,21 @@ portable across machines.
 - Do not silently omit indexed classes, methods, module functions, important
   branches, mappings or capabilities from the Plan review.
 - Do not reduce source review scope to make tests pass.
-- Do not create one page per class or method; use 3 to 5 composite pages for
-  full models.
+- Default complete full-model output is one large
+  `integrated_single_canvas`, not a dashboard of subsystem pages.
+- Expand the representative repeated block in place on a continuous runtime
+  spine. Put loading below it and map weights into actual receiving components.
+- Do not keep the Draw.io default page size. Plan 2.2 integrated output requires
+  an explicit landscape canvas of at least 4200 x 2000.
+- Do not create one page per class or method. Use `composite_pages` only after
+  two genuine MCP layout revisions fail to keep one canvas readable.
 - Do not delete core behavior for visual neatness; aggregate it into detail
   regions, panels, tables, ports or badges.
+- Plan 2.2 required anchors and relationships must be copied to Draw.io cells
+  as exact `dataAnchor` attributes. Do not satisfy them with invisible or
+  decorative cells.
+- Detail regions must attach to the declared main-story anchor. Required
+  architecture anchors may not form isolated card islands.
 - Draw.io XML may be created by Codex through Draw.io MCP, but it must follow
   `architecture-plan.json` and `evidence.json`.
 - Draw.io MCP is mandatory for final diagram creation. Never use Python,

@@ -40,6 +40,13 @@ def test_readme_embeds_all_hy_v3_example_images() -> None:
         relative = f"examples/hy_v3/images/{image_name}"
         assert relative in readme
         assert (ROOT / relative).is_file()
+    integrated_images = [
+        "examples/integrated-flow/hy_v3/architecture.png",
+        "examples/integrated-flow/qwen3_moe/architecture.png",
+    ]
+    for relative in integrated_images:
+        assert relative in readme
+        assert (ROOT / relative).is_file()
 
 
 def test_user_facing_docs_have_no_mojibake() -> None:
@@ -84,17 +91,18 @@ def test_general_setup_entrypoint_wraps_installer() -> None:
     assert "& $installer -RepoRoot $RepoRoot -ConfigureDrawioMcp" in script
 
 
-def test_mentor_package_builder_targets_v212() -> None:
+def test_package_builder_targets_v220() -> None:
     builder = read("tools/build_mentor_package.py")
-    assert "v2.1.2" in builder
-    assert "vllm-architecture-agent-v2.1.2-mentor.zip" in builder
+    assert "v2.2.0" in builder
+    assert "vllm-architecture-agent-v2.2.0.zip" in builder
     assert "tools/setup.ps1" in builder
     assert "tools/setup-mentor.ps1" in builder
-    assert "docs/development/v2.1.2-chinese-mentor-usability-report.md" in builder
+    assert "docs/development/v2.2-integrated-visual-contract-report.md" in builder
+    assert "examples/integrated-flow" in builder
     assert "legacy" not in re.findall(r'"([^"]+)"', builder)
 
 
-def test_version_is_212() -> None:
+def test_version_is_220() -> None:
     pyproject = read("pyproject.toml")
-    assert 'version = "2.1.2"' in pyproject
-    assert vllm_architecture_agent.__version__ == "2.1.2"
+    assert 'version = "2.2.0"' in pyproject
+    assert vllm_architecture_agent.__version__ == "2.2.0"
